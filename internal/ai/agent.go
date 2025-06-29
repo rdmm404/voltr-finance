@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tools"
@@ -9,30 +10,36 @@ import (
 	"google.golang.org/genai"
 )
 
-type Agent interface {
-	GetClient() *genai.Client
-	SendMessage(ctx context.Context, msg *Message) (*LlmResponse, error)
+type Agent struct {
+	Client *genai.Client
+	config *AgentConfig
 }
 
-type agent struct {
-	client *genai.Client
+type AgentConfig struct {
+	Model string
 }
 
-func NewAgent(ctx context.Context) (Agent, error) {
+func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{})
 	if err != nil {
-		return &agent{}, fmt.Errorf("error while creating the LLM client - %w", err)
+		return &Agent{}, fmt.Errorf("error while creating the LLM client - %w", err)
 	}
-	return &agent{
-		client: client,
+
+	if (cfg == nil) {
+		cfg = &AgentConfig{}
+	}
+
+	if (cfg.Model == "") {
+		cfg.Model = "gemini-2.5-flash-lite-preview-06-17"
+	}
+
+	return &Agent{
+		Client: client,
+		config: cfg,
 	}, nil
 }
 
-func (lc *agent) GetClient() *genai.Client {
-	return lc.client
-}
-
-func (lc *agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, error) {
+func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, error) {
 	if msg == nil {
 		return nil, errors.New("arguments are required")
 	}
@@ -43,7 +50,7 @@ func (lc *agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, e
 
 	agentTools := tools.GetGenaiTools()
 	config := genai.GenerateContentConfig{
-		ResponseMIMEType: "application/json",
+		ResponseMIMEType: "text/plain",
 		Tools:            agentTools,
 	}
 
@@ -60,13 +67,31 @@ func (lc *agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, e
 		content.Parts = append(content.Parts, &genai.Part{InlineData: &genai.Blob{Data: attachment.File, MIMEType: attachment.Mimetype}})
 	}
 
-	response, err := lc.client.Models.GenerateContent(ctx, "gemini-2.5-flash-lite-preview-06-17", []*genai.Content{content}, &config)
+	contentJson, errContent := json.MarshalIndent(content, "", "  ")
+	configJson, errConfig := json.MarshalIndent(config, "", "  ")
 
-	if err == nil {
+	contentStr := string(contentJson)
+	configStr := string(configJson)
+	if errContent != nil {
+		fmt.Printf("Something happened while marshaling LLM content, falling back to struct %v", errContent)
+		contentStr = fmt.Sprintf("%+v", content)
+	}
+
+	if errConfig != nil {
+		fmt.Printf("Something happened while marshaling LLM config, falling back to struct %v", errConfig)
+		configStr = fmt.Sprintf("%+v", config)
+	}
+
+	fmt.Printf("Sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
+
+
+	response, err := a.Client.Models.GenerateContent(ctx, a.config.Model, []*genai.Content{content}, &config)
+
+	if err != nil {
 		return &LlmResponse{}, err
 	}
 
-	fmt.Printf("response from llm %+v", response)
+	fmt.Printf("response from llm %+v\n", response.Text())
 
 	return (*LlmResponse)(response), nil
 }
