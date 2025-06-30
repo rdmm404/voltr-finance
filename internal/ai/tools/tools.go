@@ -43,3 +43,19 @@ func GetToolByName(name string) (Tool, bool) {
 func GetGenaiTools() []*genai.Tool {
 	return genaiTools
 }
+
+func ExecuteToolCall(call *genai.FunctionCall) (*genai.FunctionResponse) {
+	tool, ok := GetToolByName(call.Name)
+
+	if !ok {
+		return &genai.FunctionResponse{
+			ID: call.ID,
+			Name: call.Name,
+			Response: map[string]any{
+				"error": "Function with name " + call.Name + "Was not found",
+			},
+		}
+	}
+
+	return tool.Call(call)
+}

@@ -1,9 +1,11 @@
 package tools
 
 import (
+	"fmt"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
 
+	"github.com/mitchellh/mapstructure"
 	"google.golang.org/genai"
 )
 
@@ -43,12 +45,40 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 }
 
 func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall) *genai.FunctionResponse {
-	mappedTransactions := make([]transaction.Transaction, 0)
-	err := transaction.SaveTransactions(mappedTransactions)
+	mappedTransactions := make([]*transaction.Transaction, 0)
 	response := genai.FunctionResponse{
 		ID:   functionCall.ID,
 		Name: st.Name(),
+		Response: make(map[string]any, 0),
 	}
+
+	transactionsAny, ok := functionCall.Args["transactions"]
+
+	if !ok {
+		response.Response["error"] = "Missing argument 'transactions'"
+		return &response
+	}
+
+	transactions, ok := transactionsAny.([]any)
+	if !ok {
+		response.Response["error"] = "Invalid format for argument 'transactions'"
+		return &response
+	}
+
+	for i, trans := range transactions {
+		mappedTransaction := transaction.Transaction{}
+		err := mapstructure.Decode(trans, &mappedTransaction)
+
+		if err != nil {
+			response.Response["error"] = fmt.Sprintf("Invalid format for transaction at index %v", i)
+			return &response
+		}
+
+		mappedTransactions = append(mappedTransactions, &mappedTransaction)
+	}
+
+
+	err := transaction.SaveTransactions(mappedTransactions)
 
 	if err != nil {
 		response.Response["error"] = "Something bad happened :("

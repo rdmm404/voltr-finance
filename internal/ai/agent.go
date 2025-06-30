@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tools"
@@ -67,20 +66,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 		content.Parts = append(content.Parts, &genai.Part{InlineData: &genai.Blob{Data: attachment.File, MIMEType: attachment.Mimetype}})
 	}
 
-	contentJson, errContent := json.MarshalIndent(content, "", "  ")
-	configJson, errConfig := json.MarshalIndent(config, "", "  ")
-
-	contentStr := string(contentJson)
-	configStr := string(configJson)
-	if errContent != nil {
-		fmt.Printf("Something happened while marshaling LLM content, falling back to struct %v", errContent)
-		contentStr = fmt.Sprintf("%+v", content)
-	}
-
-	if errConfig != nil {
-		fmt.Printf("Something happened while marshaling LLM config, falling back to struct %v", errConfig)
-		configStr = fmt.Sprintf("%+v", config)
-	}
+	contentStr, configStr := LLMRequestToString(content, &config)
 
 	fmt.Printf("Sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
 
@@ -91,7 +77,26 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 		return &LlmResponse{}, err
 	}
 
-	fmt.Printf("response from llm %+v\n", response.Text())
+	fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
+
+	toolCalls := response.FunctionCalls()
+
+	for _, call := range response.FunctionCalls() {
+		content.Parts = append(content.Parts, &genai.Part{FunctionCall: call})
+		result := tools.ExecuteToolCall(call)
+		content.Parts = append(content.Parts, &genai.Part{FunctionResponse: result})
+	}
+
+	if len(toolCalls) > 0 {
+		contentStr, configStr := LLMRequestToString(content, &config)
+
+		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
+		response, err = a.Client.Models.GenerateContent(ctx, a.config.Model, []*genai.Content{content}, &config)
+		if err != nil {
+			return &LlmResponse{}, err
+		}
+		fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
+	}
 
 	return (*LlmResponse)(response), nil
 }

@@ -25,7 +25,7 @@ func main() {
 	PanicOnErr(err)
 
 	_, err = agent.SendMessage(ctx, &ai.Message{
-		Msg: "Hi, can you give me a list of your available tools?",
+		Msg: "I am testing your tool calling capabilities. can you call the SaveTransactions tool with some dummy data?",
 	})
 
 	PanicOnErr(err)
