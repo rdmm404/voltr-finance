@@ -1,4 +1,4 @@
-package tools
+package tool
 
 import (
 	"fmt"
@@ -47,8 +47,8 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall) *genai.FunctionResponse {
 	mappedTransactions := make([]*transaction.Transaction, 0)
 	response := genai.FunctionResponse{
-		ID:   functionCall.ID,
-		Name: st.Name(),
+		ID:       functionCall.ID,
+		Name:     st.Name(),
 		Response: make(map[string]any, 0),
 	}
 
@@ -76,7 +76,6 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall) *genai.Fun
 
 		mappedTransactions = append(mappedTransactions, &mappedTransaction)
 	}
-
 
 	err := transaction.SaveTransactions(mappedTransactions)
 

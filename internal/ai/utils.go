@@ -22,15 +22,15 @@ func LLMResponseToString(response LLMResponse) string {
 	return string(jsonResponse)
 }
 
-func LLMRequestToString(content *genai.Content, config *genai.GenerateContentConfig) (string, string) {
-	contentJson, errContent := json.MarshalIndent(content, "", "  ")
+func LLMRequestToString(messages []*genai.Content, config *genai.GenerateContentConfig) (string, string) {
+	contentJson, errContent := json.MarshalIndent(messages, "", "  ")
 	configJson, errConfig := json.MarshalIndent(config, "", "  ")
 
 	contentStr := string(contentJson)
 	configStr := string(configJson)
 	if errContent != nil {
 		fmt.Printf("Something happened while marshaling LLM content, falling back to struct %v", errContent)
-		contentStr = fmt.Sprintf("%+v", content)
+		contentStr = fmt.Sprintf("%+v", messages)
 	}
 
 	if errConfig != nil {

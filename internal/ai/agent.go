@@ -4,18 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"rdmm404/voltr-finance/internal/ai/tools"
+	"rdmm404/voltr-finance/internal/ai/tool"
 
 	"google.golang.org/genai"
 )
 
 type Agent struct {
-	Client *genai.Client
-	config *AgentConfig
+	Client   *genai.Client
+	config   *AgentConfig
+	messages []*genai.Content
 }
 
 type AgentConfig struct {
-	Model string
+	Model            string
+	generationConfig *genai.GenerateContentConfig
 }
 
 func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
@@ -24,12 +26,29 @@ func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
 		return &Agent{}, fmt.Errorf("error while creating the LLM client - %w", err)
 	}
 
-	if (cfg == nil) {
+	if cfg == nil {
 		cfg = &AgentConfig{}
 	}
 
-	if (cfg.Model == "") {
+	if cfg.Model == "" {
 		cfg.Model = "gemini-2.5-flash-lite-preview-06-17"
+	}
+
+	systemInstruction, err := formatSystemPrompt(43)
+
+	if err != nil {
+		return &Agent{}, fmt.Errorf("error while creating system prompt - %w", err)
+	}
+
+	cfg.generationConfig = &genai.GenerateContentConfig{
+		ResponseMIMEType: "text/plain",
+		Tools:            tool.GetGenaiTools(),
+		SystemInstruction: &genai.Content{
+			Role: "system",
+			Parts: []*genai.Part{
+				{Text: systemInstruction},
+			},
+		},
 	}
 
 	return &Agent{
@@ -47,12 +66,6 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 		return nil, errors.New("at least one of (img, msg) must be set")
 	}
 
-	agentTools := tools.GetGenaiTools()
-	config := genai.GenerateContentConfig{
-		ResponseMIMEType: "text/plain",
-		Tools:            agentTools,
-	}
-
 	content := &genai.Content{
 		Role:  "user",
 		Parts: make([]*genai.Part, 0),
@@ -66,12 +79,13 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 		content.Parts = append(content.Parts, &genai.Part{InlineData: &genai.Blob{Data: attachment.File, MIMEType: attachment.Mimetype}})
 	}
 
-	contentStr, configStr := LLMRequestToString(content, &config)
+	a.messages = append(a.messages, content)
+
+	contentStr, configStr := LLMRequestToString(a.messages, a.config.generationConfig)
 
 	fmt.Printf("Sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
 
-
-	response, err := a.Client.Models.GenerateContent(ctx, a.config.Model, []*genai.Content{content}, &config)
+	response, err := a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
 
 	if err != nil {
 		return &LlmResponse{}, err
@@ -82,16 +96,22 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 	toolCalls := response.FunctionCalls()
 
 	for _, call := range response.FunctionCalls() {
-		content.Parts = append(content.Parts, &genai.Part{FunctionCall: call})
-		result := tools.ExecuteToolCall(call)
-		content.Parts = append(content.Parts, &genai.Part{FunctionResponse: result})
+		a.messages = append(a.messages, &genai.Content{
+			Role: "model",
+			Parts: []*genai.Part{{FunctionCall: call},},
+		})
+		result := tool.ExecuteToolCall(call)
+		a.messages = append(a.messages, &genai.Content{
+			Role: "user",
+			Parts: []*genai.Part{{FunctionResponse: result},},
+		})
 	}
 
 	if len(toolCalls) > 0 {
-		contentStr, configStr := LLMRequestToString(content, &config)
+		contentStr, configStr := LLMRequestToString(a.messages, a.config.generationConfig)
 
 		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
-		response, err = a.Client.Models.GenerateContent(ctx, a.config.Model, []*genai.Content{content}, &config)
+		response, err = a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
 		if err != nil {
 			return &LlmResponse{}, err
 		}

@@ -1,4 +1,4 @@
-package tools
+package tool
 
 import "google.golang.org/genai"
 
@@ -44,12 +44,12 @@ func GetGenaiTools() []*genai.Tool {
 	return genaiTools
 }
 
-func ExecuteToolCall(call *genai.FunctionCall) (*genai.FunctionResponse) {
+func ExecuteToolCall(call *genai.FunctionCall) *genai.FunctionResponse {
 	tool, ok := GetToolByName(call.Name)
 
 	if !ok {
 		return &genai.FunctionResponse{
-			ID: call.ID,
+			ID:   call.ID,
 			Name: call.Name,
 			Response: map[string]any{
 				"error": "Function with name " + call.Name + "Was not found",
