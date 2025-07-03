@@ -2,31 +2,48 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"io"
+	"log"
+	"os"
 	"rdmm404/voltr-finance/internal/ai"
 
 	"github.com/joho/godotenv"
 )
 
-func PanicOnErr(err error) {
-	if (err != nil) {
-		fmt.Println(err)
-		panic(err)
-	}
-}
-
 func main() {
-	err := godotenv.Load()
-	PanicOnErr(err)
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Failed to load .env file %v", err)
+	}
+
+	file, err := os.Open("test.jpg")
+
+	if err != nil {
+		log.Fatalf("Error opening file %v\n", err)
+	}
+
+	fileContents, err := io.ReadAll(file)
+
+	if err != nil {
+		log.Fatalf("Error reading file %v\n", err)
+	}
+
+	defer file.Close()
 
 	ctx := context.Background()
 	agent, err := ai.NewAgent(ctx, nil)
 
-	PanicOnErr(err)
+	if err != nil {
+		log.Fatalf("Failed to initialize agent %v", err)
+	}
 
 	_, err = agent.SendMessage(ctx, &ai.Message{
-		Msg: "I am testing your tool calling capabilities. can you call the SaveTransactions tool with some dummy data?",
+		Attachments: []ai.Attachment{
+			{ File: fileContents, Mimetype: "image/jpeg"},
+		},
+		Msg: "Sent by Rob",
 	})
 
-	PanicOnErr(err)
+	if err != nil {
+		log.Fatalf("Error while calling LLM provider %v", err)
+	}
 }
