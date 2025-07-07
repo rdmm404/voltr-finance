@@ -6,7 +6,7 @@ import (
 	"google.golang.org/genai"
 )
 
-type LlmResponse genai.GenerateContentResponse
+type AgentResponse genai.GenerateContentResponse
 
 type GenerationConfig struct {
 	Model       string

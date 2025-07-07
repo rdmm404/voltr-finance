@@ -17,6 +17,7 @@ type Agent struct {
 
 type AgentConfig struct {
 	Model            string
+	MaxTokens        int32
 	generationConfig *genai.GenerateContentConfig
 }
 
@@ -49,6 +50,7 @@ func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
 				{Text: systemInstruction},
 			},
 		},
+		MaxOutputTokens: cfg.MaxTokens,
 	}
 
 	return &Agent{
@@ -57,7 +59,7 @@ func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
 	}, nil
 }
 
-func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, error) {
+func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, error) {
 	if msg == nil {
 		return nil, errors.New("arguments are required")
 	}
@@ -88,8 +90,10 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 	response, err := a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
 
 	if err != nil {
-		return &LlmResponse{}, err
+		return &AgentResponse{}, err
 	}
+
+	a.messages = append(a.messages, response.Candidates[0].Content)
 
 	fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
 
@@ -97,13 +101,13 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 
 	for _, call := range response.FunctionCalls() {
 		a.messages = append(a.messages, &genai.Content{
-			Role: "model",
-			Parts: []*genai.Part{{FunctionCall: call},},
+			Role:  "model",
+			Parts: []*genai.Part{{FunctionCall: call}},
 		})
 		result := tool.ExecuteToolCall(call)
 		a.messages = append(a.messages, &genai.Content{
-			Role: "user",
-			Parts: []*genai.Part{{FunctionResponse: result},},
+			Role:  "user",
+			Parts: []*genai.Part{{FunctionResponse: result}},
 		})
 	}
 
@@ -113,10 +117,11 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*LlmResponse, er
 		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
 		response, err = a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
 		if err != nil {
-			return &LlmResponse{}, err
+			return &AgentResponse{}, err
 		}
+		a.messages = append(a.messages, response.Candidates[0].Content)
 		fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
 	}
 
-	return (*LlmResponse)(response), nil
+	return (*AgentResponse)(response), nil
 }

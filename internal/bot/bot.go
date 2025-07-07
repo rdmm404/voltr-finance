@@ -1,11 +1,13 @@
 package bot
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"rdmm404/voltr-finance/internal/ai"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -15,9 +17,14 @@ var ErrInvalidBotConfig = errors.New("bot is not set up correctly")
 
 type Bot struct {
 	session *discordgo.Session
+	agent Agent
 }
 
-func NewBot() (*Bot, error) {
+type Agent interface {
+	SendMessage(ctx context.Context, msg *ai.Message) (*ai.AgentResponse, error)
+}
+
+func NewBot(agent Agent) (*Bot, error) {
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("%w - DISCORD_TOKEN environment variable is not set", ErrInvalidBotConfig)
@@ -28,13 +35,16 @@ func NewBot() (*Bot, error) {
 		return nil, fmt.Errorf("error creating discord session - %w", err)
 	}
 
-	dg.AddHandler(messageCreate)
+	bot := &Bot{
+		session: dg,
+		agent: agent,
+	}
+
+	dg.AddHandler(bot.handlerMessageCreate)
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 
-	return &Bot{
-		session: dg,
-	}, nil
+	return bot, nil
 }
 
 func (b *Bot) Run() error {
@@ -51,7 +61,7 @@ func (b *Bot) Run() error {
 	return b.session.Close()
 }
 
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	fmt.Printf("message received %v\n", string(msgJson))
 	// Ignore all messages created by the bot itself
@@ -59,13 +69,18 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
-	// If the message is "ping" reply with "Pong!"
-	if m.Content == "ping" {
-		s.ChannelMessageSend(m.ChannelID, "Pong!")
+
+	resp, err := b.agent.SendMessage(context.TODO(), &ai.Message{Msg: m.Content})
+
+	if (err != nil || len(resp.Candidates) < 1) {
+		s.ChannelMessageSend(m.ChannelID, "Something went wrong :(")
+		fmt.Printf("error %v", err)
+		// TODO: Send debug trace as spoiler or something that makes it hidden
+		return
 	}
 
-	// If the message is "pong" reply with "Ping!"
-	if m.Content == "pong" {
-		s.ChannelMessageSend(m.ChannelID, "Ping!")
+	_, err = s.ChannelMessageSend(m.ChannelID, resp.Candidates[0].Content.Parts[0].Text)
+	if (err != nil) {
+		fmt.Println(err)
 	}
 }

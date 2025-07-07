@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"io"
 	"log"
-	"os"
 	"rdmm404/voltr-finance/internal/ai"
 
 	"github.com/joho/godotenv"
@@ -15,19 +13,19 @@ func main() {
 		log.Fatalf("Failed to load .env file %v", err)
 	}
 
-	file, err := os.Open("test.jpg")
+	// file, err := os.Open("test.jpg")
 
-	if err != nil {
-		log.Fatalf("Error opening file %v\n", err)
-	}
+	// if err != nil {
+	// 	log.Fatalf("Error opening file %v\n", err)
+	// }
 
-	fileContents, err := io.ReadAll(file)
+	// fileContents, err := io.ReadAll(file)
 
-	if err != nil {
-		log.Fatalf("Error reading file %v\n", err)
-	}
+	// if err != nil {
+	// 	log.Fatalf("Error reading file %v\n", err)
+	// }
 
-	defer file.Close()
+	// defer file.Close()
 
 	ctx := context.Background()
 	agent, err := ai.NewAgent(ctx, nil)
@@ -37,10 +35,10 @@ func main() {
 	}
 
 	_, err = agent.SendMessage(ctx, &ai.Message{
-		Attachments: []ai.Attachment{
-			{ File: fileContents, Mimetype: "image/jpeg"},
-		},
-		Msg: "Sent by Rob",
+		// Attachments: []ai.Attachment{
+		// 	{ File: fileContents, Mimetype: "image/jpeg"},
+		// },
+		Msg: "Hello",
 	})
 
 	if err != nil {
