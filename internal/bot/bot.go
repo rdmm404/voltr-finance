@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"rdmm404/voltr-finance/internal/ai"
+	"rdmm404/voltr-finance/internal/config"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -25,7 +26,7 @@ type Agent interface {
 }
 
 func NewBot(agent Agent) (*Bot, error) {
-	token := os.Getenv("DISCORD_TOKEN")
+	token := config.DISCORD_TOKEN
 	if token == "" {
 		return nil, fmt.Errorf("%w - DISCORD_TOKEN environment variable is not set", ErrInvalidBotConfig)
 	}

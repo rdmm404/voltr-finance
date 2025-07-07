@@ -1,13 +1,9 @@
-package env
+package config
 
 import (
 	"fmt"
 	"os"
 	"strconv"
-)
-
-var (
-	DEBUG = GetEnvBool("DEBUG", false)
 )
 
 func GetEnvBool(key string, defaultValue bool) bool {
@@ -17,6 +13,13 @@ func GetEnvBool(key string, defaultValue bool) bool {
 			return b
 		}
 		fmt.Printf("Warning: Environment variable %s='%s' cannot be parsed as bool. Using default %t.\n", key, value, defaultValue)
+	}
+	return defaultValue
+}
+
+func GetEnvString(key string, defaultValue string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
 	}
 	return defaultValue
 }
