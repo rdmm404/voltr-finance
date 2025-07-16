@@ -74,11 +74,22 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	}
 
 	if msg.Msg != "" {
-		content.Parts = append(content.Parts, &genai.Part{Text: msg.Msg})
+		content.Parts = append(content.Parts, genai.NewPartFromText(msg.Msg))
 	}
 
 	for _, attachment := range msg.Attachments {
-		content.Parts = append(content.Parts, &genai.Part{InlineData: &genai.Blob{Data: attachment.File, MIMEType: attachment.Mimetype}})
+		if len(attachment.File) > 0 {
+			content.Parts = append(content.Parts, genai.NewPartFromBytes(attachment.File, attachment.Mimetype))
+			continue
+		}
+
+		if attachment.URI != "" {
+			content.Parts = append(content.Parts, genai.NewPartFromURI(attachment.URI, attachment.Mimetype))
+			continue
+		}
+
+		return nil, fmt.Errorf("invalid attachment provided - %+v",  attachment)
+
 	}
 
 	a.messages = append(a.messages, content)
@@ -100,10 +111,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	toolCalls := response.FunctionCalls()
 
 	for _, call := range response.FunctionCalls() {
-		a.messages = append(a.messages, &genai.Content{
-			Role:  "model",
-			Parts: []*genai.Part{{FunctionCall: call}},
-		})
+		a.messages = append(a.messages, genai.NewContentFromFunctionCall(call.Name, call.Args, "model"))
 		result := tool.ExecuteToolCall(call)
 		a.messages = append(a.messages, &genai.Content{
 			Role:  "user",

@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"rdmm404/voltr-finance/internal/ai"
 	"rdmm404/voltr-finance/internal/config"
+	"rdmm404/voltr-finance/internal/utils"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -71,7 +72,20 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		return
 	}
 
-	resp, err := b.agent.SendMessage(context.TODO(), &ai.Message{Msg: m.Content})
+	s.ChannelTyping(m.ChannelID)
+
+	aiMsg := &ai.Message{Msg: m.Content}
+
+		for _, att := range m.Attachments {
+			bytes, err := utils.DownloadFileBytes(att.URL)
+			if err != nil {
+				fmt.Printf("Error downloading attachment %+v - %v\n", att, err)
+				return
+			}
+			aiMsg.Attachments = append(aiMsg.Attachments, &ai.Attachment{File: bytes, Mimetype: att.ContentType})
+		}
+
+	resp, err := b.agent.SendMessage(context.TODO(), aiMsg)
 
 	if (err != nil || len(resp.Candidates) < 1) {
 		s.ChannelMessageSend(m.ChannelID, "Something went wrong :(")
