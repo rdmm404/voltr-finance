@@ -40,7 +40,6 @@ type ContentSlice []*genai.Content
 
 func (cs ContentSlice) String() string {
 	var sb strings.Builder
-	fmt.Println("content string was called")
 	sb.WriteString("[")
 	for i, content := range cs {
 		if i > 0 {
@@ -61,7 +60,6 @@ type PartSlice []*genai.Part
 
 func (ps PartSlice) String() string {
 	var sb strings.Builder
-	fmt.Println("part string was called")
 	sb.WriteString("[")
 	for i, part := range ps {
 		if i > 0 {
