@@ -12,4 +12,5 @@ type Transaction struct {
 	Description     string
 	Amount          float32
 	TransactionType TransactionType
+
 }

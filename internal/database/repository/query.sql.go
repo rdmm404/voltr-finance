@@ -7,24 +7,89 @@ package database
 
 import (
 	"context"
+	"database/sql"
 )
 
-const getHouseholdTransaction = `-- name: GetHouseholdTransaction :one
-SELECT id, paid_by, amount, is_paid, amount_owed, budget_category_id, household_id FROM household_transaction
-WHERE id = ? LIMIT 1
+const createTransaction = `-- name: CreateTransaction :execresult
+INSERT INTO ` + "`" + `transaction` + "`" + `
+SET
+    amount = ?,
+    is_paid = ?,
+    amount_owed = ?,
+    budget_category_id = ?,
+    description = ?,
+    transaction_date = ?,
+    transaction_id = ?,
+    transaction_type = ?,
+    paid_by = ?
 `
 
-func (q *Queries) GetHouseholdTransaction(ctx context.Context, id int32) (HouseholdTransaction, error) {
-	row := q.db.QueryRowContext(ctx, getHouseholdTransaction, id)
-	var i HouseholdTransaction
-	err := row.Scan(
-		&i.ID,
-		&i.PaidBy,
-		&i.Amount,
-		&i.IsPaid,
-		&i.AmountOwed,
-		&i.BudgetCategoryID,
-		&i.HouseholdID,
+type CreateTransactionParams struct {
+	Amount           float64
+	IsPaid           sql.NullBool
+	AmountOwed       sql.NullFloat64
+	BudgetCategoryID sql.NullInt32
+	Description      sql.NullString
+	TransactionDate  sql.NullTime
+	TransactionID    sql.NullString
+	TransactionType  sql.NullInt32
+	PaidBy           int32
+}
+
+func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createTransaction,
+		arg.Amount,
+		arg.IsPaid,
+		arg.AmountOwed,
+		arg.BudgetCategoryID,
+		arg.Description,
+		arg.TransactionDate,
+		arg.TransactionID,
+		arg.TransactionType,
+		arg.PaidBy,
 	)
-	return i, err
+}
+
+const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
+SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM ` + "`" + `transaction` + "`" + `
+WHERE transaction_type=2 AND household_id = ?
+`
+
+func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID sql.NullInt32) ([]Transaction, error) {
+	rows, err := q.db.QueryContext(ctx, listTransactionsByHousehold, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.PaidBy,
+			&i.AmountOwed,
+			&i.BudgetCategoryID,
+			&i.Description,
+			&i.TransactionDate,
+			&i.TransactionID,
+			&i.TransactionType,
+			&i.OwedBy,
+			&i.HouseholdID,
+			&i.IsPaid,
+			&i.PaymentDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

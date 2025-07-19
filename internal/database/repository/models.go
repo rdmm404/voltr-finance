@@ -13,6 +13,8 @@ type Budget struct {
 	UserID      sql.NullInt32
 	HouseholdID sql.NullInt32
 	Type        string
+	CreatedAt   sql.NullTime
+	UpdatedAt   sql.NullTime
 }
 
 type BudgetCategory struct {
@@ -20,36 +22,46 @@ type BudgetCategory struct {
 	BudgetID     sql.NullInt32
 	CategoryName string
 	Allocation   float64
+	CreatedAt    sql.NullTime
+	UpdatedAt    sql.NullTime
 }
 
 type Household struct {
-	ID   int32
-	Name string
-}
-
-type HouseholdTransaction struct {
-	ID               int32
-	PaidBy           sql.NullInt32
-	Amount           float64
-	IsPaid           bool
-	AmountOwed       sql.NullFloat64
-	BudgetCategoryID sql.NullInt32
-	HouseholdID      sql.NullInt32
+	ID        int32
+	Name      string
+	CreatedAt sql.NullTime
+	UpdatedAt sql.NullTime
 }
 
 type HouseholdUser struct {
 	HouseholdID sql.NullInt32
 	UserID      sql.NullInt32
+	CreatedAt   sql.NullTime
+	UpdatedAt   sql.NullTime
 }
 
-type PersonalTransaction struct {
+type Transaction struct {
 	ID               int32
-	UserID           sql.NullInt32
+	Amount           float64
+	PaidBy           int32
+	AmountOwed       sql.NullFloat64
 	BudgetCategoryID sql.NullInt32
+	Description      sql.NullString
+	TransactionDate  sql.NullTime
+	TransactionID    sql.NullString
+	TransactionType  sql.NullInt32
+	OwedBy           sql.NullInt32
+	HouseholdID      sql.NullInt32
+	IsPaid           sql.NullBool
+	PaymentDate      sql.NullTime
+	CreatedAt        sql.NullTime
+	UpdatedAt        sql.NullTime
 }
 
 type User struct {
 	ID        int32
 	DiscordID sql.NullString
 	Name      string
+	CreatedAt sql.NullTime
+	UpdatedAt sql.NullTime
 }
