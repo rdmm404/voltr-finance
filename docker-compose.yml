@@ -1,0 +1,28 @@
+services:
+  bot:
+    container_name: voltr-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./cmd:/app/cmd:rw
+      - ./internal:/app/internal:rw
+    env_file:
+      - .env
+
+  mysql:
+    image: mysql
+    container_name: voltr-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: voltr
+      MYSQL_DATABASE: voltr_finance
+      MYSQL_USER: voltr
+      MYSQL_PASSWORD: voltr
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d
+
+volumes:
+  mysql_data:

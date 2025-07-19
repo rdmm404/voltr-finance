@@ -29,7 +29,7 @@ func LLMRequestToString(messages []*genai.Content, config *genai.GenerateContent
 	contentStr := ContentSlice(messages).String()
 
 	if errConfig != nil {
-		fmt.Printf("Something happened while marshaling LLM config, falling bac`k to struct %v", errConfig)
+		fmt.Printf("Something happened while marshaling LLM config, falling back to struct %v", errConfig)
 		configStr = fmt.Sprintf("%+v", config)
 	}
 
