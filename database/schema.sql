@@ -19,6 +19,8 @@ CREATE TABLE transactions.household (
 CREATE TABLE transactions.household_user (
     household_id INT,
     user_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     PRIMARY KEY (household_id, user_id),
     FOREIGN KEY (household_id) REFERENCES transactions.household(id),
     FOREIGN KEY (user_id) REFERENCES transactions."user"(id),
