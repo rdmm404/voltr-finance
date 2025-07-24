@@ -2,20 +2,21 @@ package transaction
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"rdmm404/voltr-finance/internal/config"
 	database "rdmm404/voltr-finance/internal/database/repository"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5"
+	_ "github.com/jackc/pgx/v5/pgtype"
 )
 
 func SaveTransactions(transactions []*Transaction) error {
 
-	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?parseTime=true", config.DB_USER, config.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME)
+	connString := fmt.Sprintf("postgres://%v:%v@%v:%v/%v", config.DB_USER, config.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME)
 
-	fmt.Println("Connecting with DSN " + dsn)
-	conn, err := sql.Open("mysql", dsn)
+	fmt.Println("Connecting with DSN " + connString)
+	conn, err := pgx.Connect(context.TODO(), connString)
+
 
 	if err != nil {
 		panic(err)
@@ -27,7 +28,7 @@ func SaveTransactions(transactions []*Transaction) error {
 		fmt.Printf("%+v\n", *trans)
 
 		dbTrans := database.CreateTransactionParams{
-			Amount: float64(trans.Amount),
+			Amount: trans.Amount,
 			// Description: sql.NullString{String: trans.Description, Valid: true},
 			PaidBy: 1,
 		}

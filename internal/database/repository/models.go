@@ -5,63 +5,63 @@
 package database
 
 import (
-	"database/sql"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Budget struct {
+type TransactionsBudget struct {
 	ID          int32
-	UserID      sql.NullInt32
-	HouseholdID sql.NullInt32
+	UserID      *int32
+	HouseholdID *int32
 	Type        string
-	CreatedAt   sql.NullTime
-	UpdatedAt   sql.NullTime
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
-type BudgetCategory struct {
+type TransactionsBudgetCategory struct {
 	ID           int32
-	BudgetID     sql.NullInt32
+	BudgetID     *int32
 	CategoryName string
-	Allocation   float64
-	CreatedAt    sql.NullTime
-	UpdatedAt    sql.NullTime
+	Allocation   float32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
-type Household struct {
+type TransactionsHousehold struct {
 	ID        int32
 	Name      string
-	CreatedAt sql.NullTime
-	UpdatedAt sql.NullTime
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
-type HouseholdUser struct {
-	HouseholdID sql.NullInt32
-	UserID      sql.NullInt32
-	CreatedAt   sql.NullTime
-	UpdatedAt   sql.NullTime
+type TransactionsHouseholdUser struct {
+	HouseholdID int32
+	UserID      int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
-type Transaction struct {
+type TransactionsTransaction struct {
 	ID               int32
-	Amount           float64
+	Amount           float32
 	PaidBy           int32
-	AmountOwed       sql.NullFloat64
-	BudgetCategoryID sql.NullInt32
-	Description      sql.NullString
-	TransactionDate  sql.NullTime
-	TransactionID    sql.NullString
-	TransactionType  sql.NullInt32
-	OwedBy           sql.NullInt32
-	HouseholdID      sql.NullInt32
-	IsPaid           sql.NullBool
-	PaymentDate      sql.NullTime
-	CreatedAt        sql.NullTime
-	UpdatedAt        sql.NullTime
+	AmountOwed       *float32
+	BudgetCategoryID *int32
+	Description      *string
+	TransactionDate  pgtype.Timestamptz
+	TransactionID    *string
+	TransactionType  *int32
+	OwedBy           *int32
+	HouseholdID      *int32
+	IsPaid           *bool
+	PaymentDate      pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
 }
 
-type User struct {
+type TransactionsUser struct {
 	ID        int32
-	DiscordID sql.NullString
+	DiscordID *string
 	Name      string
-	CreatedAt sql.NullTime
-	UpdatedAt sql.NullTime
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }

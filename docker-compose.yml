@@ -7,22 +7,25 @@ services:
     volumes:
       - ./cmd:/app/cmd:rw
       - ./internal:/app/internal:rw
+    environment:
+      - DB_USER=voltr
+      - DB_PASSWORD=voltr
+      - DB_NAME=voltr_finance
+      - DB_HOST=db
+      - DB_PORT=5432
     env_file:
       - .env
-
-  mysql:
-    image: mysql
-    container_name: voltr-mysql
+  db:
+    image: postgres
+    container_name: voltr-db
     environment:
-      MYSQL_ROOT_PASSWORD: voltr
-      MYSQL_DATABASE: voltr_finance
-      MYSQL_USER: voltr
-      MYSQL_PASSWORD: voltr
+      POSTGRES_USER: voltr
+      POSTGRES_PASSWORD: voltr
+      POSTGRES_DB: voltr_finance
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - db_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
-
 volumes:
-  mysql_data:
+  db_data:

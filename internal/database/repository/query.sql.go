@@ -7,37 +7,32 @@ package database
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createTransaction = `-- name: CreateTransaction :execresult
-INSERT INTO ` + "`" + `transaction` + "`" + `
-SET
-    amount = ?,
-    is_paid = ?,
-    amount_owed = ?,
-    budget_category_id = ?,
-    description = ?,
-    transaction_date = ?,
-    transaction_id = ?,
-    transaction_type = ?,
-    paid_by = ?
+INSERT INTO transactions.transaction
+(amount, is_paid, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, paid_by)
+VALUES
+($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type CreateTransactionParams struct {
-	Amount           float64
-	IsPaid           sql.NullBool
-	AmountOwed       sql.NullFloat64
-	BudgetCategoryID sql.NullInt32
-	Description      sql.NullString
-	TransactionDate  sql.NullTime
-	TransactionID    sql.NullString
-	TransactionType  sql.NullInt32
+	Amount           float32
+	IsPaid           *bool
+	AmountOwed       *float32
+	BudgetCategoryID *int32
+	Description      *string
+	TransactionDate  pgtype.Timestamptz
+	TransactionID    *string
+	TransactionType  *int32
 	PaidBy           int32
 }
 
-func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, createTransaction,
+func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, createTransaction,
 		arg.Amount,
 		arg.IsPaid,
 		arg.AmountOwed,
@@ -51,19 +46,19 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
-SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM ` + "`" + `transaction` + "`" + `
-WHERE transaction_type=2 AND household_id = ?
+SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transactions.transaction
+WHERE transaction_type=2 AND household_id = $1
 `
 
-func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID sql.NullInt32) ([]Transaction, error) {
-	rows, err := q.db.QueryContext(ctx, listTransactionsByHousehold, householdID)
+func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int32) ([]TransactionsTransaction, error) {
+	rows, err := q.db.Query(ctx, listTransactionsByHousehold, householdID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Transaction
+	var items []TransactionsTransaction
 	for rows.Next() {
-		var i Transaction
+		var i TransactionsTransaction
 		if err := rows.Scan(
 			&i.ID,
 			&i.Amount,
@@ -84,9 +79,6 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID s
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
