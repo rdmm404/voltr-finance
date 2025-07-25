@@ -44,12 +44,20 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 	}
 }
 
-func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall) *genai.FunctionResponse {
+func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse {
 	mappedTransactions := make([]*transaction.Transaction, 0)
 	response := genai.FunctionResponse{
 		ID:       functionCall.ID,
 		Name:     st.Name(),
 		Response: make(map[string]any, 0),
+	}
+
+	err := st.validateDependencies(deps)
+
+	if err != nil {
+		fmt.Printf("SaveTransactions called with invalid deps %v\n", err)
+		response.Response["error"] = "Internal error"
+		return &response
 	}
 
 	transactionsAny, ok := functionCall.Args["transactions"]
@@ -77,7 +85,7 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall) *genai.Fun
 		mappedTransactions = append(mappedTransactions, &mappedTransaction)
 	}
 
-	err := transaction.SaveTransactions(mappedTransactions)
+	err = deps.Ts.SaveTransactions(mappedTransactions)
 
 	if err != nil {
 		response.Response["error"] = "Something bad happened :("
@@ -87,4 +95,12 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall) *genai.Fun
 
 	return &response
 
+}
+
+func (st SaveTransactionsTool) validateDependencies(deps *ToolDependencies) error {
+	if deps.Ts == nil {
+		return fmt.Errorf("transaction service not present in dependencies")
+	}
+
+	return nil
 }

@@ -65,12 +65,13 @@ func (b *Bot) Run() error {
 
 func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
-	fmt.Printf("message received %v\n", string(msgJson))
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
+
+	fmt.Printf("message received %v\n", string(msgJson))
 
 	s.ChannelTyping(m.ChannelID)
 
@@ -88,8 +89,8 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	resp, err := b.agent.SendMessage(context.TODO(), aiMsg)
 
 	if (err != nil || len(resp.Candidates) < 1) {
-		s.ChannelMessageSend(m.ChannelID, "Something went wrong :(")
 		fmt.Printf("error %v", err)
+		s.ChannelMessageSend(m.ChannelID, "Something went wrong :(")
 		// TODO: Send debug trace as spoiler or something that makes it hidden
 		return
 	}

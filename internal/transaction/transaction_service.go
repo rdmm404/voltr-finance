@@ -3,27 +3,14 @@ package transaction
 import (
 	"context"
 	"fmt"
-	"rdmm404/voltr-finance/internal/config"
 	database "rdmm404/voltr-finance/internal/database/repository"
-
-	"github.com/jackc/pgx/v5"
-	_ "github.com/jackc/pgx/v5/pgtype"
 )
 
-func SaveTransactions(transactions []*Transaction) error {
+type TransactionService struct {
+	db *database.Queries
+}
 
-	connString := fmt.Sprintf("postgres://%v:%v@%v:%v/%v", config.DB_USER, config.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME)
-
-	fmt.Println("Connecting with DSN " + connString)
-	conn, err := pgx.Connect(context.TODO(), connString)
-
-
-	if err != nil {
-		panic(err)
-	}
-
-	db := database.New(conn)
-	fmt.Println("received transactions")
+func (ts *TransactionService) SaveTransactions(transactions []*Transaction) error {
 	for _, trans := range transactions {
 		fmt.Printf("%+v\n", *trans)
 
@@ -33,7 +20,7 @@ func SaveTransactions(transactions []*Transaction) error {
 			PaidBy: 1,
 		}
 
-		res, err := db.CreateTransaction(context.TODO(), dbTrans)
+		res, err := ts.db.CreateTransaction(context.TODO(), dbTrans)
 
 		if err != nil {
 			panic(err)
@@ -42,4 +29,8 @@ func SaveTransactions(transactions []*Transaction) error {
 		fmt.Printf("db result: %+v\n", res)
 	}
 	return nil
+}
+
+func NewTransactionService(db *database.Queries) *TransactionService {
+	return &TransactionService{db: db}
 }

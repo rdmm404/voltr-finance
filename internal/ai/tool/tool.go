@@ -1,25 +1,41 @@
 package tool
 
-import "google.golang.org/genai"
+import (
+	"fmt"
+	"rdmm404/voltr-finance/internal/transaction"
+
+	"google.golang.org/genai"
+)
 
 type Tool interface {
 	Name() string
 	Description() string
 	Parameters() *genai.Schema
-	Call(functionCall *genai.FunctionCall) *genai.FunctionResponse
+	Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse
+}
+
+type ToolProvider struct {
+	toolsByName     map[string]Tool
+	genaiTools      []*genai.Tool
+	deps *ToolDependencies
+}
+
+type ToolDependencies struct {
+	Ts *transaction.TransactionService
 }
 
 var allTools = []Tool{
 	SaveTransactionsTool{},
 }
-var toolsByName = make(map[string]Tool)
-var genaiTools []*genai.Tool
 
-func init() {
+func NewToolProvider(deps *ToolDependencies) *ToolProvider {
+	tp := ToolProvider{deps: deps}
+	tp.toolsByName = make(map[string]Tool, 0)
+
 	for _, tool := range allTools {
-		toolsByName[tool.Name()] = tool
+		tp.toolsByName[tool.Name()] = tool
 
-		genaiTools = append(genaiTools, &genai.Tool{
+		tp.genaiTools = append(tp.genaiTools, &genai.Tool{
 			FunctionDeclarations: []*genai.FunctionDeclaration{
 				{
 					Name:        tool.Name(),
@@ -29,23 +45,23 @@ func init() {
 			},
 		})
 	}
+
+	return &tp
 }
 
-func GetTools() []Tool {
-	return allTools
-}
-
-func GetToolByName(name string) (Tool, bool) {
-	tool, ok := toolsByName[name]
+func (tp *ToolProvider) GetToolByName(name string) (Tool, bool) {
+	fmt.Printf("getting tool by name %v\n", name)
+	fmt.Printf("tools by name %+v\n", tp.toolsByName)
+	tool, ok := tp.toolsByName[name]
 	return tool, ok
 }
 
-func GetGenaiTools() []*genai.Tool {
-	return genaiTools
+func (tp *ToolProvider) GetGenaiTools() []*genai.Tool {
+	return tp.genaiTools
 }
 
-func ExecuteToolCall(call *genai.FunctionCall) *genai.FunctionResponse {
-	tool, ok := GetToolByName(call.Name)
+func (tp *ToolProvider) ExecuteToolCall(call *genai.FunctionCall) *genai.FunctionResponse {
+	tool, ok := tp.GetToolByName(call.Name)
 
 	if !ok {
 		return &genai.FunctionResponse{
@@ -57,5 +73,5 @@ func ExecuteToolCall(call *genai.FunctionCall) *genai.FunctionResponse {
 		}
 	}
 
-	return tool.Call(call)
+	return tool.Call(call, tp.deps)
 }

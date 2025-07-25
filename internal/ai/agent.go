@@ -13,6 +13,7 @@ type Agent struct {
 	Client   *genai.Client
 	config   *AgentConfig
 	messages []*genai.Content
+	tp *tool.ToolProvider
 }
 
 type AgentConfig struct {
@@ -21,7 +22,7 @@ type AgentConfig struct {
 	generationConfig *genai.GenerateContentConfig
 }
 
-func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
+func NewAgent(ctx context.Context, cfg *AgentConfig, tp *tool.ToolProvider) (*Agent, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{})
 	if err != nil {
 		return &Agent{}, fmt.Errorf("error while creating the LLM client - %w", err)
@@ -43,7 +44,7 @@ func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
 
 	cfg.generationConfig = &genai.GenerateContentConfig{
 		ResponseMIMEType: "text/plain",
-		Tools:            tool.GetGenaiTools(),
+		Tools:            tp.GetGenaiTools(),
 		SystemInstruction: &genai.Content{
 			Role: "system",
 			Parts: []*genai.Part{
@@ -56,6 +57,7 @@ func NewAgent(ctx context.Context, cfg *AgentConfig) (*Agent, error) {
 	return &Agent{
 		Client: client,
 		config: cfg,
+		tp: tp,
 	}, nil
 }
 
@@ -112,7 +114,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 
 	for _, call := range response.FunctionCalls() {
 		a.messages = append(a.messages, genai.NewContentFromFunctionCall(call.Name, call.Args, "model"))
-		result := tool.ExecuteToolCall(call)
+		result := a.tp.ExecuteToolCall(call)
 		a.messages = append(a.messages, &genai.Content{
 			Role:  "user",
 			Parts: []*genai.Part{{FunctionResponse: result}},
