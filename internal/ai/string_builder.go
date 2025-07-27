@@ -22,18 +22,8 @@ func LLMResponseToString(response LLMResponse) string {
 	return string(jsonResponse)
 }
 
-func LLMRequestToString(messages []*genai.Content, config *genai.GenerateContentConfig) (string, string) {
-	configJson, errConfig := json.MarshalIndent(config, "", "  ")
-
-	configStr := string(configJson)
-	contentStr := ContentSlice(messages).String()
-
-	if errConfig != nil {
-		fmt.Printf("Something happened while marshaling LLM config, falling back to struct %v", errConfig)
-		configStr = fmt.Sprintf("%+v", config)
-	}
-
-	return contentStr, configStr
+func LLMRequestToString(messages []*genai.Content) string {
+	return ContentSlice(messages).String()
 }
 
 type ContentSlice []*genai.Content
@@ -46,10 +36,9 @@ func (cs ContentSlice) String() string {
 			sb.WriteString(", ")
 		}
 
-		parts := PartSlice(content.Parts).String()
-		sb.WriteString("genai.Content{")
-		sb.WriteString(fmt.Sprintf("Parts: %+v", parts))
-		sb.WriteString(fmt.Sprintf("Role: %v}", content.Role))
+		sb.WriteString("genai.Content{ ")
+		sb.WriteString(fmt.Sprintf("Parts: %+v, ", PartSlice(content.Parts)))
+		sb.WriteString(fmt.Sprintf("Role: %v }", content.Role))
 
 	}
 	sb.WriteString("]")
@@ -65,8 +54,41 @@ func (ps PartSlice) String() string {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		sb.WriteString(fmt.Sprintf("%+v", *part))
+
+		partJson, err := json.Marshal((MyPart(*part)))
+
+		if err != nil {
+			sb.WriteString(fmt.Sprintf("%+v", *part))
+			continue
+		}
+
+		sb.WriteString(string(partJson))
 	}
 	sb.WriteString("]")
 	return sb.String()
+}
+
+type MyPart genai.Part
+
+type MyBlob struct {
+	genai.Blob
+	FormattedData string `json:"data,omitempty"`
+}
+
+func (p MyPart) MarshalJSON() ([]byte, error){
+	type Alias MyPart
+	if p.InlineData != nil && len(p.InlineData.Data) > 1 {
+		return json.Marshal(&struct {
+			Alias
+			FormattedInlineData MyBlob `json:"inlineData,omitempty"`
+		}{
+			Alias: (Alias)(p),
+			FormattedInlineData: MyBlob{
+				Blob: *p.InlineData,
+				FormattedData: fmt.Sprintf("%v bytes", len(p.InlineData.Data)),
+			},
+		})
+	}
+
+	return json.Marshal((Alias)(p))
 }

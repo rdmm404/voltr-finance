@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tool"
@@ -54,6 +55,13 @@ func NewAgent(ctx context.Context, cfg *AgentConfig, tp *tool.ToolProvider) (*Ag
 		MaxOutputTokens: cfg.MaxTokens,
 	}
 
+	configJson, err := json.MarshalIndent(cfg.generationConfig, "", "  ")
+	configStr := string(configJson)
+	if err != nil {
+		configStr = fmt.Sprintf("%+v", cfg.generationConfig)
+	}
+	fmt.Println("Initializing agent with config" + configStr)
+
 	return &Agent{
 		Client: client,
 		config: cfg,
@@ -96,9 +104,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 
 	a.messages = append(a.messages, content)
 
-	contentStr, configStr := LLMRequestToString(a.messages, a.config.generationConfig)
-
-	fmt.Printf("Sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
+	fmt.Printf("Sending request to LLM\n CONTENT: %s\n", LLMRequestToString(a.messages))
 
 	response, err := a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
 
@@ -122,9 +128,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	}
 
 	if len(toolCalls) > 0 {
-		contentStr, configStr := LLMRequestToString(a.messages, a.config.generationConfig)
-
-		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n CONFIG: %v\n", contentStr, configStr)
+		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n", LLMRequestToString(a.messages))
 		response, err = a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
 		if err != nil {
 			return &AgentResponse{}, err
