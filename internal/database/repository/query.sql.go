@@ -20,15 +20,15 @@ VALUES
 `
 
 type CreateTransactionParams struct {
-	Amount           float32
-	IsPaid           *bool
-	AmountOwed       *float32
-	BudgetCategoryID *int32
-	Description      *string
-	TransactionDate  pgtype.Timestamptz
-	TransactionID    *string
-	TransactionType  *int32
-	PaidBy           int32
+	Amount           float32            `json:"amount"`
+	IsPaid           *bool              `json:"is_paid"`
+	AmountOwed       *float32           `json:"amount_owed"`
+	BudgetCategoryID *int32             `json:"budget_category_id"`
+	Description      *string            `json:"description"`
+	TransactionDate  pgtype.Timestamptz `json:"transaction_date"`
+	TransactionID    *string            `json:"transaction_id"`
+	TransactionType  *int32             `json:"transaction_type"`
+	PaidBy           int32              `json:"paid_by"`
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (pgconn.CommandTag, error) {

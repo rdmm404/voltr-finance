@@ -4,33 +4,42 @@ import (
 	"context"
 	"fmt"
 	database "rdmm404/voltr-finance/internal/database/repository"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type TransactionService struct {
-	db *database.Queries
+	db *pgx.Conn
+	repository *database.Queries
 }
 
-func (ts *TransactionService) SaveTransactions(transactions []*Transaction) error {
-	for _, trans := range transactions {
-		fmt.Printf("%+v\n", *trans)
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*Transaction) error {
+	tx, err := ts.db.Begin(ctx)
 
+	if err != nil {
+		return fmt.Errorf("error while creating DB transaction %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	ts.repository.WithTx(tx)
+
+	for _, trans := range transactions {
 		dbTrans := database.CreateTransactionParams{
 			Amount: trans.Amount,
 			// Description: sql.NullString{String: trans.Description, Valid: true},
 			PaidBy: 1,
 		}
 
-		res, err := ts.db.CreateTransaction(context.TODO(), dbTrans)
+		_, err := ts.repository.CreateTransaction(ctx, dbTrans)
 
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("error while storing transaction %v - %w", trans.Name, err)
 		}
 
-		fmt.Printf("db result: %+v\n", res)
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
-func NewTransactionService(db *database.Queries) *TransactionService {
-	return &TransactionService{db: db}
+func NewTransactionService(db *pgx.Conn, repository *database.Queries) *TransactionService {
+	return &TransactionService{db: db, repository: repository}
 }
