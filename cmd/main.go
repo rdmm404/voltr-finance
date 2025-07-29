@@ -13,12 +13,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	dbConn := database.Init()
-	defer dbConn.Close(ctx)
+	db := database.Init()
+	defer db.Close(ctx)
 
-	db := database.New(dbConn)
+	repository := database.New(db)
 
-	ts := transaction.NewTransactionService(db)
+	ts := transaction.NewTransactionService(db, repository)
 
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 

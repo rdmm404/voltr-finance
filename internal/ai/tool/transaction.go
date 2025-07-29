@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
@@ -85,7 +86,7 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *Tool
 		mappedTransactions = append(mappedTransactions, &mappedTransaction)
 	}
 
-	err = deps.Ts.SaveTransactions(mappedTransactions)
+	err = deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
 
 	if err != nil {
 		response.Response["error"] = "Something bad happened :("
