@@ -21,11 +21,11 @@ CREATE TABLE transactions.household_user (
     user_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (household_id, user_id),
     FOREIGN KEY (household_id) REFERENCES transactions.household(id),
-    FOREIGN KEY (user_id) REFERENCES transactions."user"(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    FOREIGN KEY (user_id) REFERENCES transactions."user"(id)
 );
 
 CREATE TABLE transactions.budget (
@@ -33,10 +33,10 @@ CREATE TABLE transactions.budget (
     user_id INT,
     household_id INT,
     type VARCHAR(50) NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES transactions."user"(id),
-    FOREIGN KEY (household_id) REFERENCES transactions.household(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES transactions."user"(id),
+    FOREIGN KEY (household_id) REFERENCES transactions.household(id)
 );
 
 CREATE TABLE transactions.budget_category (
@@ -44,9 +44,9 @@ CREATE TABLE transactions.budget_category (
     budget_id INT,
     category_name VARCHAR(255) NOT NULL,
     allocation REAL NOT NULL,
-    FOREIGN KEY (budget_id) REFERENCES transactions.budget(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (budget_id) REFERENCES transactions.budget(id)
 );
 
 CREATE TABLE transactions.transaction (
@@ -66,10 +66,10 @@ CREATE TABLE transactions.transaction (
     is_paid BOOLEAN,
     payment_date TIMESTAMP WITH TIME ZONE,
 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (paid_by) REFERENCES transactions."user"(id),
     FOREIGN KEY (owed_by) REFERENCES transactions."user"(id),
     FOREIGN KEY (budget_category_id) REFERENCES transactions.budget_category(id),
-    FOREIGN KEY (household_id) REFERENCES transactions.household(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    FOREIGN KEY (household_id) REFERENCES transactions.household(id)
 );
