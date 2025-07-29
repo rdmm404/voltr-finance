@@ -13,7 +13,7 @@ type TransactionService struct {
 	repository *database.Queries
 }
 
-func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*Transaction) error {
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*database.Transaction) error {
 	tx, err := ts.db.Begin(ctx)
 
 	if err != nil {
@@ -33,7 +33,7 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 		_, err := ts.repository.CreateTransaction(ctx, dbTrans)
 
 		if err != nil {
-			return fmt.Errorf("error while storing transaction %v - %w", trans.Name, err)
+			return fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)
 		}
 
 	}

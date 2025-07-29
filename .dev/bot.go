@@ -15,7 +15,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	agentCfg := ai.AgentConfig{MaxTokens: 400}
+	agentCfg := ai.AgentConfig{MaxTokens: 5000}
 	agent, err := ai.NewAgent(ctx, &agentCfg)
 
 	if err != nil {

@@ -3,9 +3,14 @@ package tool
 import (
 	"context"
 	"fmt"
+	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
+	"reflect"
+	"strconv"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/genai"
 )
@@ -26,18 +31,48 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 				Type: genai.TypeArray,
 				Items: &genai.Schema{
 					Type: genai.TypeObject,
+					Required: []string{"description", "amount", "transactionType", "paidBy"},
 					Properties: map[string]*genai.Schema{
-						"name": {
-							Type:        genai.TypeString,
-							Description: "Name of the transaction.",
-						},
 						"description": {
 							Type:        genai.TypeString,
-							Description: "Description of the transaction. Not required. Should only be set if inferrable from the image.",
+							Description: "Description of the transaction.",
 							Nullable:    utils.BoolPtr(true),
 						},
-						"amount":          {Type: genai.TypeNumber},
-						"transactionType": {Type: genai.TypeString, Enum: []string{"credit", "debit"}},
+						"amount":          {
+							Type: genai.TypeNumber,
+							Description: "The amount of the transaction.",
+						},
+						"transactionType": {
+						Type: genai.TypeString,
+							Enum: []string{
+								fmt.Sprintf("%v", transaction.TransactionTypePersonal),
+								fmt.Sprintf("%v", transaction.TransactionTypeHousehold),
+							},
+
+							Description: "The type of the transaction. For personal transactions use 1, For household transactions use 2.",
+						},
+						"paidBy": {
+							Type: genai.TypeInteger,
+							Description: "The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender.",
+						},
+						"transactionDate": {
+							Type: genai.TypeString,
+							Description: "The date and time of the transaction in ISO format. Only set if can be inferred by the data provided. Must be in the format YYYY-MM-DDTHH:MM:SS.",
+							Nullable: utils.BoolPtr(true),
+						},
+						"notes": {
+							Type: genai.TypeString,
+							Description: "Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction.",
+							Nullable: utils.BoolPtr(true),
+						},
+						"householdId": {
+							Type: genai.TypeInteger,
+							Description: "ID of the household the user belongs to. Only set if the transaction is of type household.",
+							Nullable: utils.BoolPtr(true),
+						},
+
+						// TODO missing fields
+						// owedBy, amountOwed, paymentDate, isPaid
 					},
 				},
 			},
@@ -46,7 +81,7 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 }
 
 func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse {
-	mappedTransactions := make([]*transaction.Transaction, 0)
+	mappedTransactions := make([]*database.Transaction, 0)
 	response := genai.FunctionResponse{
 		ID:       functionCall.ID,
 		Name:     st.Name(),
@@ -75,10 +110,37 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *Tool
 	}
 
 	for i, trans := range transactions {
-		mappedTransaction := transaction.Transaction{}
-		err := mapstructure.Decode(trans, &mappedTransaction)
+		transMap, ok := trans.(map[string]any)
+
+		if !ok {
+			response.Response["error"] = fmt.Sprintf("Invalid format for transaction %v", trans)
+			return &response
+		}
+
+		if !convertFieldStrToInt(&transMap, "transactionType") {
+			response.Response["error"] = fmt.Sprintf("Invalid transaction type received %v", trans)
+			return &response
+		}
+
+		fmt.Printf("Type of paidby %v", reflect.TypeOf(transMap["paidBy"]))
+		paidByFloat, ok := transMap["paidBy"].(float64)
+		if ok {
+			transMap["paidBy"] = int32(paidByFloat)
+		} else if !convertFieldStrToInt(&transMap, "paidBy") {
+			response.Response["error"] = fmt.Sprintf("Invalid paidBy ID received %v", trans)
+			return &response
+		}
+
+		if !convertFieldStrToPgDate(&transMap, "transactionDate") {
+			response.Response["error"] = fmt.Sprintf("Invalid transactionDate received %v", trans)
+			return &response
+		}
+
+		mappedTransaction := database.Transaction{}
+		err = mapstructure.Decode(trans, &mappedTransaction)
 
 		if err != nil {
+			fmt.Println(err)
 			response.Response["error"] = fmt.Sprintf("Invalid format for transaction at index %v", i)
 			return &response
 		}
@@ -104,4 +166,55 @@ func (st SaveTransactionsTool) validateDependencies(deps *ToolDependencies) erro
 	}
 
 	return nil
+}
+
+func convertFieldStrToInt(callArgs *map[string]any, fieldName string) bool {
+	callArgsMap := *callArgs
+	valueAny, ok := callArgsMap[fieldName]
+	if !ok {
+		fmt.Printf("\nnot found in map\n")
+		return ok
+	}
+
+	valueStr, ok := valueAny.(string)
+	if !ok {
+		fmt.Printf("\nnot a string\n")
+		return ok
+	}
+
+	valueInt, err := strconv.Atoi(valueStr)
+	if err != nil {
+		fmt.Printf("\nError while converting %v\n", err)
+		return false
+	}
+	callArgsMap[fieldName] = valueInt
+	return true
+}
+
+func convertFieldStrToPgDate(callArgs *map[string]any, fieldName string) bool {
+	callArgsMap := *callArgs
+	valueAny, ok := callArgsMap[fieldName]
+	if !ok {
+		return ok
+	}
+
+	valueStr, ok := valueAny.(string)
+	if !ok {
+		return ok
+	}
+
+	valueTime, err := time.Parse("2006-01-02T15:04:05", valueStr)
+
+	if err != nil {
+		return false
+	}
+
+	ts := pgtype.Timestamptz{
+		Time: valueTime,
+		Valid: true,
+	}
+
+	callArgsMap[fieldName] = ts
+
+	return true
 }

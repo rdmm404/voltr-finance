@@ -89,8 +89,8 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	resp, err := b.agent.SendMessage(context.TODO(), aiMsg)
 
 	if (err != nil || len(resp.Candidates) < 1) {
-		fmt.Printf("error %v", err)
-		s.ChannelMessageSend(m.ChannelID, "Something went wrong :(")
+		fmt.Printf("error %v\n", err)
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", err))
 		// TODO: Send debug trace as spoiler or something that makes it hidden
 		return
 	}

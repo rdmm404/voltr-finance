@@ -22,7 +22,7 @@ func main() {
 
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 
-	agentCfg := ai.AgentConfig{MaxTokens: 400}
+	agentCfg := ai.AgentConfig{MaxTokens: 5000}
 	agent, err := ai.NewAgent(ctx, &agentCfg, tp)
 
 	if err != nil {

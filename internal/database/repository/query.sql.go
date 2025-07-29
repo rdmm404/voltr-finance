@@ -46,7 +46,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
-SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transaction
+SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
@@ -69,6 +69,7 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 			&i.TransactionDate,
 			&i.TransactionID,
 			&i.TransactionType,
+			&i.Notes,
 			&i.OwedBy,
 			&i.HouseholdID,
 			&i.IsPaid,

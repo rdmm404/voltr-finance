@@ -50,6 +50,7 @@ type Transaction struct {
 	TransactionDate  pgtype.Timestamptz `json:"transaction_date"`
 	TransactionID    *string            `json:"transaction_id"`
 	TransactionType  *int32             `json:"transaction_type"`
+	Notes            *string            `json:"notes"`
 	OwedBy           *int32             `json:"owed_by"`
 	HouseholdID      *int32             `json:"household_id"`
 	IsPaid           *bool              `json:"is_paid"`

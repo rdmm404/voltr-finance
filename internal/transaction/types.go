@@ -1,16 +1,8 @@
 package transaction
 
-type TransactionType string
+type TransactionType int
 
 const (
-	TransactionTypeCredit TransactionType = "credit"
-	TransactionTypeDebit  TransactionType = "debit"
+	TransactionTypePersonal TransactionType = 1
+	TransactionTypeHousehold  TransactionType = 2
 )
-
-type Transaction struct {
-	Name            string
-	Description     string
-	Amount          float32
-	TransactionType TransactionType
-
-}

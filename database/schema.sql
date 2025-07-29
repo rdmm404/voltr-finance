@@ -57,8 +57,9 @@ CREATE TABLE transaction (
     budget_category_id INT,
     description VARCHAR(255),
     transaction_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    transaction_id VARCHAR(255) UNIQUE,
+    transaction_id VARCHAR(255) UNIQUE, -- hash
     transaction_type INT, -- 1=personal, 2=household
+    notes TEXT,
 
     -- for household
     owed_by INT,
