@@ -11,6 +11,7 @@ COPY .air.toml sqlc.yaml ./
 COPY database ./database
 COPY cmd ./cmd
 COPY internal ./internal
+COPY .dev ./.dev
 
 ENTRYPOINT [ "air" ]
 CMD [ "." ]

@@ -7,6 +7,7 @@ services:
     volumes:
       - ./cmd:/app/cmd:rw
       - ./internal:/app/internal:rw
+      - ./.dev:/app/.dev:rw
     environment:
       - DB_USER=voltr
       - DB_PASSWORD=voltr
@@ -15,6 +16,8 @@ services:
       - DB_PORT=5432
     env_file:
       - .env
+    depends_on:
+      - db
   db:
     image: postgres
     container_name: voltr-db
