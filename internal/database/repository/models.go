@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type TransactionsBudget struct {
+type Budget struct {
 	ID          int32              `json:"id"`
 	UserID      *int32             `json:"user_id"`
 	HouseholdID *int32             `json:"household_id"`
@@ -17,7 +17,7 @@ type TransactionsBudget struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
-type TransactionsBudgetCategory struct {
+type BudgetCategory struct {
 	ID           int32              `json:"id"`
 	BudgetID     *int32             `json:"budget_id"`
 	CategoryName string             `json:"category_name"`
@@ -26,21 +26,21 @@ type TransactionsBudgetCategory struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-type TransactionsHousehold struct {
+type Household struct {
 	ID        int32              `json:"id"`
 	Name      string             `json:"name"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-type TransactionsHouseholdUser struct {
+type HouseholdUser struct {
 	HouseholdID int32              `json:"household_id"`
 	UserID      int32              `json:"user_id"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
-type TransactionsTransaction struct {
+type Transaction struct {
 	ID               int32              `json:"id"`
 	Amount           float32            `json:"amount"`
 	PaidBy           int32              `json:"paid_by"`
@@ -58,7 +58,7 @@ type TransactionsTransaction struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
-type TransactionsUser struct {
+type User struct {
 	ID        int32              `json:"id"`
 	DiscordID *string            `json:"discord_id"`
 	Name      string             `json:"name"`

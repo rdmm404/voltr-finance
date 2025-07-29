@@ -1,7 +1,9 @@
 -- TODO: ADD INDEXES FOR QUERIED COLUMNS
+SET search_path = transactions;
+ALTER DATABASE voltr_finance SET search_path TO transactions;
 CREATE SCHEMA transactions;
 
-CREATE TABLE transactions."user" (
+CREATE TABLE "user" (
     id SERIAL PRIMARY KEY,
     discord_id VARCHAR(255) UNIQUE,
     name VARCHAR(255) NOT NULL,
@@ -9,47 +11,45 @@ CREATE TABLE transactions."user" (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE transactions.household (
+CREATE TABLE household (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE transactions.household_user (
+CREATE TABLE household_user (
     household_id INT,
     user_id INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (household_id, user_id),
-    FOREIGN KEY (household_id) REFERENCES transactions.household(id),
-    FOREIGN KEY (user_id) REFERENCES transactions."user"(id)
+    FOREIGN KEY (household_id) REFERENCES household(id),
+    FOREIGN KEY (user_id) REFERENCES "user"(id)
 );
 
-CREATE TABLE transactions.budget (
+CREATE TABLE budget (
     id SERIAL PRIMARY KEY,
     user_id INT,
     household_id INT,
     type VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES transactions."user"(id),
-    FOREIGN KEY (household_id) REFERENCES transactions.household(id)
+    FOREIGN KEY (user_id) REFERENCES "user"(id),
+    FOREIGN KEY (household_id) REFERENCES household(id)
 );
 
-CREATE TABLE transactions.budget_category (
+CREATE TABLE budget_category (
     id SERIAL PRIMARY KEY,
     budget_id INT,
     category_name VARCHAR(255) NOT NULL,
     allocation REAL NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (budget_id) REFERENCES transactions.budget(id)
+    FOREIGN KEY (budget_id) REFERENCES budget(id)
 );
 
-CREATE TABLE transactions.transaction (
+CREATE TABLE transaction (
     id SERIAL PRIMARY KEY,
     amount REAL NOT NULL,
     paid_by INT NOT NULL,
@@ -68,8 +68,8 @@ CREATE TABLE transactions.transaction (
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (paid_by) REFERENCES transactions."user"(id),
-    FOREIGN KEY (owed_by) REFERENCES transactions."user"(id),
-    FOREIGN KEY (budget_category_id) REFERENCES transactions.budget_category(id),
-    FOREIGN KEY (household_id) REFERENCES transactions.household(id)
+    FOREIGN KEY (paid_by) REFERENCES "user"(id),
+    FOREIGN KEY (owed_by) REFERENCES "user"(id),
+    FOREIGN KEY (budget_category_id) REFERENCES budget_category(id),
+    FOREIGN KEY (household_id) REFERENCES household(id)
 );

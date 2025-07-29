@@ -13,7 +13,7 @@ import (
 )
 
 const createTransaction = `-- name: CreateTransaction :execresult
-INSERT INTO transactions.transaction
+INSERT INTO transaction
 (amount, is_paid, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, paid_by)
 VALUES
 ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -46,19 +46,19 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
-SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transactions.transaction
+SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
-func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int32) ([]TransactionsTransaction, error) {
+func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int32) ([]Transaction, error) {
 	rows, err := q.db.Query(ctx, listTransactionsByHousehold, householdID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TransactionsTransaction
+	var items []Transaction
 	for rows.Next() {
-		var i TransactionsTransaction
+		var i Transaction
 		if err := rows.Scan(
 			&i.ID,
 			&i.Amount,
