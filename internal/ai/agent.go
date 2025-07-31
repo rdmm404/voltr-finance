@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tool"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -15,6 +16,7 @@ type Agent struct {
 	config   *AgentConfig
 	messages []*genai.Content
 	tp *tool.ToolProvider
+	usageStats UsageStats
 }
 
 type AgentConfig struct {
@@ -106,11 +108,13 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 
 	fmt.Printf("Sending request to LLM\n CONTENT: %s\n", LLMRequestToString(a.messages))
 
-	response, err := a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
+	response, err := a.generateContentRetry(ctx, a.config.Model, a.messages, a.config.generationConfig)
 
 	if err != nil {
 		return &AgentResponse{}, err
 	}
+
+	a.countTokens(response)
 
 	a.messages = append(a.messages, response.Candidates[0].Content)
 
@@ -129,13 +133,61 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 
 	if len(toolCalls) > 0 {
 		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n", LLMRequestToString(a.messages))
-		response, err = a.Client.Models.GenerateContent(ctx, a.config.Model, a.messages, a.config.generationConfig)
+		response, err = a.generateContentRetry(ctx, a.config.Model, a.messages, a.config.generationConfig)
 		if err != nil {
 			return &AgentResponse{}, err
 		}
+		a.countTokens(response)
 		a.messages = append(a.messages, response.Candidates[0].Content)
 		fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
 	}
 
 	return (*AgentResponse)(response), nil
+}
+
+func (a *Agent) countTokens(resp *genai.GenerateContentResponse) {
+	if resp == nil || resp.UsageMetadata == nil {
+		return
+	}
+
+	a.usageStats.InputTokens += resp.UsageMetadata.PromptTokenCount + resp.UsageMetadata.ToolUsePromptTokenCount
+	a.usageStats.OutputTokens += resp.UsageMetadata.CandidatesTokenCount
+	a.usageStats.TotalTokens += resp.UsageMetadata.TotalTokenCount
+
+	fmt.Printf("\nCurrent usage stats: %+v\n", a.usageStats)
+}
+
+func (a *Agent) generateContentRetry(
+	ctx context.Context,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) (*genai.GenerateContentResponse, error) {
+	// TODO make this configurable
+	maxRetries := 5
+	delay := 2 * time.Second // TODO exponential backoff?
+
+	var lastErr error
+
+	for retry := range maxRetries {
+		time.Sleep(delay * time.Duration(retry))
+		response, err := a.Client.Models.GenerateContent(ctx, model, contents, config)
+		lastErr = err
+		if err == nil {
+			return response, nil
+		}
+
+		apiErr, ok := err.(genai.APIError)
+		if !ok {
+			return nil, err
+		}
+
+		if apiErr.Code != 500 {
+			return nil, err
+		}
+
+		fmt.Printf("Error response received, retrying - %v\n", err)
+	}
+
+	return nil, lastErr
 }

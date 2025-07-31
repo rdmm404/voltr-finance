@@ -88,11 +88,15 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 
 	resp, err := b.agent.SendMessage(context.TODO(), aiMsg)
 
-	if (err != nil || len(resp.Candidates) < 1) {
+	if (err != nil) {
 		fmt.Printf("error %v\n", err)
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", err))
 		// TODO: Send debug trace as spoiler or something that makes it hidden
 		return
+	}
+
+	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0] == nil || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 || resp.Candidates[0].Content.Parts[0] == nil {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", resp))
 	}
 
 	err = sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
@@ -101,7 +105,6 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		fmt.Println(err)
 	}
 }
-
 
 func sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Session, m *discordgo.MessageCreate) error {
 	remainder := []rune(msg)

@@ -62,3 +62,9 @@ func (b *CustomBlob) MarshalJson() ([]byte, error) {
 		Alias:    (*Alias)(b),
 	})
 }
+
+type UsageStats struct {
+	TotalTokens int32
+	InputTokens int32
+	OutputTokens int32
+}

@@ -31,7 +31,7 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 				Type: genai.TypeArray,
 				Items: &genai.Schema{
 					Type: genai.TypeObject,
-					Required: []string{"description", "amount", "transactionType", "paidBy"},
+					Required: []string{"description", "amount", "transactionType", "paidBy", "transactionDate"},
 					Properties: map[string]*genai.Schema{
 						"description": {
 							Type:        genai.TypeString,
