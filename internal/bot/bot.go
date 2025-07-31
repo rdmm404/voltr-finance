@@ -95,8 +95,36 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		return
 	}
 
-	_, err = s.ChannelMessageSend(m.ChannelID, resp.Candidates[0].Content.Parts[0].Text)
+	err = sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
+
 	if (err != nil) {
 		fmt.Println(err)
 	}
+}
+
+
+func sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Session, m *discordgo.MessageCreate) error {
+	remainder := []rune(msg)
+	chunkSize := MAX_MESSAGE_LENGTH
+	if chunkSizePtr != nil {
+		chunkSize = *chunkSizePtr
+	}
+	for (len(remainder) > 0) {
+		var currMessage []rune
+		if len(remainder) > int(chunkSize) {
+			currMessage = remainder[:chunkSize]
+		} else {
+			currMessage = remainder
+		}
+
+		remainder = remainder[len(currMessage):]
+
+		_, err := s.ChannelMessageSend(m.ChannelID, string(currMessage))
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
