@@ -36,7 +36,7 @@ func NewAgent(ctx context.Context, cfg *AgentConfig, tp *tool.ToolProvider) (*Ag
 	}
 
 	if cfg.Model == "" {
-		cfg.Model = "gemini-2.5-flash-lite-preview-06-17"
+		cfg.Model = "gemini-2.0-flash"
 	}
 
 	systemInstruction, err := formatSystemPrompt(43)
@@ -123,7 +123,6 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	toolCalls := response.FunctionCalls()
 
 	for _, call := range response.FunctionCalls() {
-		a.messages = append(a.messages, genai.NewContentFromFunctionCall(call.Name, call.Args, "model"))
 		result := a.tp.ExecuteToolCall(call)
 		a.messages = append(a.messages, &genai.Content{
 			Role:  "user",

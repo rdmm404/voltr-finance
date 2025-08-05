@@ -6,7 +6,6 @@ import (
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -122,7 +121,6 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *Tool
 			return &response
 		}
 
-		fmt.Printf("Type of paidby %v", reflect.TypeOf(transMap["paidBy"]))
 		paidByFloat, ok := transMap["paidBy"].(float64)
 		if ok {
 			transMap["paidBy"] = int32(paidByFloat)
