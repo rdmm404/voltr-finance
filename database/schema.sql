@@ -3,7 +3,7 @@ SET search_path = transactions;
 ALTER DATABASE voltr_finance SET search_path TO transactions;
 CREATE SCHEMA transactions;
 
-CREATE TABLE "user" (
+CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     discord_id VARCHAR(255) UNIQUE,
     name VARCHAR(255) NOT NULL,
@@ -11,6 +11,7 @@ CREATE TABLE "user" (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- TODO add discord server id to link server to household
 CREATE TABLE household (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
@@ -18,6 +19,7 @@ CREATE TABLE household (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- TODO add default owed amount
 CREATE TABLE household_user (
     household_id INT,
     user_id INT,
@@ -25,7 +27,7 @@ CREATE TABLE household_user (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (household_id, user_id),
     FOREIGN KEY (household_id) REFERENCES household(id),
-    FOREIGN KEY (user_id) REFERENCES "user"(id)
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE budget (
@@ -35,7 +37,7 @@ CREATE TABLE budget (
     type VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES "user"(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (household_id) REFERENCES household(id)
 );
 
@@ -69,8 +71,8 @@ CREATE TABLE transaction (
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (paid_by) REFERENCES "user"(id),
-    FOREIGN KEY (owed_by) REFERENCES "user"(id),
+    FOREIGN KEY (paid_by) REFERENCES users(id),
+    FOREIGN KEY (owed_by) REFERENCES users(id),
     FOREIGN KEY (budget_category_id) REFERENCES budget_category(id),
     FOREIGN KEY (household_id) REFERENCES household(id)
 );

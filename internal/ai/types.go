@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
 
 	"google.golang.org/genai"
@@ -37,6 +38,12 @@ type Attachment struct {
 type Message struct {
 	Attachments []*Attachment
 	Msg         string
+	SenderInfo *MessageSenderInfo
+}
+
+type MessageSenderInfo struct {
+	User *database.User
+	Household *database.Household
 }
 
 // this is just to override the json marshalling of files

@@ -14,9 +14,20 @@ import (
 
 const createTransaction = `-- name: CreateTransaction :execresult
 INSERT INTO transaction
-(amount, is_paid, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, paid_by)
+(
+    amount,
+    is_paid,
+    amount_owed,
+    budget_category_id,
+    description,
+    transaction_date,
+    transaction_id,
+    transaction_type,
+    paid_by,
+    household_id
+)
 VALUES
-($1, $2, $3, $4, $5, $6, $7, $8, $9)
+($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateTransactionParams struct {
@@ -29,6 +40,7 @@ type CreateTransactionParams struct {
 	TransactionID    *string            `json:"transaction_id"`
 	TransactionType  *int32             `json:"transaction_type"`
 	PaidBy           int32              `json:"paid_by"`
+	HouseholdID      *int32             `json:"household_id"`
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (pgconn.CommandTag, error) {
@@ -42,7 +54,37 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.TransactionID,
 		arg.TransactionType,
 		arg.PaidBy,
+		arg.HouseholdID,
 	)
+}
+
+const getUserDetailsByDiscordId = `-- name: GetUserDetailsByDiscordId :one
+SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, household.id, household.name, household.created_at, household.updated_at FROM users
+JOIN household_user on users.id = household_user.user_id
+JOIN household on household_user.household_id = household.id
+WHERE users.discord_id = $1
+`
+
+type GetUserDetailsByDiscordIdRow struct {
+	User      User      `json:"user"`
+	Household Household `json:"household"`
+}
+
+func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *string) (GetUserDetailsByDiscordIdRow, error) {
+	row := q.db.QueryRow(ctx, getUserDetailsByDiscordId, discordID)
+	var i GetUserDetailsByDiscordIdRow
+	err := row.Scan(
+		&i.User.ID,
+		&i.User.DiscordID,
+		&i.User.Name,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.Household.ID,
+		&i.Household.Name,
+		&i.Household.CreatedAt,
+		&i.Household.UpdatedAt,
+	)
+	return i, err
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many

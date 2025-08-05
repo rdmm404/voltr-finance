@@ -29,7 +29,7 @@ func main() {
 		log.Fatalf("Failed to initialize agent %v", err)
 	}
 
-	bot, err := bot.NewBot(agent)
+	bot, err := bot.NewBot(agent, repository)
 	if err != nil {
 		log.Panicf("Error creating bot %v", err)
 	}

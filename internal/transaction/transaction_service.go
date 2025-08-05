@@ -13,7 +13,7 @@ type TransactionService struct {
 	repository *database.Queries
 }
 
-func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*database.Transaction) error {
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*database.CreateTransactionParams) error {
 	tx, err := ts.db.Begin(ctx)
 
 	if err != nil {
@@ -24,13 +24,7 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 	ts.repository.WithTx(tx)
 
 	for _, trans := range transactions {
-		dbTrans := database.CreateTransactionParams{
-			Amount: trans.Amount,
-			// Description: sql.NullString{String: trans.Description, Valid: true},
-			PaidBy: 1,
-		}
-
-		_, err := ts.repository.CreateTransaction(ctx, dbTrans)
+		_, err := ts.repository.CreateTransaction(ctx, *trans)
 
 		if err != nil {
 			return fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)

@@ -30,7 +30,7 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 				Type: genai.TypeArray,
 				Items: &genai.Schema{
 					Type: genai.TypeObject,
-					Required: []string{"description", "amount", "transactionType", "paidBy", "transactionDate"},
+					Required: []string{"description", "amount", "transactionType", "paidBy", "transactionDate", "householdId"},
 					Properties: map[string]*genai.Schema{
 						"description": {
 							Type:        genai.TypeString,
@@ -80,7 +80,7 @@ func (st SaveTransactionsTool) Parameters() *genai.Schema {
 }
 
 func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse {
-	mappedTransactions := make([]*database.Transaction, 0)
+	mappedTransactions := make([]*database.CreateTransactionParams, 0)
 	response := genai.FunctionResponse{
 		ID:       functionCall.ID,
 		Name:     st.Name(),
@@ -134,7 +134,7 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *Tool
 			return &response
 		}
 
-		mappedTransaction := database.Transaction{}
+		mappedTransaction := database.CreateTransactionParams{}
 		err = mapstructure.Decode(trans, &mappedTransaction)
 
 		if err != nil {

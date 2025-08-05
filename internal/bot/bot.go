@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"rdmm404/voltr-finance/internal/ai"
 	"rdmm404/voltr-finance/internal/config"
+	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/utils"
 	"syscall"
 
@@ -20,13 +21,14 @@ var ErrInvalidBotConfig = errors.New("bot is not set up correctly")
 type Bot struct {
 	session *discordgo.Session
 	agent Agent
+	repository *database.Queries
 }
 
 type Agent interface {
 	SendMessage(ctx context.Context, msg *ai.Message) (*ai.AgentResponse, error)
 }
 
-func NewBot(agent Agent) (*Bot, error) {
+func NewBot(agent Agent, repository *database.Queries) (*Bot, error) {
 	token := config.DISCORD_TOKEN
 	if token == "" {
 		return nil, fmt.Errorf("%w - DISCORD_TOKEN environment variable is not set", ErrInvalidBotConfig)
@@ -40,6 +42,7 @@ func NewBot(agent Agent) (*Bot, error) {
 	bot := &Bot{
 		session: dg,
 		agent: agent,
+		repository: repository,
 	}
 
 	dg.AddHandler(bot.handlerMessageCreate)
@@ -64,6 +67,7 @@ func (b *Bot) Run() error {
 }
 
 func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	ctx := context.TODO()
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
@@ -75,18 +79,26 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 
 	s.ChannelTyping(m.ChannelID)
 
-	aiMsg := &ai.Message{Msg: m.Content}
+	senderInfo, err := b.getSenderIntoFromMessage(ctx, m)
 
-		for _, att := range m.Attachments {
-			bytes, err := utils.DownloadFileBytes(att.URL)
-			if err != nil {
-				fmt.Printf("Error downloading attachment %+v - %v\n", att, err)
-				return
-			}
-			aiMsg.Attachments = append(aiMsg.Attachments, &ai.Attachment{File: bytes, Mimetype: att.ContentType})
+	if err != nil {
+		fmt.Printf("Bot: Error while getting sender info %v", err)
+		return
+	}
+
+	aiMsg := &ai.Message{Msg: m.Content, SenderInfo: senderInfo}
+
+
+	for _, att := range m.Attachments {
+		bytes, err := utils.DownloadFileBytes(att.URL)
+		if err != nil {
+			fmt.Printf("Error downloading attachment %+v - %v\n", att, err)
+			return
 		}
+		aiMsg.Attachments = append(aiMsg.Attachments, &ai.Attachment{File: bytes, Mimetype: att.ContentType})
+	}
 
-	resp, err := b.agent.SendMessage(context.TODO(), aiMsg)
+	resp, err := b.agent.SendMessage(ctx, aiMsg)
 
 	if (err != nil) {
 		fmt.Printf("error %v\n", err)
@@ -99,14 +111,30 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", resp))
 	}
 
-	err = sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
+	err = b.sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
 
 	if (err != nil) {
 		fmt.Println(err)
 	}
 }
 
-func sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Session, m *discordgo.MessageCreate) error {
+func (b *Bot) getSenderIntoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*ai.MessageSenderInfo, error) {
+	if m == nil || m.Author == nil {
+		return nil, fmt.Errorf("message received does not have an authoor")
+	}
+
+	result, err := b.repository.GetUserDetailsByDiscordId(ctx, &m.Author.ID)
+
+	if (err != nil) {
+		return nil, err
+	}
+	return &ai.MessageSenderInfo{
+		User: &result.User,
+		Household: &result.Household,
+	}, nil
+}
+
+func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Session, m *discordgo.MessageCreate) error {
 	remainder := []rune(msg)
 	chunkSize := MAX_MESSAGE_LENGTH
 	if chunkSizePtr != nil {

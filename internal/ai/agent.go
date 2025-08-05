@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tool"
+	"strings"
 	"time"
 
 	"google.golang.org/genai"
@@ -86,7 +87,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	}
 
 	if msg.Msg != "" {
-		content.Parts = append(content.Parts, genai.NewPartFromText(msg.Msg))
+		content.Parts = append(content.Parts, genai.NewPartFromText(a.formatMessageText(msg)))
 	}
 
 	for _, attachment := range msg.Attachments {
@@ -142,6 +143,20 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	}
 
 	return (*AgentResponse)(response), nil
+}
+
+func (a *Agent) formatMessageText(msg *Message) string {
+	var sb strings.Builder
+	sb.WriteString(
+		fmt.Sprintf(
+			"Message sent by user '%v' with ID %v whos part of the household %v:\n",
+			msg.SenderInfo.User.Name,
+			msg.SenderInfo.User.ID,
+			msg.SenderInfo.Household.ID),
+	)
+
+	sb.WriteString(msg.Msg)
+	return sb.String()
 }
 
 func (a *Agent) countTokens(resp *genai.GenerateContentResponse) {
