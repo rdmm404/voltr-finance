@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tool"
-	"strings"
 	"time"
 
 	"google.golang.org/genai"
@@ -40,7 +39,7 @@ func NewAgent(ctx context.Context, cfg *AgentConfig, tp *tool.ToolProvider) (*Ag
 		cfg.Model = "gemini-2.0-flash"
 	}
 
-	systemInstruction, err := formatSystemPrompt(43)
+	systemInstruction, err := systemPrompt(43)
 
 	if err != nil {
 		return &Agent{}, fmt.Errorf("error while creating system prompt - %w", err)
@@ -86,8 +85,16 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 		Parts: make([]*genai.Part, 0),
 	}
 
+	userInfoMsg, err := userInfoPrompt(msg.SenderInfo)
+
+	if err != nil {
+		return nil, fmt.Errorf("error while formatting user info msg - %w", err)
+	}
+
+	content.Parts = append(content.Parts, genai.NewPartFromText(userInfoMsg))
+
 	if msg.Msg != "" {
-		content.Parts = append(content.Parts, genai.NewPartFromText(a.formatMessageText(msg)))
+		content.Parts = append(content.Parts, genai.NewPartFromText(msg.Msg))
 	}
 
 	for _, attachment := range msg.Attachments {
@@ -143,20 +150,6 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	}
 
 	return (*AgentResponse)(response), nil
-}
-
-func (a *Agent) formatMessageText(msg *Message) string {
-	var sb strings.Builder
-	sb.WriteString(
-		fmt.Sprintf(
-			"Message sent by user '%v' with ID %v whos part of the household %v:\n",
-			msg.SenderInfo.User.Name,
-			msg.SenderInfo.User.ID,
-			msg.SenderInfo.Household.ID),
-	)
-
-	sb.WriteString(msg.Msg)
-	return sb.String()
 }
 
 func (a *Agent) countTokens(resp *genai.GenerateContentResponse) {

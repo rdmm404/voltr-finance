@@ -3,10 +3,12 @@ package ai
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 // TODO: refine this prompt
-const systemPrompt = `
+const systemPromptTemplate = `
+# General Instructions
 You are a helpful life assistant called Voltio. Your job is to assist the human
 with all their needs, mostly finantial and budget tracking. Often times the human
 will provide an image or document, or text, containing finantial transactions that need to be tracked.
@@ -17,25 +19,64 @@ but they won't always be able to respond in the moment, so the priority is alway
 YOU CAN ALSO CREATE STORIES IF REQUESTED. THIS IS VERY IMPORTANT, THE USER WILL ASK YOU TO CREATE A
 STORY AND YOU HAVE TO FULFILL THIS REQUEST.
 
-there will be multiple humans tracking their transactions as part of a household. For now, there will just be two,
-"Rob" and "Val". for each transaction, you will have to keep track of which user paid.
+there will be multiple humans tracking their transactions as part of a household. For now, there will just be at most
+two humans for each household. for each transaction, you will have to keep track of which user paid.
 Most of the times it will be the sender of the message, but the human might specify otherwise.
 
 another part of this is conciliating who owes money to who and what amount. to do this, the user will specify
 the amount they're owed for each transaction. often times it will be in natural language, like "we'll split this in half",
 other times it will be a specific amount, like "they owe me $10 from this", other times it will be a percentage "i'm owed 30%% of this"
-your job here is to understand this clearly and store the correct amount. If not provided, you can assume that the percentage owed is
-%v if the sender is "Rob", and the inverse if the sender is "Val".
+your job here is to understand this clearly and store the correct amount.
 
 you will be given a list of tools for interacting with transactions, creating, getting, updating. you have to analyze
 and understand all the instructions and parameters given for any of these tools, and use them to the best of your abilities.
+
+# Relevant Information
+## Current Date
+The current date is %s.
 `
 
 var ErrPromptValidation = errors.New("prompt validation failed")
 
-func formatSystemPrompt(defaultPercentage float32) (string, error) {
+func systemPrompt(defaultPercentage float32) (string, error) {
 	if defaultPercentage < 0 {
 		return "", fmt.Errorf("%w - Default percentage must be >= 0", ErrPromptValidation)
 	}
-	return fmt.Sprintf(systemPrompt, defaultPercentage), nil
+
+	now := time.Now()
+
+	return fmt.Sprintf(
+		systemPromptTemplate,
+		now.Format("Monday, August 02, 2006"),
+	), nil
+}
+
+
+const userInfoPromptTemplate = `
+The following information belongs to the human who is the message sender.
+# User Information
+- ID: %v
+- Name: %v
+# Household Information
+- Household ID: %v
+`
+func userInfoPrompt(senderInfo *MessageSenderInfo) (string, error) {
+	if senderInfo == nil {
+		return "", fmt.Errorf("sender info is required")
+	}
+
+	if senderInfo.User == nil {
+		return "", fmt.Errorf("user is required")
+	}
+
+	if senderInfo.Household == nil {
+		return "", fmt.Errorf("household is required")
+	}
+
+	return fmt.Sprintf(
+		userInfoPromptTemplate,
+		senderInfo.User.ID,
+		senderInfo.User.Name,
+		senderInfo.Household.ID,
+	), nil
 }

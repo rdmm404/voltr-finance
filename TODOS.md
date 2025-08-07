@@ -11,8 +11,13 @@
 - [] add discord server id into households table to link server to household
 - [] overall improve context management
 - [] make users only be in a single household
+- [] Add more context from the incoming message, like message time
 
 - [] tools to get transactions using natural language
 - [] implementpaid/owed functionality
   - [] add user default owed amount into household_user
 - [] improve discord interactions
+
+
+MAYBE
+- [ ] Handle simultaneous messages 
