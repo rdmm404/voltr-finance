@@ -25,7 +25,7 @@ type Bot struct {
 }
 
 type Agent interface {
-	SendMessage(ctx context.Context, msg *ai.Message) (*ai.AgentResponse, error)
+	SendMessage(ctx context.Context, msg *ai.Message, ch chan<- *ai.AgentResponse)
 }
 
 func NewBot(agent Agent, repository *database.Queries) (*Bot, error) {
@@ -67,7 +67,7 @@ func (b *Bot) Run() error {
 }
 
 func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(context.Background())
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
@@ -98,25 +98,34 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		aiMsg.Attachments = append(aiMsg.Attachments, &ai.Attachment{File: bytes, Mimetype: att.ContentType})
 	}
 
-	resp, err := b.agent.SendMessage(ctx, aiMsg)
+	ch := make(chan *ai.AgentResponse)
+	go b.agent.SendMessage(ctx, aiMsg, ch)
 
-	if (err != nil) {
-		fmt.Printf("error %v\n", err)
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", err))
-		// TODO: Send debug trace as spoiler or something that makes it hidden
-		return
-	}
+	for agentResp := range ch {
+		s.ChannelTyping(m.ChannelID)
 
-	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0] == nil || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 || resp.Candidates[0].Content.Parts[0] == nil {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", resp))
-	}
+		if (agentResp.Err != nil) {
+			fmt.Printf("error %v\n", err)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", err))
+			// TODO: Send debug trace as spoiler or something that makes it hidden
+			cancel()
+		}
 
-	err = b.sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
+		resp := agentResp.GenerateReponse
 
-	if (err != nil) {
-		fmt.Println(err)
+		// TODO make this cleaner lol
+		if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0] == nil || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 || resp.Candidates[0].Content.Parts[0] == nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", resp))
+		}
+
+		err = b.sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
+
+		if (err != nil) {
+			fmt.Println(err)
+		}
 	}
 }
+
 
 func (b *Bot) getSenderIntoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*ai.MessageSenderInfo, error) {
 	if m == nil || m.Author == nil {

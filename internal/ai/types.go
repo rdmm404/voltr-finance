@@ -9,7 +9,10 @@ import (
 	"google.golang.org/genai"
 )
 
-type AgentResponse genai.GenerateContentResponse
+type AgentResponse struct {
+	GenerateReponse *genai.GenerateContentResponse
+	Err error
+}
 
 type GenerationConfig struct {
 	Model       string

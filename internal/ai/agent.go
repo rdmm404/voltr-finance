@@ -71,13 +71,13 @@ func NewAgent(ctx context.Context, cfg *AgentConfig, tp *tool.ToolProvider) (*Ag
 	}, nil
 }
 
-func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, error) {
+func (a *Agent) SendMessage(ctx context.Context, msg *Message, ch chan<- *AgentResponse){
 	if msg == nil {
-		return nil, errors.New("arguments are required")
+		ch <- &AgentResponse{Err: errors.New("arguments are required")}
 	}
 
 	if (len(msg.Attachments) == 0) && msg.Msg == "" {
-		return nil, errors.New("at least one of (img, msg) must be set")
+		ch <- &AgentResponse{Err: errors.New("at least one of (img, msg) must be set")};
 	}
 
 	content := &genai.Content{
@@ -88,7 +88,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	userInfoMsg, err := userInfoPrompt(msg.SenderInfo)
 
 	if err != nil {
-		return nil, fmt.Errorf("error while formatting user info msg - %w", err)
+		ch <- &AgentResponse{Err: fmt.Errorf("error while formatting user info msg - %w", err)}
 	}
 
 	content.Parts = append(content.Parts, genai.NewPartFromText(userInfoMsg))
@@ -108,7 +108,7 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 			continue
 		}
 
-		return nil, fmt.Errorf("invalid attachment provided - %+v",  attachment)
+		ch <- &AgentResponse{Err: fmt.Errorf("invalid attachment provided - %+v",  attachment)}
 
 	}
 
@@ -117,9 +117,10 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 	fmt.Printf("Sending request to LLM\n CONTENT: %s\n", LLMRequestToString(a.messages))
 
 	response, err := a.generateContentRetry(ctx, a.config.Model, a.messages, a.config.generationConfig)
+	ch <- &AgentResponse{GenerateReponse: response};
 
 	if err != nil {
-		return &AgentResponse{}, err
+		ch <- &AgentResponse{Err: err};
 	}
 
 	a.countTokens(response)
@@ -142,14 +143,15 @@ func (a *Agent) SendMessage(ctx context.Context, msg *Message) (*AgentResponse, 
 		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n", LLMRequestToString(a.messages))
 		response, err = a.generateContentRetry(ctx, a.config.Model, a.messages, a.config.generationConfig)
 		if err != nil {
-			return &AgentResponse{}, err
+			ch <- &AgentResponse{Err: err}
 		}
+		ch <- &AgentResponse{GenerateReponse: response};
 		a.countTokens(response)
 		a.messages = append(a.messages, response.Candidates[0].Content)
 		fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
 	}
 
-	return (*AgentResponse)(response), nil
+	close(ch)
 }
 
 func (a *Agent) countTokens(resp *genai.GenerateContentResponse) {
