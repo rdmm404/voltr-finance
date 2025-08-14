@@ -13,25 +13,34 @@ type TransactionService struct {
 	repository *database.Queries
 }
 
-func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*database.CreateTransactionParams) error {
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*database.CreateTransactionParams) (map[int32]*database.Transaction, error) {
 	tx, err := ts.db.Begin(ctx)
 
 	if err != nil {
-		return fmt.Errorf("error while creating DB transaction %w", err)
+		return nil, fmt.Errorf("error while creating DB transaction %w", err)
 	}
 	defer tx.Rollback(ctx)
 
 	ts.repository.WithTx(tx)
 
+	createdTransactions := make(map[int32]*database.Transaction, len(transactions))
+
 	for _, trans := range transactions {
-		_, err := ts.repository.CreateTransaction(ctx, *trans)
+		createdTrans, err := ts.repository.CreateTransaction(ctx, *trans)
 
 		if err != nil {
-			return fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)
+			return nil, fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)
 		}
 
+		createdTransactions[createdTrans.ID] = &createdTrans
 	}
-	return tx.Commit(ctx)
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error while committing db transaction - %w", err)
+	}
+
+	return createdTransactions, nil
 }
 
 func NewTransactionService(db *pgx.Conn, repository *database.Queries) *TransactionService {

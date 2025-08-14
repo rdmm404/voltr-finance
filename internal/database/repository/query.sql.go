@@ -8,11 +8,10 @@ package database
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createTransaction = `-- name: CreateTransaction :execresult
+const createTransaction = `-- name: CreateTransaction :one
 INSERT INTO transaction
 (
     amount,
@@ -24,27 +23,30 @@ INSERT INTO transaction
     transaction_id,
     transaction_type,
     paid_by,
-    household_id
+    household_id,
+    notes
 )
 VALUES
-($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at
 `
 
 type CreateTransactionParams struct {
 	Amount           float32            `json:"amount"`
-	IsPaid           *bool              `json:"is_paid"`
-	AmountOwed       *float32           `json:"amount_owed"`
-	BudgetCategoryID *int32             `json:"budget_category_id"`
+	IsPaid           *bool              `json:"isPaid"`
+	AmountOwed       *float32           `json:"amountOwed"`
+	BudgetCategoryID *int32             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
-	TransactionDate  pgtype.Timestamptz `json:"transaction_date"`
-	TransactionID    *string            `json:"transaction_id"`
-	TransactionType  *int32             `json:"transaction_type"`
-	PaidBy           int32              `json:"paid_by"`
-	HouseholdID      *int32             `json:"household_id"`
+	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
+	TransactionID    *string            `json:"transactionId"`
+	TransactionType  *int32             `json:"transactionType"`
+	PaidBy           int32              `json:"paidBy"`
+	HouseholdID      *int32             `json:"householdId"`
+	Notes            *string            `json:"notes"`
 }
 
-func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, createTransaction,
+func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, createTransaction,
 		arg.Amount,
 		arg.IsPaid,
 		arg.AmountOwed,
@@ -55,7 +57,28 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.TransactionType,
 		arg.PaidBy,
 		arg.HouseholdID,
+		arg.Notes,
 	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.PaidBy,
+		&i.AmountOwed,
+		&i.BudgetCategoryID,
+		&i.Description,
+		&i.TransactionDate,
+		&i.TransactionID,
+		&i.TransactionType,
+		&i.Notes,
+		&i.OwedBy,
+		&i.HouseholdID,
+		&i.IsPaid,
+		&i.PaymentDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getUserDetailsByDiscordId = `-- name: GetUserDetailsByDiscordId :one

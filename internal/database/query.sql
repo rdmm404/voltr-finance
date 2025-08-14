@@ -2,7 +2,7 @@
 SELECT * FROM transaction
 WHERE transaction_type=2 AND household_id = $1;
 
--- name: CreateTransaction :execresult
+-- name: CreateTransaction :one
 INSERT INTO transaction
 (
     amount,
@@ -14,10 +14,12 @@ INSERT INTO transaction
     transaction_id,
     transaction_type,
     paid_by,
-    household_id
+    household_id,
+    notes
 )
 VALUES
-($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;
 
 -- name: GetUserDetailsByDiscordId :one
 SELECT sqlc.embed(users), sqlc.embed(household) FROM users

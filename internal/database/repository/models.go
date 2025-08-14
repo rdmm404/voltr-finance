@@ -10,59 +10,59 @@ import (
 
 type Budget struct {
 	ID          int32              `json:"id"`
-	UserID      *int32             `json:"user_id"`
-	HouseholdID *int32             `json:"household_id"`
+	UserID      *int32             `json:"userId"`
+	HouseholdID *int32             `json:"householdId"`
 	Type        string             `json:"type"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type BudgetCategory struct {
 	ID           int32              `json:"id"`
-	BudgetID     *int32             `json:"budget_id"`
-	CategoryName string             `json:"category_name"`
+	BudgetID     *int32             `json:"budgetId"`
+	CategoryName string             `json:"categoryName"`
 	Allocation   float32            `json:"allocation"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt    pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type Household struct {
 	ID        int32              `json:"id"`
 	Name      string             `json:"name"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type HouseholdUser struct {
-	HouseholdID int32              `json:"household_id"`
-	UserID      int32              `json:"user_id"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	HouseholdID int32              `json:"householdId"`
+	UserID      int32              `json:"userId"`
+	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type Transaction struct {
 	ID               int32              `json:"id"`
 	Amount           float32            `json:"amount"`
-	PaidBy           int32              `json:"paid_by"`
-	AmountOwed       *float32           `json:"amount_owed"`
-	BudgetCategoryID *int32             `json:"budget_category_id"`
+	PaidBy           int32              `json:"paidBy"`
+	AmountOwed       *float32           `json:"amountOwed"`
+	BudgetCategoryID *int32             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
-	TransactionDate  pgtype.Timestamptz `json:"transaction_date"`
-	TransactionID    *string            `json:"transaction_id"`
-	TransactionType  *int32             `json:"transaction_type"`
+	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
+	TransactionID    *string            `json:"transactionId"`
+	TransactionType  *int32             `json:"transactionType"`
 	Notes            *string            `json:"notes"`
-	OwedBy           *int32             `json:"owed_by"`
-	HouseholdID      *int32             `json:"household_id"`
-	IsPaid           *bool              `json:"is_paid"`
-	PaymentDate      pgtype.Timestamptz `json:"payment_date"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	OwedBy           *int32             `json:"owedBy"`
+	HouseholdID      *int32             `json:"householdId"`
+	IsPaid           *bool              `json:"isPaid"`
+	PaymentDate      pgtype.Timestamptz `json:"paymentDate"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type User struct {
 	ID        int32              `json:"id"`
-	DiscordID *string            `json:"discord_id"`
+	DiscordID *string            `json:"discordId"`
 	Name      string             `json:"name"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }

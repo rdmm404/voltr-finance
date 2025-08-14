@@ -2,11 +2,13 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -146,12 +148,18 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *Tool
 		mappedTransactions = append(mappedTransactions, &mappedTransaction)
 	}
 
-	err = deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
+	createdTrans, err := deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
 
 	if err != nil {
 		response.Response["error"] = "Something bad happened :("
 	} else {
-		response.Response["output"] = "Transactions saved successfully"
+		// consider formatting transactions to MD instead
+		formattedTrans, err := formatTransactionsForLLM(createdTrans)
+		if err != nil {
+			fmt.Printf("SaveTransactionsTool: Error received when formatting transactions - %v", err)
+			response.Response["output"] = "The transactions were stored successfully. However there was an error while reading the inserted data."
+		}
+		response.Response["output"] = "The following transactions were successfully stored:\n" + formattedTrans
 	}
 
 	return &response
@@ -215,4 +223,26 @@ func convertFieldStrToPgDate(callArgs *map[string]any, fieldName string) bool {
 	callArgsMap[fieldName] = ts
 
 	return true
+}
+
+func formatTransactionsForLLM(transactions map[int32]*database.Transaction) (string, error) {
+	var sb strings.Builder
+	sb.WriteString("[\n")
+	count := 0
+	for transId, trans := range transactions {
+		count++
+
+		transJson, err := json.MarshalIndent(trans, "  ", "  ")
+
+		if err != nil {
+			return "", fmt.Errorf("invalid JSON received for trans with id %v - %w", transId, err)
+		}
+
+		sb.WriteString(string(transJson))
+		if count != len(transactions) {
+			sb.WriteString(",\n")
+		}
+	}
+
+	return sb.String(), nil
 }

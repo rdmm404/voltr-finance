@@ -6,9 +6,11 @@
   - [x] reply only with text from LLM (no tools)
 
 - [ ] store transactions first then ask details
-  - [ ] return created transaction ids from db
+  - [x] return created transaction ids from db
   - [ ] add update transactions tool
   - [ ] add instructions to system prompt
+
+- [ ] Add user and message in single message
 
 - [ ] MAKE IT STATELESS!!!
   - [ ] Include all details from LLM in discord message, like tool cals to preserve the history
