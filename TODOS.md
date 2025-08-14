@@ -7,6 +7,7 @@
 
 - [ ] store transactions first then ask details
   - [x] return created transaction ids from db
+  - [ ] refactor mapstructure logic with hooks and WeaklyTyped parameter
   - [ ] add update transactions tool
   - [ ] add instructions to system prompt
 
@@ -18,6 +19,8 @@
   - [ ] overall improve context management
 
 - [ ] if message comes from server -> household by default, if comes from pm -> personal by default if not otherwise specified
+
+- [ ] db structure review
 
 - [ ] implement paid/owed functionality
   - [ ] Add other household members to message context

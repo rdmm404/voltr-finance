@@ -174,6 +174,24 @@ func (st SaveTransactionsTool) validateDependencies(deps *ToolDependencies) erro
 	return nil
 }
 
+type UpdateTransactionsByIdTool struct{}
+
+func (ut UpdateTransactionsByIdTool) Name() string {
+	return "UpdateTransactionsById"
+}
+
+func (ut UpdateTransactionsByIdTool) Description() string {
+	return "This function set the specified data to the transactions with the provided IDs."
+}
+
+func (ut UpdateTransactionsByIdTool) Parameters() *genai.Schema {
+	return &genai.Schema{}
+}
+
+func (ut UpdateTransactionsByIdTool) Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse {
+	return &genai.FunctionResponse{}
+}
+
 func convertFieldStrToInt(callArgs *map[string]any, fieldName string) bool {
 	callArgsMap := *callArgs
 	valueAny, ok := callArgsMap[fieldName]

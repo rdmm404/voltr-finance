@@ -12,6 +12,7 @@ import (
 )
 
 const createTransaction = `-- name: CreateTransaction :one
+
 INSERT INTO transaction
 (
     amount,
@@ -45,6 +46,7 @@ type CreateTransactionParams struct {
 	Notes            *string            `json:"notes"`
 }
 
+// WRITES
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
 	row := q.db.QueryRow(ctx, createTransaction,
 		arg.Amount,
@@ -82,6 +84,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 }
 
 const getUserDetailsByDiscordId = `-- name: GetUserDetailsByDiscordId :one
+
 SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, household.id, household.name, household.created_at, household.updated_at FROM users
 JOIN household_user on users.id = household_user.user_id
 JOIN household on household_user.household_id = household.id
@@ -93,6 +96,8 @@ type GetUserDetailsByDiscordIdRow struct {
 	Household Household `json:"household"`
 }
 
+// ******************* users *******************
+// READS
 func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *string) (GetUserDetailsByDiscordIdRow, error) {
 	row := q.db.QueryRow(ctx, getUserDetailsByDiscordId, discordID)
 	var i GetUserDetailsByDiscordIdRow
@@ -111,10 +116,13 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *stri
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
+
 SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
+// ******************* transaction *******************
+// READS
 func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int32) ([]Transaction, error) {
 	rows, err := q.db.Query(ctx, listTransactionsByHousehold, householdID)
 	if err != nil {
@@ -150,4 +158,146 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateTransactionById = `-- name: UpdateTransactionById :one
+UPDATE
+    transaction
+SET
+    amount = CASE
+        WHEN $1::bool THEN $2::real
+        ELSE amount
+    END,
+    paid_by = CASE
+        WHEN $3::bool THEN $4::int
+        ELSE paid_by
+    END,
+    budget_category_id = CASE
+        WHEN $5::bool THEN $6::int
+        ELSE budget_category_id
+    END,
+    description = CASE
+        WHEN $7::bool THEN $8::text
+        ELSE description
+    END,
+    transaction_date = CASE
+        WHEN $9::bool THEN $10::timestamp
+        ELSE transaction_date
+    END,
+    transaction_id = CASE
+        WHEN $11::bool THEN $12::text
+        ELSE transaction_id
+    END,
+    transaction_type = CASE
+        WHEN $13::bool THEN $14::text
+        ELSE transaction_type
+    END,
+    notes = CASE
+        WHEN $15::bool THEN $16::text
+        ELSE notes
+    END,
+    household_id = CASE
+        WHEN $17::bool THEN $18::int
+        ELSE household_id
+    END,
+    owed_by = CASE
+        WHEN $19::bool THEN $20::int
+        ELSE owed_by
+    END,
+    amount_owed = CASE
+        WHEN $21::bool THEN $22::real
+        ELSE amount_owed
+    END,
+    is_paid = CASE
+        WHEN $23::bool THEN $24::bool
+        ELSE is_paid
+    END,
+    payment_date = CASE
+        WHEN $25::bool THEN $26::timestamp
+        ELSE payment_date
+    END
+WHERE
+    id = ANY($27::int[]) RETURNING id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at
+`
+
+type UpdateTransactionByIdParams struct {
+	SetAmount           bool             `json:"setAmount"`
+	Amount              float32          `json:"amount"`
+	SetPaidBy           bool             `json:"setPaidBy"`
+	PaidBy              int32            `json:"paidBy"`
+	SetBudgetCategoryID bool             `json:"setBudgetCategoryId"`
+	BudgetCategoryID    *int32           `json:"budgetCategoryId"`
+	SetDescription      bool             `json:"setDescription"`
+	Description         *string          `json:"description"`
+	SetTransactionDate  bool             `json:"setTransactionDate"`
+	TransactionDate     pgtype.Timestamp `json:"transactionDate"`
+	SetTransactionID    bool             `json:"setTransactionId"`
+	TransactionID       *string          `json:"transactionId"`
+	SetTransactionType  bool             `json:"setTransactionType"`
+	TransactionType     *string          `json:"transactionType"`
+	SetNotes            bool             `json:"setNotes"`
+	Notes               *string          `json:"notes"`
+	SetHouseholdID      bool             `json:"setHouseholdId"`
+	HouseholdID         *int32           `json:"householdId"`
+	SetOwedBy           bool             `json:"setOwedBy"`
+	OwedBy              *int32           `json:"owedBy"`
+	SetAmountOwed       bool             `json:"setAmountOwed"`
+	AmountOwed          *float32         `json:"amountOwed"`
+	SetIsPaid           bool             `json:"setIsPaid"`
+	IsPaid              *bool            `json:"isPaid"`
+	SetPaymentDate      bool             `json:"setPaymentDate"`
+	PaymentDate         pgtype.Timestamp `json:"paymentDate"`
+	Ids                 []int32          `json:"ids"`
+}
+
+func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransactionByIdParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, updateTransactionById,
+		arg.SetAmount,
+		arg.Amount,
+		arg.SetPaidBy,
+		arg.PaidBy,
+		arg.SetBudgetCategoryID,
+		arg.BudgetCategoryID,
+		arg.SetDescription,
+		arg.Description,
+		arg.SetTransactionDate,
+		arg.TransactionDate,
+		arg.SetTransactionID,
+		arg.TransactionID,
+		arg.SetTransactionType,
+		arg.TransactionType,
+		arg.SetNotes,
+		arg.Notes,
+		arg.SetHouseholdID,
+		arg.HouseholdID,
+		arg.SetOwedBy,
+		arg.OwedBy,
+		arg.SetAmountOwed,
+		arg.AmountOwed,
+		arg.SetIsPaid,
+		arg.IsPaid,
+		arg.SetPaymentDate,
+		arg.PaymentDate,
+		arg.Ids,
+	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.PaidBy,
+		&i.AmountOwed,
+		&i.BudgetCategoryID,
+		&i.Description,
+		&i.TransactionDate,
+		&i.TransactionID,
+		&i.TransactionType,
+		&i.Notes,
+		&i.OwedBy,
+		&i.HouseholdID,
+		&i.IsPaid,
+		&i.PaymentDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
