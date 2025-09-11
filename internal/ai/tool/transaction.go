@@ -7,11 +7,8 @@ import (
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/genai"
 )
@@ -104,48 +101,22 @@ func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *Tool
 		return &response
 	}
 
-	transactions, ok := transactionsAny.([]any)
-	if !ok {
-		response.Response["error"] = "Invalid format for argument 'transactions'"
+	decoder, err := createToolDecoder(
+		&mappedTransactions,
+		[]mapstructure.DecodeHookFuncType{dateToPgTimestampHook},
+	)
+
+	if err != nil {
+		response.Response["error"] = fmt.Sprintf("Internal error, %v", err)
 		return &response
 	}
 
-	for i, trans := range transactions {
-		transMap, ok := trans.(map[string]any)
+	err = decoder.Decode(transactionsAny)
 
-		if !ok {
-			response.Response["error"] = fmt.Sprintf("Invalid format for transaction %v", trans)
-			return &response
-		}
-
-		if !convertFieldStrToInt(&transMap, "transactionType") {
-			response.Response["error"] = fmt.Sprintf("Invalid transaction type received %v", trans)
-			return &response
-		}
-
-		paidByFloat, ok := transMap["paidBy"].(float64)
-		if ok {
-			transMap["paidBy"] = int32(paidByFloat)
-		} else if !convertFieldStrToInt(&transMap, "paidBy") {
-			response.Response["error"] = fmt.Sprintf("Invalid paidBy ID received %v", trans)
-			return &response
-		}
-
-		if !convertFieldStrToPgDate(&transMap, "transactionDate") {
-			response.Response["error"] = fmt.Sprintf("Invalid transactionDate received %v", trans)
-			return &response
-		}
-
-		mappedTransaction := database.CreateTransactionParams{}
-		err = mapstructure.Decode(trans, &mappedTransaction)
-
-		if err != nil {
-			fmt.Println(err)
-			response.Response["error"] = fmt.Sprintf("Invalid format for transaction at index %v", i)
-			return &response
-		}
-
-		mappedTransactions = append(mappedTransactions, &mappedTransaction)
+	if err != nil {
+		fmt.Println(err)
+		response.Response["error"] = fmt.Sprintf("Invalid format for transactions, error: %v", err)
+		return &response
 	}
 
 	createdTrans, err := deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
@@ -192,56 +163,6 @@ func (ut UpdateTransactionsByIdTool) Call(functionCall *genai.FunctionCall, deps
 	return &genai.FunctionResponse{}
 }
 
-func convertFieldStrToInt(callArgs *map[string]any, fieldName string) bool {
-	callArgsMap := *callArgs
-	valueAny, ok := callArgsMap[fieldName]
-	if !ok {
-		fmt.Printf("\nnot found in map\n")
-		return ok
-	}
-
-	valueStr, ok := valueAny.(string)
-	if !ok {
-		fmt.Printf("\nnot a string\n")
-		return ok
-	}
-
-	valueInt, err := strconv.Atoi(valueStr)
-	if err != nil {
-		fmt.Printf("\nError while converting %v\n", err)
-		return false
-	}
-	callArgsMap[fieldName] = valueInt
-	return true
-}
-
-func convertFieldStrToPgDate(callArgs *map[string]any, fieldName string) bool {
-	callArgsMap := *callArgs
-	valueAny, ok := callArgsMap[fieldName]
-	if !ok {
-		return ok
-	}
-
-	valueStr, ok := valueAny.(string)
-	if !ok {
-		return ok
-	}
-
-	valueTime, err := time.Parse("2006-01-02T15:04:05", valueStr)
-
-	if err != nil {
-		return false
-	}
-
-	ts := pgtype.Timestamptz{
-		Time: valueTime,
-		Valid: true,
-	}
-
-	callArgsMap[fieldName] = ts
-
-	return true
-}
 
 func formatTransactionsForLLM(transactions map[int32]*database.Transaction) (string, error) {
 	var sb strings.Builder
@@ -261,6 +182,7 @@ func formatTransactionsForLLM(transactions map[int32]*database.Transaction) (str
 			sb.WriteString(",\n")
 		}
 	}
+	sb.WriteString("]")
 
 	return sb.String(), nil
 }
