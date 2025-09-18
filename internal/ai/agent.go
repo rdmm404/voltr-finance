@@ -2,20 +2,20 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"rdmm404/voltr-finance/internal/ai/tool"
 
-	"github.com/firebase/genkit/go/ai"
 	gai "github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
-type chatFlow *core.Flow[*gai.Message, string, string]
+type chatFlow = *core.Flow[*gai.Message, string, string]
 
 type flows struct {
-	chatFlow chatFlow
+	chat chatFlow
 }
 
 type Agent struct {
@@ -23,7 +23,7 @@ type Agent struct {
 	messages []*gai.Message
 	tp *tool.ToolProvider
 	usageStats UsageStats
-	flows flows
+	flows *flows
 }
 
 func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
@@ -31,8 +31,9 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 		ctx,
 		genkit.WithPlugins(&googlegenai.GoogleAI{}),
 		genkit.WithDefaultModel("googleai/gemini-2.0-flash"),
-
 	)
+
+	tp.Init(g)
 
 	// systemInstruction, err := systemPrompt(43)
 
@@ -55,7 +56,10 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 		tp: tp,
 	}
 
-	a.flows.chatFlow = a.chatFlow()
+	// TODO: Find a better way to do this
+	a.flows = &flows{
+		chat: a.chatFlow(),
+	}
 
 	return a, nil
 }
@@ -68,12 +72,14 @@ func (a *Agent) chatFlow() chatFlow {
 			resp, err := genkit.Generate(
 				ctx,
 				a.g,
-				// ai.WithTools(),
-				ai.WithMessages(
+				gai.WithTools(a.tp.GetAvailableTools()...),
+				gai.WithMessages(
 					a.messages...
 				),
 				// ai.WithStreaming(func(ctx context.Context, chunk *ai.ModelResponseChunk))
 			)
+
+			a.messages = append(a.messages, resp.Message)
 
 			if err != nil {
 				return "", fmt.Errorf("error while calling LLM %w", err)
@@ -83,7 +89,18 @@ func (a *Agent) chatFlow() chatFlow {
 	)
 }
 
-func (a *Agent) SendMessage(ctx context.Context, message gai.Message) {
+func (a *Agent) SendMessage(ctx context.Context, message *gai.Message) (string, error) {
+	resp, err := a.flows.chat.Run(ctx, message)
+
+	for _, msg := range a.messages {
+		msgJson, _ := json.Marshal(msg)
+		fmt.Println(string(msgJson))
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return resp, nil
 	// resp, err := genkit.Generate(ctx, a.g,
 	// 	ai.WithMessages(
 	// 		ai.NewUserMessage(

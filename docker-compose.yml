@@ -19,7 +19,7 @@ services:
     depends_on:
       - db
     ports:
-      "3100:3100"
+      - "3100:3100"
   db:
     image: postgres
     container_name: voltr-db
