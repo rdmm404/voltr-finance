@@ -51,12 +51,12 @@ func main() {
 	// agent.SendMessage(ctx, gai.NewUserTextMessage("What tools do you have available?"))
 
 	_, err = agent.SendMessage(ctx, gai.NewUserMessage(
-		gai.NewTextPart("Give me 3 stories. You must give me each story as a separate message."),
-		// gai.NewTextPart("Please store the transactions in the image. These are personal transactions. user ID is 1."),
-		// gai.NewMediaPart(
-		// 	"image/png",
-		// 	"https://cdn.discordapp.com/attachments/1404637483077074984/1415541865335492769/image.png?ex=68d804d8&is=68d6b358&hm=316029f666e46a9b77d780e13333e2446e28f9eb9537c4d2f76088501bc4f9d8&",
-		// ),
+		// gai.NewTextPart("Give me 3 stories. You must give me each story as a separate message."),
+		gai.NewTextPart("Please store the transactions in the image. These are personal transactions. user ID is 1."),
+		gai.NewMediaPart(
+			"image/png",
+			"https://cdn.discordapp.com/attachments/1404637483077074984/1415541865335492769/image.png?ex=68d95658&is=68d804d8&hm=596a6a21f18dd397869ae0a7fae02ae61d81dea7926619187870d485a6ef14e7&",
+		),
 	))
 
 

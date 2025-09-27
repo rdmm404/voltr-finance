@@ -13,7 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type SaveTransactionsTool struct{}
+type saveTransactionsTool struct{
+	deps *ToolDependencies
+}
 
 type SaveTransactionsInput struct {
 	Transactions []TransactionSave
@@ -24,7 +26,7 @@ type TransactionSave struct {
 	Amount float32 `json:"amount" jsonschema_description:"The amount of the transaction."`
 	TransactionType int32 `json:"transactionType" jsonschema_description:"The type of the transaction. For personal transactions use 1, For household transactions use 2."`
 	PaidBy int32 `json:"paidBy" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
-	TransactionDate time.Time `json:"transactionDate" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! MUST be in the format YYYY-MM-DDTHH:MM:SS.sTZD."`
+	TransactionDate time.Time `json:"transactionDate" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DDTHH:MM:SS.sTZD."`
 	// not required
 	HouseholdId *int32 `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. Only set if the transaction is of type household."`
 	Notes *string `json:"notes,omitempty" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
@@ -32,30 +34,26 @@ type TransactionSave struct {
 	// TODO: owedBy, amountOwed, paymentDate, isPaid
 }
 
-func (st SaveTransactionsTool) Name() string {
+func NewSaveTransactionsTool(deps *ToolDependencies) (Tool, error) {
+	if deps.Ts == nil {
+		return nil, fmt.Errorf("transaction service not present in dependencies")
+	}
+
+	return &saveTransactionsTool{deps: deps}, nil
+}
+
+func (st *saveTransactionsTool) Name() string {
 	return "SaveTransactions"
 }
-func (st SaveTransactionsTool) Description() string {
+func (st *saveTransactionsTool) Description() string {
 	return "This function will store the specified transactions in database."
 }
 
-func (st SaveTransactionsTool) Create(g *genkit.Genkit, deps *ToolDependencies) ai.Tool {
-	return genkit.DefineTool(
-		g,
-		st.Name(),
-		st.Description(),
-		func(ctx *ai.ToolContext, input SaveTransactionsInput) (string, error) {
-			err := st.validateDependencies(deps)
-			if err != nil {
-				fmt.Printf("SaveTransactions called with invalid deps %v\n", err)
-				return "", fmt.Errorf("invalid dependencies received %w", err)
-			}
-			return st.execute(&input, deps)
-		},
-	)
+func(st *saveTransactionsTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
+	return DefineTool(tp, g, st, st.execute)
 }
 
-func (st SaveTransactionsTool) execute(input *SaveTransactionsInput, deps *ToolDependencies) (string, error) {
+func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransactionsInput) (string, error) {
 	mappedTransactions := make([]database.CreateTransactionParams, 0)
 
 	for _, transaction := range input.Transactions {
@@ -73,7 +71,7 @@ func (st SaveTransactionsTool) execute(input *SaveTransactionsInput, deps *ToolD
 		})
 	}
 
-	createdTrans, err := deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
+	createdTrans, err := st.deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
 
 	if err != nil {
 		return "", fmt.Errorf("unknown error while saving transactions - %w", err)
@@ -90,13 +88,6 @@ func (st SaveTransactionsTool) execute(input *SaveTransactionsInput, deps *ToolD
 
 }
 
-func (st SaveTransactionsTool) validateDependencies(deps *ToolDependencies) error {
-	if deps.Ts == nil {
-		return fmt.Errorf("transaction service not present in dependencies")
-	}
-
-	return nil
-}
 
 type UpdateTransactionsByIdTool struct{}
 

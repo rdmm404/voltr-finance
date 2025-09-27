@@ -7,14 +7,13 @@ import (
 	"log"
 	"rdmm404/voltr-finance/internal/ai/tool"
 
-	"github.com/firebase/genkit/go/ai"
 	gai "github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
-type chatFlow = *core.Flow[*gai.Message, string, string]
+type chatFlow = *core.Flow[*gai.Message, string, *gai.ModelResponseChunk]
 
 type flows struct {
 	chat chatFlow
@@ -32,7 +31,7 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 	g := genkit.Init(
 		ctx,
 		genkit.WithPlugins(&googlegenai.GoogleAI{}),
-		genkit.WithDefaultModel("googleai/gemini-2.5-flash"),
+		genkit.WithDefaultModel("googleai/gemini-2.0-flash"),
 	)
 
 	tp.Init(g)
@@ -68,7 +67,7 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 
 func (a *Agent) chatFlow() chatFlow {
 	return genkit.DefineStreamingFlow(a.g, "chat",
-		func(ctx context.Context, message *gai.Message, callback core.StreamCallback[string]) (string, error) {
+		func(ctx context.Context, message *gai.Message, callback core.StreamCallback[*gai.ModelResponseChunk]) (string, error) {
 			a.messages = append(a.messages, message)
 
 			resp, err := genkit.Generate(
@@ -79,8 +78,13 @@ func (a *Agent) chatFlow() chatFlow {
 				gai.WithMessages(
 					a.messages...
 				),
-				gai.WithStreaming(func(ctx context.Context, chunk *ai.ModelResponseChunk) error {
-					err := callback(ctx, chunk.Text())
+				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
+					// for _, content := range chunk.Content {
+					// 	if content.ToolRequest != nil {
+					// 		log.Printf("Tool %v was called with args %v", content.ToolRequest.Name, content.ToolRequest.Input)
+					// 	}
+					// }
+					err := callback(ctx, chunk)
 					if err != nil {
 						return fmt.Errorf("error in streaming callback - %w", err)
 					}
@@ -91,9 +95,6 @@ func (a *Agent) chatFlow() chatFlow {
 			if err != nil {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
-
-			jsonResp, _ := json.Marshal(resp)
-			log.Printf("LLM RESPONSE: %v", string(jsonResp))
 
 			a.messages = append(a.messages, resp.Message)
 
@@ -107,7 +108,7 @@ func (a *Agent) SendMessage(ctx context.Context, message *gai.Message) (string, 
 	var fullOutput string
 
 	a.flows.chat.Stream(ctx, message)(
-		func(resp *core.StreamingFlowValue[string, string], err error) bool {
+		func(resp *core.StreamingFlowValue[string, *gai.ModelResponseChunk], err error) bool {
 			if err != nil {
 				streamErr = err
 				log.Printf("Error while streaming response %v\n", err)
@@ -120,7 +121,8 @@ func (a *Agent) SendMessage(ctx context.Context, message *gai.Message) (string, 
 				return true
 			}
 
-			log.Printf("\n*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", resp.Stream)
+			jsonContent, _ := json.MarshalIndent(resp.Stream, "", "  ")
+			log.Printf("*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", string(jsonContent))
 			return true
 		},
 	)
