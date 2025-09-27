@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"rdmm404/voltr-finance/internal/ai/tool"
 
+	"github.com/firebase/genkit/go/ai"
 	gai "github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
 	"github.com/firebase/genkit/go/genkit"
@@ -30,7 +32,7 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 	g := genkit.Init(
 		ctx,
 		genkit.WithPlugins(&googlegenai.GoogleAI{}),
-		genkit.WithDefaultModel("googleai/gemini-2.0-flash"),
+		genkit.WithDefaultModel("googleai/gemini-2.5-flash"),
 	)
 
 	tp.Init(g)
@@ -73,34 +75,66 @@ func (a *Agent) chatFlow() chatFlow {
 				ctx,
 				a.g,
 				gai.WithTools(a.tp.GetAvailableTools()...),
+				gai.WithSystem(systemPrompt(43)),
 				gai.WithMessages(
 					a.messages...
 				),
-				// ai.WithStreaming(func(ctx context.Context, chunk *ai.ModelResponseChunk))
+				gai.WithStreaming(func(ctx context.Context, chunk *ai.ModelResponseChunk) error {
+					err := callback(ctx, chunk.Text())
+					if err != nil {
+						return fmt.Errorf("error in streaming callback - %w", err)
+					}
+					return nil
+				}),
 			)
-
-			a.messages = append(a.messages, resp.Message)
 
 			if err != nil {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
+
+			jsonResp, _ := json.Marshal(resp)
+			log.Printf("LLM RESPONSE: %v", string(jsonResp))
+
+			a.messages = append(a.messages, resp.Message)
+
 			return resp.Text(), nil
 		},
 	)
 }
 
 func (a *Agent) SendMessage(ctx context.Context, message *gai.Message) (string, error) {
-	resp, err := a.flows.chat.Run(ctx, message)
+	var streamErr error
+	var fullOutput string
 
-	for _, msg := range a.messages {
-		msgJson, _ := json.Marshal(msg)
-		fmt.Println(string(msgJson))
-	}
-	if err != nil {
-		return "", err
+	a.flows.chat.Stream(ctx, message)(
+		func(resp *core.StreamingFlowValue[string, string], err error) bool {
+			if err != nil {
+				streamErr = err
+				log.Printf("Error while streaming response %v\n", err)
+				return false
+			}
+
+			if resp.Done {
+				fullOutput = resp.Output
+				log.Printf("full streaming output: %v\n", resp.Output)
+				return true
+			}
+
+			log.Printf("\n*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", resp.Stream)
+			return true
+		},
+	)
+
+	if streamErr != nil {
+		return "", streamErr
 	}
 
-	return resp, nil
+	// for _, msg := range a.messages {
+	// 	msgJson, _ := json.Marshal(msg)
+	// 	fmt.Println(string(msgJson))
+	// }
+
+	return fullOutput, nil
 	// resp, err := genkit.Generate(ctx, a.g,
 	// 	ai.WithMessages(
 	// 		ai.NewUserMessage(

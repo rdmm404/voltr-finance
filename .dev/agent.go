@@ -50,14 +50,19 @@ func main() {
 
 	// agent.SendMessage(ctx, gai.NewUserTextMessage("What tools do you have available?"))
 
-	agent.SendMessage(ctx, gai.NewUserMessage(
-		gai.NewTextPart("Please store the transactions in the image. These are personal transactions. user ID is 1."),
-		gai.NewMediaPart(
-			"image/png",
-			"https://media.discordapp.net/attachments/1404637483077074984/1415541865335492769/image.png?ex=68cc2758&is=68cad5d8&hm=7bdd973535633373a6c7c2eabab41a0a0cdffe22b3eb6f93e62c30506fa88eff&=&format=webp&quality=lossless&width=511&height=1124",
-		),
+	_, err = agent.SendMessage(ctx, gai.NewUserMessage(
+		gai.NewTextPart("Give me 3 stories. You must give me each story as a separate message."),
+		// gai.NewTextPart("Please store the transactions in the image. These are personal transactions. user ID is 1."),
+		// gai.NewMediaPart(
+		// 	"image/png",
+		// 	"https://cdn.discordapp.com/attachments/1404637483077074984/1415541865335492769/image.png?ex=68d804d8&is=68d6b358&hm=316029f666e46a9b77d780e13333e2446e28f9eb9537c4d2f76088501bc4f9d8&",
+		// ),
 	))
 
+
+	if err != nil {
+		log.Fatalf("Error while sending message to agent - %v", err)
+	}
 
 	<-ctx.Done()
 	log.Println("Signal received, exiting.")
