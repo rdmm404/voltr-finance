@@ -6,7 +6,6 @@ import (
 	"fmt"
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"strings"
-	"time"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -26,7 +25,7 @@ type TransactionSave struct {
 	Amount float32 `json:"amount" jsonschema_description:"The amount of the transaction."`
 	TransactionType int32 `json:"transactionType" jsonschema_description:"The type of the transaction. For personal transactions use 1, For household transactions use 2."`
 	PaidBy int32 `json:"paidBy" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
-	TransactionDate time.Time `json:"transactionDate" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DDTHH:MM:SS.sTZD."`
+	TransactionDate DateTime `json:"transactionDate" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DD HH:MM:SS."`
 	// not required
 	HouseholdId *int32 `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. Only set if the transaction is of type household."`
 	Notes *string `json:"notes,omitempty" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
@@ -59,15 +58,15 @@ func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransact
 	for _, transaction := range input.Transactions {
 		mappedTransactions = append(mappedTransactions, database.CreateTransactionParams{
 			Amount: transaction.Amount,
-			// TransactionType: &transaction.TransactionType,
+			TransactionType: &transaction.TransactionType,
 			PaidBy: transaction.PaidBy,
 			TransactionDate: pgtype.Timestamptz{
-				Time: transaction.TransactionDate,
+				Time: transaction.TransactionDate.Time,
 				Valid: true,
 			},
 			HouseholdID: transaction.HouseholdId,
 			Notes: transaction.Notes,
-			// Description: transaction.Description,
+			Description: transaction.Description,
 		})
 	}
 

@@ -2,10 +2,10 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"rdmm404/voltr-finance/internal/ai/tool"
+	"strings"
 
 	gai "github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
@@ -13,7 +13,7 @@ import (
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
-type chatFlow = *core.Flow[*gai.Message, string, *gai.ModelResponseChunk]
+type chatFlow = *core.Flow[*gai.Message, string, *ModelUpdate]
 
 type flows struct {
 	chat chatFlow
@@ -67,7 +67,7 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 
 func (a *Agent) chatFlow() chatFlow {
 	return genkit.DefineStreamingFlow(a.g, "chat",
-		func(ctx context.Context, message *gai.Message, callback core.StreamCallback[*gai.ModelResponseChunk]) (string, error) {
+		func(ctx context.Context, message *gai.Message, callback core.StreamCallback[*ModelUpdate]) (string, error) {
 			a.messages = append(a.messages, message)
 
 			resp, err := genkit.Generate(
@@ -79,12 +79,25 @@ func (a *Agent) chatFlow() chatFlow {
 					a.messages...
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
-					// for _, content := range chunk.Content {
-					// 	if content.ToolRequest != nil {
-					// 		log.Printf("Tool %v was called with args %v", content.ToolRequest.Name, content.ToolRequest.Input)
-					// 	}
-					// }
-					err := callback(ctx, chunk)
+					update := ModelUpdate{Text: chunk.Text()}
+
+					for _, content := range chunk.Content {
+						if content.ToolRequest != nil {
+							update.ToolCall = &ToolCallUpdate{
+								Args: content.ToolRequest.Input,
+								Name: content.ToolRequest.Name,
+							}
+						}
+
+						if content.ToolResponse != nil {
+							update.ToolResponse  = &ToolResponseUpdate{
+								Response: content.ToolResponse.Output,
+								Name: content.ToolResponse.Name,
+							}
+						}
+					}
+
+					err := callback(ctx, &update)
 					if err != nil {
 						return fmt.Errorf("error in streaming callback - %w", err)
 					}
@@ -103,48 +116,53 @@ func (a *Agent) chatFlow() chatFlow {
 	)
 }
 
-func (a *Agent) SendMessage(ctx context.Context, message *gai.Message) (string, error) {
-	var streamErr error
-	var fullOutput string
-
-	a.flows.chat.Stream(ctx, message)(
-		func(resp *core.StreamingFlowValue[string, *gai.ModelResponseChunk], err error) bool {
-			if err != nil {
-				streamErr = err
-				log.Printf("Error while streaming response %v\n", err)
-				return false
-			}
-
-			if resp.Done {
-				fullOutput = resp.Output
-				log.Printf("full streaming output: %v\n", resp.Output)
-				return true
-			}
-
-			jsonContent, _ := json.MarshalIndent(resp.Stream, "", "  ")
-			log.Printf("*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", string(jsonContent))
-			return true
-		},
-	)
-
-	if streamErr != nil {
-		return "", streamErr
+func (a *Agent) Run(ctx context.Context, message *gai.Message, mode StreamingMode) (<-chan *ModelUpdate, error) {
+	if !mode.Valid() {
+		return nil, fmt.Errorf("invalid streaming mode received %v", mode)
 	}
 
-	// for _, msg := range a.messages {
-	// 	msgJson, _ := json.Marshal(msg)
-	// 	fmt.Println(string(msgJson))
-	// }
+	ch := make(chan *ModelUpdate)
 
-	return fullOutput, nil
-	// resp, err := genkit.Generate(ctx, a.g,
-	// 	ai.WithMessages(
-	// 		ai.NewUserMessage(
-	// 			ai.NewMediaPart("image/jpeg", "https://example.com/photo.jpg"),
-	// 			ai.NewTextPart("Compose a poem about this image."),
-	// 		),
-	// 	),
-	// )
+	go func () {
+		defer close(ch)
+		var mb strings.Builder
+
+		a.flows.chat.Stream(ctx, message)(
+			func(resp *core.StreamingFlowValue[string, *ModelUpdate], err error) bool {
+				if err != nil {
+					log.Printf("Error while streaming response %v\n", err)
+					ch <- &ModelUpdate{Err: err}
+					return false
+				}
+
+				// jsonContent, _ := json.MarshalIndent(resp.Stream, "", "  ")
+				// log.Printf("*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", string(jsonContent))
+
+				switch mode {
+					case StreamingModeComplete:
+						if (resp.Done) {
+							ch <- &ModelUpdate{Text: resp.Output}
+						} else if resp.Stream.ToolCall == nil {
+							mb.WriteString(resp.Stream.Text)
+						} else {
+							resp.Stream.Text = mb.String()
+							ch <- resp.Stream
+						}
+					case StreamingModeChunks:
+						if !resp.Done {
+							ch <- resp.Stream
+						}
+					default:
+						ch <- &ModelUpdate{Err: fmt.Errorf("invalid streaming mode received %v", mode)}
+						return false
+				}
+				return true
+			},
+		)
+	}()
+
+
+	return ch, nil
 }
 
 // func (a *Agent) sendMessage(ctx context.Context, msg *Message, ch chan<- *AgentResponse){

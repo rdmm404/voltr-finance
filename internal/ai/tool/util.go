@@ -1,60 +1,53 @@
 package tool
 
 import (
-	"fmt"
-	"reflect"
+	"bytes"
+	"encoding/json"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/mitchellh/mapstructure"
+	"github.com/invopop/jsonschema"
 )
 
-func createToolDecoder(output interface{}, hooks []mapstructure.DecodeHookFuncType) (*mapstructure.Decoder, error) {
-	config := &mapstructure.DecoderConfig{
-		WeaklyTypedInput: true,
-		Result:           output,
-	}
 
-	if len(hooks) == 1 {
-		config.DecodeHook = hooks[0]
-	}
-
-	if len(hooks) > 1 {
-		config.DecodeHook = mapstructure.ComposeDecodeHookFunc(hooks)
-	}
-
-	decoder, err := mapstructure.NewDecoder(config)
-
-	if err != nil {
-		return nil, fmt.Errorf("error while creating decoder for tool - %w", err)
-	}
-
-	return decoder, nil
+type DateTime struct {
+	time.Time
 }
 
-func dateToPgTimestampHook(from reflect.Type, to reflect.Type, data any) (any, error) {
-	if to != reflect.TypeOf(pgtype.Timestamptz{}) {
-		return data, nil
+var parseLayouts = []string{
+	time.RFC3339Nano,           // "2006-01-02T15:04:05.999999999Z07:00"
+	time.RFC3339,               // "2006-01-02T15:04:05Z07:00"
+	"2006-01-02 15:04:05 MST",  // "2025-09-27 22:00:00 EDT"
+	"2006-01-02 15:04:05 -0700",// "2025-09-27 22:00:00 -0400"
+	"2006-01-02 15:04:05",      // naive local/server time
+	"2006-01-02",               // date only
+}
+
+func (d *DateTime) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(data, []byte("null")) {
+		d.Time = time.Time{}
+		return nil
 	}
 
-	if data == nil {
-		return pgtype.Timestamptz{Valid: false}, nil
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
 	}
 
-	switch v := data.(type) {
-	case pgtype.Timestamp:
-		return v, nil
-	case time.Time:
-		return pgtype.Timestamptz{Time: v, Valid: true}, nil
-	case string:
-		parsedTime, err := time.Parse("2006-01-02T15:04:05", v)
-		fmt.Printf("hook: string: parsed time %v\n", parsedTime)
-		if err != nil {
-			return nil, fmt.Errorf("error while parsing string timestamp - %w", err)
+	var lastErr error
+	for _, layout := range parseLayouts {
+		if parsed, err := time.Parse(layout, s); err == nil {
+			d.Time = parsed
+			return  nil
+		} else {
+			lastErr = err
 		}
+	}
 
-		return pgtype.Timestamptz{Time: parsedTime, Valid: true}, nil
-	default:
-		return nil, fmt.Errorf("unsupported data type")
+	return lastErr
+}
+
+func (DateTime) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Type: "string",
 	}
 }

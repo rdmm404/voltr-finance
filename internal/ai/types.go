@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	database "rdmm404/voltr-finance/internal/database/repository"
-	"rdmm404/voltr-finance/internal/transaction"
 
 	"google.golang.org/genai"
 )
@@ -19,12 +18,6 @@ type GenerationConfig struct {
 	Temperature float32
 }
 
-type Transaction struct {
-	Name            string                      `json:"name"`
-	Description     string                      `json:"description"`
-	Amount          float32                     `json:"amount"`
-	TransactionType transaction.TransactionType `json:"transactionType"`
-}
 
 type AttachmentFile []byte
 
@@ -77,4 +70,36 @@ type UsageStats struct {
 	TotalTokens int32
 	InputTokens int32
 	OutputTokens int32
+}
+
+type ModelUpdate struct {
+	Text string `json:"text,omitempty"`
+	ToolCall *ToolCallUpdate `json:"toolCall,omitempty"`
+	ToolResponse *ToolResponseUpdate `json:"toolResponse,omitempty"`
+	Err error
+}
+
+type ToolCallUpdate struct {
+	Name string
+	Args any
+}
+
+type ToolResponseUpdate struct {
+	Name string
+	Response any
+}
+
+type StreamingMode string
+const (
+	StreamingModeComplete StreamingMode = "complete"
+	StreamingModeChunks StreamingMode = "chunks"
+)
+
+func (s StreamingMode) Valid() bool {
+	switch s {
+	case StreamingModeComplete, StreamingModeChunks:
+		return true
+	default:
+		return false
+	}
 }
