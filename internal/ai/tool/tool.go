@@ -4,19 +4,18 @@ import (
 	"fmt"
 	"rdmm404/voltr-finance/internal/transaction"
 
-	"google.golang.org/genai"
+	"github.com/firebase/genkit/go/ai"
+	"github.com/firebase/genkit/go/genkit"
 )
 
 type Tool interface {
 	Name() string
 	Description() string
-	Parameters() *genai.Schema
-	Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse
+	Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool
 }
 
 type ToolProvider struct {
-	toolsByName     map[string]Tool
-	genaiTools      []*genai.Tool
+	allTools      []ai.Tool
 	deps *ToolDependencies
 }
 
@@ -24,54 +23,51 @@ type ToolDependencies struct {
 	Ts *transaction.TransactionService
 }
 
-var allTools = []Tool{
-	SaveTransactionsTool{},
+
+var toolFactories = []func(deps *ToolDependencies) (Tool, error) {
+	NewSaveTransactionsTool,
 }
 
 func NewToolProvider(deps *ToolDependencies) *ToolProvider {
-	tp := ToolProvider{deps: deps}
-	tp.toolsByName = make(map[string]Tool, 0)
-
-	for _, tool := range allTools {
-		tp.toolsByName[tool.Name()] = tool
-
-		tp.genaiTools = append(tp.genaiTools, &genai.Tool{
-			FunctionDeclarations: []*genai.FunctionDeclaration{
-				{
-					Name:        tool.Name(),
-					Description: tool.Description(),
-					Parameters:  tool.Parameters(),
-				},
-			},
-		})
-	}
-
-	return &tp
+	return &ToolProvider{deps: deps}
 }
 
-func (tp *ToolProvider) GetToolByName(name string) (Tool, bool) {
-	fmt.Printf("getting tool by name %v\n", name)
-	fmt.Printf("tools by name %+v\n", tp.toolsByName)
-	tool, ok := tp.toolsByName[name]
-	return tool, ok
-}
-
-func (tp *ToolProvider) GetGenaiTools() []*genai.Tool {
-	return tp.genaiTools
-}
-
-func (tp *ToolProvider) ExecuteToolCall(call *genai.FunctionCall) *genai.FunctionResponse {
-	tool, ok := tp.GetToolByName(call.Name)
-
-	if !ok {
-		return &genai.FunctionResponse{
-			ID:   call.ID,
-			Name: call.Name,
-			Response: map[string]any{
-				"error": "Function with name " + call.Name + "Was not found",
-			},
+func (tp *ToolProvider) Init(g *genkit.Genkit) error {
+	for _, toolFactory := range toolFactories {
+		tool, err := toolFactory(tp.deps)
+		if err != nil {
+			return fmt.Errorf("error while creating tool - %w", err)
 		}
+		tp.allTools = append(tp.allTools, tool.Create(g, tp))
 	}
+	return nil
+}
 
-	return tool.Call(call, tp.deps)
+func (tp *ToolProvider) GetAvailableTools() []ai.ToolRef {
+	var toolRefs []ai.ToolRef
+	for _, tool := range tp.allTools {
+		toolRefs = append(toolRefs, tool)
+	}
+	return toolRefs
+}
+
+func DefineTool[I any, O any](
+	tp *ToolProvider,
+	g *genkit.Genkit,
+	tool Tool,
+	handler ai.ToolFunc[I, O],
+) ai.Tool {
+	return genkit.DefineTool(
+		g,
+		tool.Name(),
+		tool.Description(),
+		func(ctx *ai.ToolContext, input I) (O, error) {
+			res, err := handler(ctx, input)
+			if err != nil {
+				return res, err
+			}
+			return res, err
+		},
+	)
+
 }

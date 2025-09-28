@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
-	"rdmm404/voltr-finance/internal/ai"
+	"rdmm404/voltr-finance/internal/ai/agent"
 	"rdmm404/voltr-finance/internal/config"
 	database "rdmm404/voltr-finance/internal/database/repository"
-	"rdmm404/voltr-finance/internal/utils"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -20,15 +20,11 @@ var ErrInvalidBotConfig = errors.New("bot is not set up correctly")
 
 type Bot struct {
 	session *discordgo.Session
-	agent Agent
+	agent agent.ChatAgent
 	repository *database.Queries
 }
 
-type Agent interface {
-	SendMessage(ctx context.Context, msg *ai.Message, ch chan<- *ai.AgentResponse)
-}
-
-func NewBot(agent Agent, repository *database.Queries) (*Bot, error) {
+func NewBot(a agent.ChatAgent, repository *database.Queries) (*Bot, error) {
 	token := config.DISCORD_TOKEN
 	if token == "" {
 		return nil, fmt.Errorf("%w - DISCORD_TOKEN environment variable is not set", ErrInvalidBotConfig)
@@ -41,7 +37,7 @@ func NewBot(agent Agent, repository *database.Queries) (*Bot, error) {
 
 	bot := &Bot{
 		session: dg,
-		agent: agent,
+		agent: a,
 		repository: repository,
 	}
 
@@ -67,7 +63,7 @@ func (b *Bot) Run() error {
 }
 
 func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.Background()
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
@@ -86,39 +82,37 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		return
 	}
 
-	aiMsg := &ai.Message{Msg: m.Content, SenderInfo: senderInfo}
+	aiMsg := &agent.Message{Msg: m.Content, SenderInfo: senderInfo}
 
 
 	for _, att := range m.Attachments {
-		bytes, err := utils.DownloadFileBytes(att.URL)
-		if err != nil {
-			fmt.Printf("Error downloading attachment %+v - %v\n", att, err)
-			return
-		}
-		aiMsg.Attachments = append(aiMsg.Attachments, &ai.Attachment{File: bytes, Mimetype: att.ContentType})
+		aiMsg.Attachments = append(aiMsg.Attachments, &agent.Attachment{URI: att.URL, Mimetype: att.ContentType})
 	}
 
-	ch := make(chan *ai.AgentResponse)
-	go b.agent.SendMessage(ctx, aiMsg, ch)
+	ch, err := b.agent.Run(ctx, aiMsg, agent.StreamingModeComplete)
 
-	for agentResp := range ch {
+	if err != nil {
+		log.Printf("Bot: Error received from agent %v", err)
+		return
+	}
+
+	for update := range ch {
 		s.ChannelTyping(m.ChannelID)
 
-		if (agentResp.Err != nil) {
+		if (update.Err != nil) {
 			fmt.Printf("error %v\n", err)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", err))
 			// TODO: Send debug trace as spoiler or something that makes it hidden
-			cancel()
 		}
 
-		resp := agentResp.GenerateReponse
-
-		// TODO make this cleaner lol
-		if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0] == nil || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 || resp.Candidates[0].Content.Parts[0] == nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", resp))
+		if update.Text == "" && update.ToolCall == nil && update.ToolResponse == nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", update))
 		}
 
-		err = b.sendMessageInChunks(resp.Candidates[0].Content.Parts[0].Text, nil, s, m)
+		// TODO: include tool call in msg
+		if update.Text != "" {
+			err = b.sendMessageInChunks(update.Text, nil, s, m)
+		}
 
 		if (err != nil) {
 			fmt.Println(err)
@@ -126,20 +120,27 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	}
 }
 
-
-func (b *Bot) getSenderIntoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*ai.MessageSenderInfo, error) {
+func (b *Bot) getSenderIntoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*agent.MessageSenderInfo, error) {
 	if m == nil || m.Author == nil {
 		return nil, fmt.Errorf("message received does not have an authoor")
 	}
 
 	result, err := b.repository.GetUserDetailsByDiscordId(ctx, &m.Author.ID)
 
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
-	return &ai.MessageSenderInfo{
-		User: &result.User,
-		Household: &result.Household,
+
+	return &agent.MessageSenderInfo{
+		User: &agent.MessageUser{
+			ID: result.User.ID,
+			Name: result.User.Name,
+			DiscordID: result.User.DiscordID,
+		},
+		Household: &agent.MessageHousehold{
+			ID: result.Household.ID,
+			Name: result.Household.Name,
+		},
 	}, nil
 }
 

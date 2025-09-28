@@ -1,6 +1,6 @@
 package transaction
 
-type TransactionType int
+type TransactionType uint8
 
 const (
 	TransactionTypePersonal TransactionType = 1

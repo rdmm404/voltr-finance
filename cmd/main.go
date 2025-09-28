@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"log"
-	"rdmm404/voltr-finance/internal/ai"
+	"rdmm404/voltr-finance/internal/ai/agent"
 	"rdmm404/voltr-finance/internal/ai/tool"
 	"rdmm404/voltr-finance/internal/bot"
 	database "rdmm404/voltr-finance/internal/database/repository"
@@ -22,14 +22,13 @@ func main() {
 
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 
-	agentCfg := ai.AgentConfig{MaxTokens: 5000}
-	agent, err := ai.NewAgent(ctx, &agentCfg, tp)
+	a, err := agent.NewChatAgent(ctx, tp)
 
 	if err != nil {
 		log.Fatalf("Failed to initialize agent %v", err)
 	}
 
-	bot, err := bot.NewBot(agent, repository)
+	bot, err := bot.NewBot(a, repository)
 	if err != nil {
 		log.Panicf("Error creating bot %v", err)
 	}

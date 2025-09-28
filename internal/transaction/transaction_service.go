@@ -13,7 +13,7 @@ type TransactionService struct {
 	repository *database.Queries
 }
 
-func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []*database.CreateTransactionParams) (map[int32]*database.Transaction, error) {
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []database.CreateTransactionParams) (map[int32]*database.Transaction, error) {
 	tx, err := ts.db.Begin(ctx)
 
 	if err != nil {
@@ -26,7 +26,7 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 	createdTransactions := make(map[int32]*database.Transaction, len(transactions))
 
 	for _, trans := range transactions {
-		createdTrans, err := ts.repository.CreateTransaction(ctx, *trans)
+		createdTrans, err := ts.repository.CreateTransaction(ctx, trans)
 
 		if err != nil {
 			return nil, fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)

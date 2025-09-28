@@ -5,145 +5,88 @@ import (
 	"encoding/json"
 	"fmt"
 	database "rdmm404/voltr-finance/internal/database/repository"
-	"rdmm404/voltr-finance/internal/transaction"
-	"rdmm404/voltr-finance/internal/utils"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
-	"google.golang.org/genai"
+	"github.com/firebase/genkit/go/ai"
+	"github.com/firebase/genkit/go/genkit"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type SaveTransactionsTool struct{}
+type saveTransactionsTool struct{
+	deps *ToolDependencies
+}
 
-func (st SaveTransactionsTool) Name() string {
+type SaveTransactionsInput struct {
+	Transactions []TransactionSave
+}
+
+type TransactionSave struct {
+	// required
+	Amount float32 `json:"amount" jsonschema_description:"The amount of the transaction."`
+	TransactionType int32 `json:"transactionType" jsonschema_description:"The type of the transaction. For personal transactions use 1, For household transactions use 2."`
+	PaidBy int32 `json:"paidBy" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
+	TransactionDate DateTime `json:"transactionDate" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DD HH:MM:SS."`
+	// not required
+	HouseholdId *int32 `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. Only set if the transaction is of type household."`
+	Notes *string `json:"notes,omitempty" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
+	Description *string `json:"description,omitempty" jsonschema_description:"Description of the transaction."`
+	// TODO: owedBy, amountOwed, paymentDate, isPaid
+}
+
+func NewSaveTransactionsTool(deps *ToolDependencies) (Tool, error) {
+	if deps.Ts == nil {
+		return nil, fmt.Errorf("transaction service not present in dependencies")
+	}
+
+	return &saveTransactionsTool{deps: deps}, nil
+}
+
+func (st *saveTransactionsTool) Name() string {
 	return "SaveTransactions"
 }
-func (st SaveTransactionsTool) Description() string {
+func (st *saveTransactionsTool) Description() string {
 	return "This function will store the specified transactions in database."
 }
-func (st SaveTransactionsTool) Parameters() *genai.Schema {
-	return &genai.Schema{
-		Type: genai.TypeObject,
-		Properties: map[string]*genai.Schema{
-			"transactions": {
-				Type: genai.TypeArray,
-				Items: &genai.Schema{
-					Type: genai.TypeObject,
-					Required: []string{"description", "amount", "transactionType", "paidBy", "transactionDate", "householdId"},
-					Properties: map[string]*genai.Schema{
-						"description": {
-							Type:        genai.TypeString,
-							Description: "Description of the transaction.",
-							Nullable:    utils.BoolPtr(true),
-						},
-						"amount":          {
-							Type: genai.TypeNumber,
-							Description: "The amount of the transaction.",
-						},
-						"transactionType": {
-						Type: genai.TypeString,
-							Enum: []string{
-								fmt.Sprintf("%v", transaction.TransactionTypePersonal),
-								fmt.Sprintf("%v", transaction.TransactionTypeHousehold),
-							},
 
-							Description: "The type of the transaction. For personal transactions use 1, For household transactions use 2.",
-						},
-						"paidBy": {
-							Type: genai.TypeInteger,
-							Description: "The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender.",
-						},
-						"transactionDate": {
-							Type: genai.TypeString,
-							Description: "The date and time of the transaction in ISO format. Only set if can be inferred by the data provided. Must be in the format YYYY-MM-DDTHH:MM:SS.",
-							Nullable: utils.BoolPtr(true),
-						},
-						"notes": {
-							Type: genai.TypeString,
-							Description: "Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction.",
-							Nullable: utils.BoolPtr(true),
-						},
-						"householdId": {
-							Type: genai.TypeInteger,
-							Description: "ID of the household the user belongs to. Only set if the transaction is of type household.",
-							Nullable: utils.BoolPtr(true),
-						},
+func(st *saveTransactionsTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
+	return DefineTool(tp, g, st, st.execute)
+}
 
-						// TODO missing fields
-						// owedBy, amountOwed, paymentDate, isPaid
-					},
-				},
+func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransactionsInput) (string, error) {
+	mappedTransactions := make([]database.CreateTransactionParams, 0)
+
+	for _, transaction := range input.Transactions {
+		mappedTransactions = append(mappedTransactions, database.CreateTransactionParams{
+			Amount: transaction.Amount,
+			TransactionType: &transaction.TransactionType,
+			PaidBy: transaction.PaidBy,
+			TransactionDate: pgtype.Timestamptz{
+				Time: transaction.TransactionDate.Time,
+				Valid: true,
 			},
-		},
-	}
-}
-
-func (st SaveTransactionsTool) Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse {
-	mappedTransactions := make([]*database.CreateTransactionParams, 0)
-	response := genai.FunctionResponse{
-		ID:       functionCall.ID,
-		Name:     st.Name(),
-		Response: make(map[string]any, 0),
+			HouseholdID: transaction.HouseholdId,
+			Notes: transaction.Notes,
+			Description: transaction.Description,
+		})
 	}
 
-	err := st.validateDependencies(deps)
+	createdTrans, err := st.deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
 
 	if err != nil {
-		fmt.Printf("SaveTransactions called with invalid deps %v\n", err)
-		response.Response["error"] = "Internal error"
-		return &response
+		return "", fmt.Errorf("unknown error while saving transactions - %w", err)
 	}
-
-	transactionsAny, ok := functionCall.Args["transactions"]
-
-	if !ok {
-		response.Response["error"] = "Missing argument 'transactions'"
-		return &response
-	}
-
-	decoder, err := createToolDecoder(
-		&mappedTransactions,
-		[]mapstructure.DecodeHookFuncType{dateToPgTimestampHook},
-	)
-
+	// consider formatting transactions to MD instead
+	// TODO: look into returning transaction structs directly instead of formatting
+	formattedTrans, err := formatTransactionsForLLM(createdTrans)
 	if err != nil {
-		response.Response["error"] = fmt.Sprintf("Internal error, %v", err)
-		return &response
+		fmt.Printf("SaveTransactionsTool: Error received when formatting transactions - %v", err)
+		return "", fmt.Errorf("unknown error while reading created transactions. insert was successful %w", err)
 	}
 
-	err = decoder.Decode(transactionsAny)
-
-	if err != nil {
-		fmt.Println(err)
-		response.Response["error"] = fmt.Sprintf("Invalid format for transactions, error: %v", err)
-		return &response
-	}
-
-	createdTrans, err := deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
-
-	if err != nil {
-		response.Response["error"] = "Something bad happened :("
-	} else {
-		// consider formatting transactions to MD instead
-		formattedTrans, err := formatTransactionsForLLM(createdTrans)
-		if err != nil {
-			fmt.Printf("SaveTransactionsTool: Error received when formatting transactions - %v", err)
-			response.Response["output"] = "The transactions were stored successfully. However there was an error while reading the inserted data."
-		}
-		response.Response["output"] = "The following transactions were successfully stored:\n" + formattedTrans
-	}
-
-	return &response
+	return "The following transactions were successfully stored:\n" + formattedTrans, nil
 
 }
 
-func (st SaveTransactionsTool) validateDependencies(deps *ToolDependencies) error {
-	if deps.Ts == nil {
-		return fmt.Errorf("transaction service not present in dependencies")
-	}
-
-	return nil
-}
 
 type UpdateTransactionsByIdTool struct{}
 
@@ -155,12 +98,15 @@ func (ut UpdateTransactionsByIdTool) Description() string {
 	return "This function set the specified data to the transactions with the provided IDs."
 }
 
-func (ut UpdateTransactionsByIdTool) Parameters() *genai.Schema {
-	return &genai.Schema{}
-}
-
-func (ut UpdateTransactionsByIdTool) Call(functionCall *genai.FunctionCall, deps *ToolDependencies) *genai.FunctionResponse {
-	return &genai.FunctionResponse{}
+func (ut UpdateTransactionsByIdTool) Create(g *genkit.Genkit, deps *ToolDependencies) ai.Tool {
+	return genkit.DefineTool(
+		g,
+		ut.Name(),
+		ut.Description(),
+		func(ctx *ai.ToolContext, input SaveTransactionsInput) (string, error) {
+			return "hi", nil
+		},
+	)
 }
 
 
