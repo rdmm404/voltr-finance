@@ -1,4 +1,4 @@
-package ai
+package agent
 
 import (
 	"errors"
@@ -54,7 +54,6 @@ func systemPrompt(defaultPercentage float32) (string, error) {
 	), nil
 }
 
-
 const userInfoPromptTemplate = `
 The following information belongs to the human who is the message sender.
 # User Information
@@ -63,6 +62,7 @@ The following information belongs to the human who is the message sender.
 # Household Information
 - Household ID: %v
 `
+
 func userInfoPrompt(senderInfo *MessageSenderInfo) (string, error) {
 	if senderInfo == nil {
 		return "", fmt.Errorf("sender info is required")

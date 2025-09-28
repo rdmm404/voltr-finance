@@ -1,45 +1,45 @@
-package ai
+package agent
 
 type AttachmentFile []byte
 
 type Attachment struct {
-	URI string
+	URI      string
 	Mimetype string
 }
 
 type Message struct {
 	Attachments []*Attachment
 	Msg         string
-	SenderInfo *MessageSenderInfo
+	SenderInfo  *MessageSenderInfo
 }
 
 type MessageSenderInfo struct {
-	User *MessageUser
+	User      *MessageUser
 	Household *MessageHousehold
 }
 
 type MessageUser struct {
-	ID int32
-	Name string
+	ID        int32
+	Name      string
 	DiscordID *string
 }
 
 type MessageHousehold struct {
-	ID int32
+	ID   int32
 	Name string
 }
 
 type UsageStats struct {
-	TotalTokens int
-	InputTokens int
+	TotalTokens  int
+	InputTokens  int
 	OutputTokens int
 }
 
 type AgentUpdate struct {
-	Text string `json:"text,omitempty"`
-	ToolCall *ToolCallUpdate `json:"toolCall,omitempty"`
+	Text         string              `json:"text,omitempty"`
+	ToolCall     *ToolCallUpdate     `json:"toolCall,omitempty"`
 	ToolResponse *ToolResponseUpdate `json:"toolResponse,omitempty"`
-	Err error
+	Err          error
 }
 
 type ToolCallUpdate struct {
@@ -48,14 +48,15 @@ type ToolCallUpdate struct {
 }
 
 type ToolResponseUpdate struct {
-	Name string
+	Name     string
 	Response any
 }
 
 type StreamingMode string
+
 const (
 	StreamingModeComplete StreamingMode = "complete"
-	StreamingModeChunks StreamingMode = "chunks"
+	StreamingModeChunks   StreamingMode = "chunks"
 )
 
 func (s StreamingMode) Valid() bool {

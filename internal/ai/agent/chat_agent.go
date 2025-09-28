@@ -1,4 +1,4 @@
-package ai
+package agent
 
 import (
 	"context"
@@ -20,15 +20,15 @@ type flows struct {
 	chat chatFlow
 }
 
-type Agent struct {
-	g   *genkit.Genkit
-	messages []*gai.Message
-	tp *tool.ToolProvider
+type ChatAgent struct {
+	g          *genkit.Genkit
+	messages   []*gai.Message
+	tp         *tool.ToolProvider
 	usageStats UsageStats
-	flows *flows
+	flows      *flows
 }
 
-func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
+func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (Agent[Message, AgentUpdate], error) {
 	g := genkit.Init(
 		ctx,
 		genkit.WithPlugins(&googlegenai.GoogleAI{}),
@@ -37,8 +37,8 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 
 	tp.Init(g)
 
-	a := &Agent{
-		g: g,
+	a := &ChatAgent{
+		g:  g,
 		tp: tp,
 	}
 
@@ -50,7 +50,7 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 	return a, nil
 }
 
-func (a *Agent) chatFlow() chatFlow {
+func (a *ChatAgent) chatFlow() chatFlow {
 	return genkit.DefineStreamingFlow(a.g, "chat",
 		func(ctx context.Context, msg *Message, callback core.StreamCallback[*AgentUpdate]) (string, error) {
 			if msg == nil {
@@ -93,7 +93,7 @@ func (a *Agent) chatFlow() chatFlow {
 				if attachment.URI != "" {
 					message.Content = append(message.Content, gai.NewMediaPart(attachment.Mimetype, attachment.URI))
 				} else {
-					return "", fmt.Errorf("invalid attachment provided - %+v",  attachment)
+					return "", fmt.Errorf("invalid attachment provided - %+v", attachment)
 				}
 			}
 
@@ -105,7 +105,7 @@ func (a *Agent) chatFlow() chatFlow {
 				gai.WithTools(a.tp.GetAvailableTools()...),
 				gai.WithSystem(systemPrompt(43)),
 				gai.WithMessages(
-					a.messages...
+					a.messages...,
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
 					update := AgentUpdate{Text: chunk.Text()}
@@ -119,9 +119,9 @@ func (a *Agent) chatFlow() chatFlow {
 						}
 
 						if content.ToolResponse != nil {
-							update.ToolResponse  = &ToolResponseUpdate{
+							update.ToolResponse = &ToolResponseUpdate{
 								Response: content.ToolResponse.Output,
-								Name: content.ToolResponse.Name,
+								Name:     content.ToolResponse.Name,
 							}
 						}
 					}
@@ -147,18 +147,18 @@ func (a *Agent) chatFlow() chatFlow {
 	)
 }
 
-func (a *Agent) Run(ctx context.Context, msg *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
+func (a *ChatAgent) Run(ctx context.Context, input *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
 	if !mode.Valid() {
 		return nil, fmt.Errorf("invalid streaming mode received %v", mode)
 	}
 
 	ch := make(chan *AgentUpdate)
 
-	go func () {
+	go func() {
 		defer close(ch)
 		var mb strings.Builder
 
-		a.flows.chat.Stream(ctx, msg)(
+		a.flows.chat.Stream(ctx, input)(
 			func(resp *core.StreamingFlowValue[string, *AgentUpdate], err error) bool {
 				if err != nil {
 					log.Printf("Error while streaming response %v\n", err)
@@ -170,22 +170,22 @@ func (a *Agent) Run(ctx context.Context, msg *Message, mode StreamingMode) (<-ch
 				// log.Printf("*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", string(jsonContent))
 
 				switch mode {
-					case StreamingModeComplete:
-						if (resp.Done) {
-							ch <- &AgentUpdate{Text: resp.Output}
-						} else if resp.Stream.ToolCall == nil {
-							mb.WriteString(resp.Stream.Text)
-						} else {
-							resp.Stream.Text = mb.String()
-							ch <- resp.Stream
-						}
-					case StreamingModeChunks:
-						if !resp.Done {
-							ch <- resp.Stream
-						}
-					default:
-						ch <- &AgentUpdate{Err: fmt.Errorf("invalid streaming mode received %v", mode)}
-						return false
+				case StreamingModeComplete:
+					if resp.Done {
+						ch <- &AgentUpdate{Text: resp.Output}
+					} else if resp.Stream.ToolCall == nil {
+						mb.WriteString(resp.Stream.Text)
+					} else {
+						resp.Stream.Text = mb.String()
+						ch <- resp.Stream
+					}
+				case StreamingModeChunks:
+					if !resp.Done {
+						ch <- resp.Stream
+					}
+				default:
+					ch <- &AgentUpdate{Err: fmt.Errorf("invalid streaming mode received %v", mode)}
+					return false
 				}
 				return true
 			},
@@ -195,7 +195,7 @@ func (a *Agent) Run(ctx context.Context, msg *Message, mode StreamingMode) (<-ch
 	return ch, nil
 }
 
-func (a *Agent) trackUsage(resp *gai.ModelResponse) {
+func (a *ChatAgent) trackUsage(resp *gai.ModelResponse) {
 	if resp == nil || resp.Usage == nil {
 		return
 	}
@@ -213,7 +213,7 @@ func (a *Agent) trackUsage(resp *gai.ModelResponse) {
 // 	contents []*genai.Content,
 // 	config *genai.GenerateContentConfig,
 // ) (*genai.GenerateContentResponse, error) {
-	// TODO make this configurable
+// TODO make this configurable
 // 	maxRetries := 5
 // 	delay := 2 * time.Second // TODO exponential backoff?
 

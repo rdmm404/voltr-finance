@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"rdmm404/voltr-finance/internal/ai"
+	"rdmm404/voltr-finance/internal/ai/agent"
 	"rdmm404/voltr-finance/internal/ai/tool"
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
@@ -41,7 +41,7 @@ func main() {
 
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 
-	agent, err := ai.NewAgent(ctx, tp)
+	a, err := agent.NewChatAgent(ctx, tp)
 
 	if err != nil {
 		log.Fatalf("Failed to initialize agent %v", err)
@@ -49,29 +49,29 @@ func main() {
 
 	log.Println("Running. Press Ctrl+C to exit…")
 
-	// agent.SendMessage(ctx, gai.NewUserTextMessage("What tools do you have available?"))
+	// agent.SendMessage(ctx, gagent.NewUserTextMessage("What tools do you have available?"))
 	res, _ := repository.GetUserDetailsByDiscordId(ctx, utils.StringPtr("263106741711929351"))
 
-	ch, err := agent.Run(
+	ch, err := a.Run(
 		ctx,
-		&ai.Message{
+		&agent.Message{
 			Msg: "Please store the transactions in the image. These are personal transactions",
-			Attachments: []*ai.Attachment{
+			Attachments: []*agent.Attachment{
 				{Mimetype: "image/png", URI: "https://cdn.discordapp.com/attachments/1404637483077074984/1415541865335492769/image.png?ex=68d95658&is=68d804d8&hm=596a6a21f18dd397869ae0a7fae02ae61d81dea7926619187870d485a6ef14e7&"},
 			},
-			SenderInfo: &ai.MessageSenderInfo{
-				User: &ai.MessageUser{
+			SenderInfo: &agent.MessageSenderInfo{
+				User: &agent.MessageUser{
 					ID: res.User.ID,
 					Name: res.User.Name,
 					DiscordID: res.User.DiscordID,
 				},
-				Household: &ai.MessageHousehold{
+				Household: &agent.MessageHousehold{
 					ID: res.Household.ID,
 					Name: res.Household.Name,
 				},
 			},
 		},
-		ai.StreamingModeComplete,
+		agent.StreamingModeComplete,
 	)
 
 	for update := range ch {
