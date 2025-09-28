@@ -8,7 +8,7 @@ type Attachment struct {
 }
 
 type Message struct {
-	Attachments []*Attachment
+	Attachments []*Attachment `json:"attachments,omitempty"`
 	Msg         string
 	SenderInfo  *MessageSenderInfo
 }

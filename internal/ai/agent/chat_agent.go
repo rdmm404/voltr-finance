@@ -20,7 +20,9 @@ type flows struct {
 	chat chatFlow
 }
 
-type ChatAgent struct {
+type ChatAgent = Agent[Message, AgentUpdate]
+
+type chatAgent struct {
 	g          *genkit.Genkit
 	messages   []*gai.Message
 	tp         *tool.ToolProvider
@@ -28,7 +30,7 @@ type ChatAgent struct {
 	flows      *flows
 }
 
-func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (Agent[Message, AgentUpdate], error) {
+func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (ChatAgent, error) {
 	g := genkit.Init(
 		ctx,
 		genkit.WithPlugins(&googlegenai.GoogleAI{}),
@@ -37,7 +39,7 @@ func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (Agent[Message, Ag
 
 	tp.Init(g)
 
-	a := &ChatAgent{
+	a := &chatAgent{
 		g:  g,
 		tp: tp,
 	}
@@ -50,7 +52,7 @@ func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (Agent[Message, Ag
 	return a, nil
 }
 
-func (a *ChatAgent) chatFlow() chatFlow {
+func (a *chatAgent) chatFlow() chatFlow {
 	return genkit.DefineStreamingFlow(a.g, "chat",
 		func(ctx context.Context, msg *Message, callback core.StreamCallback[*AgentUpdate]) (string, error) {
 			if msg == nil {
@@ -140,14 +142,14 @@ func (a *ChatAgent) chatFlow() chatFlow {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
 
-			a.messages = append(a.messages, resp.Message)
+			a.messages = append(a.messages, gai.NewModelTextMessage(resp.Text()))
 
 			return resp.Text(), nil
 		},
 	)
 }
 
-func (a *ChatAgent) Run(ctx context.Context, input *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
+func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
 	if !mode.Valid() {
 		return nil, fmt.Errorf("invalid streaming mode received %v", mode)
 	}
@@ -195,7 +197,7 @@ func (a *ChatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 	return ch, nil
 }
 
-func (a *ChatAgent) trackUsage(resp *gai.ModelResponse) {
+func (a *chatAgent) trackUsage(resp *gai.ModelResponse) {
 	if resp == nil || resp.Usage == nil {
 		return
 	}
