@@ -11,10 +11,9 @@ import (
 	"rdmm404/voltr-finance/internal/ai/tool"
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
+	"rdmm404/voltr-finance/internal/utils"
 	"runtime/debug"
 	"syscall"
-
-	gai "github.com/firebase/genkit/go/ai"
 
 	"github.com/joho/godotenv"
 )
@@ -51,15 +50,27 @@ func main() {
 	log.Println("Running. Press Ctrl+C to exit…")
 
 	// agent.SendMessage(ctx, gai.NewUserTextMessage("What tools do you have available?"))
+	res, _ := repository.GetUserDetailsByDiscordId(ctx, utils.StringPtr("263106741711929351"))
 
-	ch, err := agent.Run(ctx, gai.NewUserMessage(
-		// gai.NewTextPart("Give me 3 stories. You must give me each story as a separate message."),
-			gai.NewTextPart("Please store the transactions in the image. These are personal transactions. user ID is 1."),
-			gai.NewMediaPart(
-				"image/png",
-				"https://cdn.discordapp.com/attachments/1404637483077074984/1415541865335492769/image.png?ex=68d95658&is=68d804d8&hm=596a6a21f18dd397869ae0a7fae02ae61d81dea7926619187870d485a6ef14e7&",
-			),
-		),
+	ch, err := agent.Run(
+		ctx,
+		&ai.Message{
+			Msg: "Please store the transactions in the image. These are personal transactions",
+			Attachments: []*ai.Attachment{
+				{Mimetype: "image/png", URI: "https://cdn.discordapp.com/attachments/1404637483077074984/1415541865335492769/image.png?ex=68d95658&is=68d804d8&hm=596a6a21f18dd397869ae0a7fae02ae61d81dea7926619187870d485a6ef14e7&"},
+			},
+			SenderInfo: &ai.MessageSenderInfo{
+				User: &ai.MessageUser{
+					ID: res.User.ID,
+					Name: res.User.Name,
+					DiscordID: res.User.DiscordID,
+				},
+				Household: &ai.MessageHousehold{
+					ID: res.Household.ID,
+					Name: res.Household.Name,
+				},
+			},
+		},
 		ai.StreamingModeComplete,
 	)
 

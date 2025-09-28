@@ -3,15 +3,9 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
-	database "rdmm404/voltr-finance/internal/database/repository"
 
 	"google.golang.org/genai"
 )
-
-type AgentResponse struct {
-	GenerateReponse *genai.GenerateContentResponse
-	Err error
-}
 
 type GenerationConfig struct {
 	Model       string
@@ -21,12 +15,11 @@ type GenerationConfig struct {
 
 type AttachmentFile []byte
 
-func (a AttachmentFile) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("File of size %d kB", len(a) / 1024)), nil
-}
+// func (a AttachmentFile) MarshalJSON() ([]byte, error) {
+// 	return []byte(fmt.Sprintf("File of size %d kB", len(a) / 1024)), nil
+// }
 
 type Attachment struct {
-	File     AttachmentFile
 	URI string
 	Mimetype string
 }
@@ -38,8 +31,19 @@ type Message struct {
 }
 
 type MessageSenderInfo struct {
-	User *database.User
-	Household *database.Household
+	User *MessageUser
+	Household *MessageHousehold
+}
+
+type MessageUser struct {
+	ID int32
+	Name string
+	DiscordID *string
+}
+
+type MessageHousehold struct {
+	ID int32
+	Name string
 }
 
 // this is just to override the json marshalling of files
@@ -67,12 +71,12 @@ func (b *CustomBlob) MarshalJson() ([]byte, error) {
 }
 
 type UsageStats struct {
-	TotalTokens int32
-	InputTokens int32
-	OutputTokens int32
+	TotalTokens int
+	InputTokens int
+	OutputTokens int
 }
 
-type ModelUpdate struct {
+type AgentUpdate struct {
 	Text string `json:"text,omitempty"`
 	ToolCall *ToolCallUpdate `json:"toolCall,omitempty"`
 	ToolResponse *ToolResponseUpdate `json:"toolResponse,omitempty"`

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"rdmm404/voltr-finance/internal/ai/tool"
@@ -13,7 +14,7 @@ import (
 	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
-type chatFlow = *core.Flow[*gai.Message, string, *ModelUpdate]
+type chatFlow = *core.Flow[*Message, string, *AgentUpdate]
 
 type flows struct {
 	chat chatFlow
@@ -36,22 +37,6 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 
 	tp.Init(g)
 
-	// systemInstruction, err := systemPrompt(43)
-
-	// if err != nil {
-	// 	return &Agent{}, fmt.Errorf("error while creating system prompt - %w", err)
-	// }
-
-	// cfg.generationConfig = &genai.GenerateContentConfig{
-	// 	Tools:            tp.GetGenaiTools(),
-	// 	SystemInstruction: &genai.Content{
-	// 		Role: "system",
-	// 		Parts: []*genai.Part{
-	// 			{Text: systemInstruction},
-	// 		},
-	// 	},
-	// }
-
 	a := &Agent{
 		g: g,
 		tp: tp,
@@ -67,7 +52,51 @@ func NewAgent(ctx context.Context, tp *tool.ToolProvider) (*Agent, error) {
 
 func (a *Agent) chatFlow() chatFlow {
 	return genkit.DefineStreamingFlow(a.g, "chat",
-		func(ctx context.Context, message *gai.Message, callback core.StreamCallback[*ModelUpdate]) (string, error) {
+		func(ctx context.Context, msg *Message, callback core.StreamCallback[*AgentUpdate]) (string, error) {
+			if msg == nil {
+				return "", errors.New("message is required")
+			}
+
+			if (len(msg.Attachments) == 0) && msg.Msg == "" {
+				return "", errors.New("at least one of (img, msg) must be set")
+			}
+
+			message := gai.NewUserMessage()
+
+			userInfoMsg, err := userInfoPrompt(msg.SenderInfo)
+
+			if err != nil {
+				return "", fmt.Errorf("error while formatting user info msg - %w", err)
+			}
+
+			message.Content = append(message.Content, gai.NewTextPart(userInfoMsg))
+
+			if msg.Msg != "" {
+				message.Content = append(message.Content, gai.NewTextPart(msg.Msg))
+			}
+
+			for _, attachment := range msg.Attachments {
+				if attachment.Mimetype == "" {
+					return "", fmt.Errorf("attachment missing mimetype %+v", attachment)
+				}
+
+				// if len(attachment.File) > 0 {
+				// 	message.Content = append(
+				// 		message.Content,
+				// 		gai.NewMediaPart(
+				// 			attachment.Mimetype,
+				// 			"data:" + attachment.Mimetype + ";base64," + base64.StdEncoding.EncodeToString(attachment.File),
+				// 		),
+				// 	)
+				// }
+
+				if attachment.URI != "" {
+					message.Content = append(message.Content, gai.NewMediaPart(attachment.Mimetype, attachment.URI))
+				} else {
+					return "", fmt.Errorf("invalid attachment provided - %+v",  attachment)
+				}
+			}
+
 			a.messages = append(a.messages, message)
 
 			resp, err := genkit.Generate(
@@ -79,7 +108,7 @@ func (a *Agent) chatFlow() chatFlow {
 					a.messages...
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
-					update := ModelUpdate{Text: chunk.Text()}
+					update := AgentUpdate{Text: chunk.Text()}
 
 					for _, content := range chunk.Content {
 						if content.ToolRequest != nil {
@@ -105,6 +134,8 @@ func (a *Agent) chatFlow() chatFlow {
 				}),
 			)
 
+			a.trackUsage(resp)
+
 			if err != nil {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
@@ -116,22 +147,22 @@ func (a *Agent) chatFlow() chatFlow {
 	)
 }
 
-func (a *Agent) Run(ctx context.Context, message *gai.Message, mode StreamingMode) (<-chan *ModelUpdate, error) {
+func (a *Agent) Run(ctx context.Context, msg *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
 	if !mode.Valid() {
 		return nil, fmt.Errorf("invalid streaming mode received %v", mode)
 	}
 
-	ch := make(chan *ModelUpdate)
+	ch := make(chan *AgentUpdate)
 
 	go func () {
 		defer close(ch)
 		var mb strings.Builder
 
-		a.flows.chat.Stream(ctx, message)(
-			func(resp *core.StreamingFlowValue[string, *ModelUpdate], err error) bool {
+		a.flows.chat.Stream(ctx, msg)(
+			func(resp *core.StreamingFlowValue[string, *AgentUpdate], err error) bool {
 				if err != nil {
 					log.Printf("Error while streaming response %v\n", err)
-					ch <- &ModelUpdate{Err: err}
+					ch <- &AgentUpdate{Err: err}
 					return false
 				}
 
@@ -141,7 +172,7 @@ func (a *Agent) Run(ctx context.Context, message *gai.Message, mode StreamingMod
 				switch mode {
 					case StreamingModeComplete:
 						if (resp.Done) {
-							ch <- &ModelUpdate{Text: resp.Output}
+							ch <- &AgentUpdate{Text: resp.Output}
 						} else if resp.Stream.ToolCall == nil {
 							mb.WriteString(resp.Stream.Text)
 						} else {
@@ -153,7 +184,7 @@ func (a *Agent) Run(ctx context.Context, message *gai.Message, mode StreamingMod
 							ch <- resp.Stream
 						}
 					default:
-						ch <- &ModelUpdate{Err: fmt.Errorf("invalid streaming mode received %v", mode)}
+						ch <- &AgentUpdate{Err: fmt.Errorf("invalid streaming mode received %v", mode)}
 						return false
 				}
 				return true
@@ -161,104 +192,20 @@ func (a *Agent) Run(ctx context.Context, message *gai.Message, mode StreamingMod
 		)
 	}()
 
-
 	return ch, nil
 }
 
-// func (a *Agent) sendMessage(ctx context.Context, msg *Message, ch chan<- *AgentResponse){
-// 	if msg == nil {
-// 		ch <- &AgentResponse{Err: errors.New("arguments are required")}
-// 	}
+func (a *Agent) trackUsage(resp *gai.ModelResponse) {
+	if resp == nil || resp.Usage == nil {
+		return
+	}
 
-// 	if (len(msg.Attachments) == 0) && msg.Msg == "" {
-// 		ch <- &AgentResponse{Err: errors.New("at least one of (img, msg) must be set")};
-// 	}
+	a.usageStats.InputTokens += resp.Usage.InputTokens
+	a.usageStats.OutputTokens += resp.Usage.OutputTokens
+	a.usageStats.TotalTokens += resp.Usage.TotalTokens
 
-// 	content := &genai.Content{
-// 		Role:  "user",
-// 		Parts: make([]*genai.Part, 0),
-// 	}
-
-// 	userInfoMsg, err := userInfoPrompt(msg.SenderInfo)
-
-// 	if err != nil {
-// 		ch <- &AgentResponse{Err: fmt.Errorf("error while formatting user info msg - %w", err)}
-// 	}
-
-// 	content.Parts = append(content.Parts, genai.NewPartFromText(userInfoMsg))
-
-// 	if msg.Msg != "" {
-// 		content.Parts = append(content.Parts, genai.NewPartFromText(msg.Msg))
-// 	}
-
-// 	for _, attachment := range msg.Attachments {
-// 		if len(attachment.File) > 0 {
-// 			content.Parts = append(content.Parts, genai.NewPartFromBytes(attachment.File, attachment.Mimetype))
-// 			continue
-// 		}
-
-// 		if attachment.URI != "" {
-// 			content.Parts = append(content.Parts, genai.NewPartFromURI(attachment.URI, attachment.Mimetype))
-// 			continue
-// 		}
-
-// 		ch <- &AgentResponse{Err: fmt.Errorf("invalid attachment provided - %+v",  attachment)}
-
-// 	}
-
-// 	a.messages = append(a.messages, content)
-
-// 	fmt.Printf("Sending request to LLM\n CONTENT: %s\n", LLMRequestToString(a.messages))
-
-// 	response, err := a.generateContentRetry(ctx, a.config.Model, a.messages, a.config.generationConfig)
-// 	ch <- &AgentResponse{GenerateReponse: response};
-
-// 	if err != nil {
-// 		ch <- &AgentResponse{Err: err};
-// 	}
-
-// 	a.countTokens(response)
-
-// 	a.messages = append(a.messages, response.Candidates[0].Content)
-
-// 	fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
-
-// 	toolCalls := response.FunctionCalls()
-
-// 	for _, call := range response.FunctionCalls() {
-// 		result := a.tp.ExecuteToolCall(call)
-// 		a.messages = append(a.messages, &genai.Content{
-// 			Role:  "user",
-// 			Parts: []*genai.Part{{FunctionResponse: result}},
-// 		})
-// 	}
-
-// 	if len(toolCalls) > 0 {
-// 		fmt.Printf("Tool calls detected. sending request to LLM\n CONTENT: %v \n", LLMRequestToString(a.messages))
-// 		response, err = a.generateContentRetry(ctx, a.config.Model, a.messages, a.config.generationConfig)
-// 		if err != nil {
-// 			ch <- &AgentResponse{Err: err}
-// 		}
-// 		ch <- &AgentResponse{GenerateReponse: response};
-// 		a.countTokens(response)
-// 		a.messages = append(a.messages, response.Candidates[0].Content)
-// 		fmt.Printf("response from llm %+v\n", LLMResponseToString(response))
-// 	}
-
-// 	close(ch)
-// }
-
-// func (a *Agent) countTokens(resp *genai.GenerateContentResponse) {
-// 	if resp == nil || resp.UsageMetadata == nil {
-// 		return
-// 	}
-
-// 	a.usageStats.InputTokens += resp.UsageMetadata.PromptTokenCount + resp.UsageMetadata.ToolUsePromptTokenCount
-// 	a.usageStats.OutputTokens += resp.UsageMetadata.CandidatesTokenCount
-// 	a.usageStats.TotalTokens += resp.UsageMetadata.TotalTokenCount
-
-// 	fmt.Printf("\nCurrent usage stats: %+v\n", a.usageStats)
-// }
+	fmt.Printf("\nCurrent usage stats: %+v\n", a.usageStats)
+}
 
 // func (a *Agent) generateContentRetry(
 // 	ctx context.Context,

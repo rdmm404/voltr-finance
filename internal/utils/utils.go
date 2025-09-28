@@ -11,6 +11,10 @@ func BoolPtr(b bool) *bool {
 	return &b
 }
 
+func StringPtr(s string) *string {
+	return &s
+}
+
 var ErrDownload = errors.New("error downloading the file")
 
 func DownloadFileBytes(url string) ([]byte, error) {
