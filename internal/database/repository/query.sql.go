@@ -11,6 +11,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createLlmMessage = `-- name: CreateLlmMessage :one
+INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3) RETURNING id, session_id, role, contents
+`
+
+type CreateLlmMessageParams struct {
+	SessionID int32  `json:"sessionId"`
+	Role      string `json:"role"`
+	Contents  []byte `json:"contents"`
+}
+
+func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) (LlmMessage, error) {
+	row := q.db.QueryRow(ctx, createLlmMessage, arg.SessionID, arg.Role, arg.Contents)
+	var i LlmMessage
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Role,
+		&i.Contents,
+	)
+	return i, err
+}
+
+const createLlmSession = `-- name: CreateLlmSession :one
+INSERT INTO llm_session (user_id) VALUES ($1) RETURNING id, user_id, created_at, updated_at
+`
+
+// ******************* LLM *******************
+func (q *Queries) CreateLlmSession(ctx context.Context, userID int32) (LlmSession, error) {
+	row := q.db.QueryRow(ctx, createLlmSession, userID)
+	var i LlmSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createTransaction = `-- name: CreateTransaction :one
 
 INSERT INTO transaction

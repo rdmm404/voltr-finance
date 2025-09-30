@@ -40,6 +40,20 @@ type HouseholdUser struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
 }
 
+type LlmMessage struct {
+	ID        int32  `json:"id"`
+	SessionID int32  `json:"sessionId"`
+	Role      string `json:"role"`
+	Contents  []byte `json:"contents"`
+}
+
+type LlmSession struct {
+	ID        int32              `json:"id"`
+	UserID    int32              `json:"userId"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
+}
+
 type Transaction struct {
 	ID               int32              `json:"id"`
 	Amount           float32            `json:"amount"`

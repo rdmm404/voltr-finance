@@ -76,3 +76,21 @@ CREATE TABLE transaction (
     FOREIGN KEY (budget_category_id) REFERENCES budget_category(id),
     FOREIGN KEY (household_id) REFERENCES household(id)
 );
+
+-- LLM messages
+-- TODO track token usage
+CREATE TABLE llm_session (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE llm_message (
+    id SERIAL PRIMARY KEY,
+    session_id INT NOT NULL,
+    role VARCHAR(255) NOT NULL,
+    contents JSONB NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES session(id)
+);

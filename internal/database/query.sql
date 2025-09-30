@@ -92,3 +92,10 @@ SELECT sqlc.embed(users), sqlc.embed(household) FROM users
 JOIN household_user on users.id = household_user.user_id
 JOIN household on household_user.household_id = household.id
 WHERE users.discord_id = $1;
+
+-- ******************* LLM *******************
+-- name: CreateLlmSession :one
+INSERT INTO llm_session (user_id) VALUES ($1) RETURNING *;
+
+-- name: CreateLlmMessage :one
+INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3) RETURNING *;
