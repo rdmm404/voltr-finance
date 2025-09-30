@@ -97,5 +97,10 @@ WHERE users.discord_id = $1;
 -- name: CreateLlmSession :one
 INSERT INTO llm_session (user_id) VALUES ($1) RETURNING *;
 
--- name: CreateLlmMessage :one
-INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3) RETURNING *;
+-- name: CreateLlmMessage :exec
+INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3);
+
+-- name: ListLlmMessagesByUserId :many
+SELECT m.* FROM llm_message m
+JOIN llm_session s ON m.session_id = s.id
+WHERE s.user_id = $1;

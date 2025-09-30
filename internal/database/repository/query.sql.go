@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createLlmMessage = `-- name: CreateLlmMessage :one
-INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3) RETURNING id, session_id, role, contents
+const createLlmMessage = `-- name: CreateLlmMessage :exec
+INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3)
 `
 
 type CreateLlmMessageParams struct {
@@ -21,16 +21,9 @@ type CreateLlmMessageParams struct {
 	Contents  []byte `json:"contents"`
 }
 
-func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) (LlmMessage, error) {
-	row := q.db.QueryRow(ctx, createLlmMessage, arg.SessionID, arg.Role, arg.Contents)
-	var i LlmMessage
-	err := row.Scan(
-		&i.ID,
-		&i.SessionID,
-		&i.Role,
-		&i.Contents,
-	)
-	return i, err
+func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) error {
+	_, err := q.db.Exec(ctx, createLlmMessage, arg.SessionID, arg.Role, arg.Contents)
+	return err
 }
 
 const createLlmSession = `-- name: CreateLlmSession :one
@@ -152,6 +145,37 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *stri
 		&i.Household.UpdatedAt,
 	)
 	return i, err
+}
+
+const listLlmMessagesByUserId = `-- name: ListLlmMessagesByUserId :many
+SELECT m.id, m.session_id, m.role, m.contents FROM llm_message m
+JOIN llm_session s ON m.session_id = s.id
+WHERE s.user_id = $1
+`
+
+func (q *Queries) ListLlmMessagesByUserId(ctx context.Context, userID int32) ([]LlmMessage, error) {
+	rows, err := q.db.Query(ctx, listLlmMessagesByUserId, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LlmMessage
+	for rows.Next() {
+		var i LlmMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.Role,
+			&i.Contents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
