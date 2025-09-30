@@ -208,38 +208,3 @@ func (a *chatAgent) trackUsage(resp *gai.ModelResponse) {
 
 	fmt.Printf("\nCurrent usage stats: %+v\n", a.usageStats)
 }
-
-// func (a *Agent) generateContentRetry(
-// 	ctx context.Context,
-// 	model string,
-// 	contents []*genai.Content,
-// 	config *genai.GenerateContentConfig,
-// ) (*genai.GenerateContentResponse, error) {
-// TODO make this configurable
-// 	maxRetries := 5
-// 	delay := 2 * time.Second // TODO exponential backoff?
-
-// 	var lastErr error
-
-// 	for retry := range maxRetries {
-// 		time.Sleep(delay * time.Duration(retry))
-// 		response, err := a.Client.Models.GenerateContent(ctx, model, contents, config)
-// 		lastErr = err
-// 		if err == nil {
-// 			return response, nil
-// 		}
-
-// 		apiErr, ok := err.(genai.APIError)
-// 		if !ok {
-// 			return nil, err
-// 		}
-
-// 		if apiErr.Code != 500 {
-// 			return nil, err
-// 		}
-
-// 		fmt.Printf("Error response received, retrying - %v\n", err)
-// 	}
-
-// 	return nil, lastErr
-// }
