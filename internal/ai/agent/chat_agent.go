@@ -168,11 +168,8 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 					return false
 				}
 
-				// jsonContent, _ := json.MarshalIndent(resp.Stream, "", "  ")
-				// log.Printf("*** BEGIN CHUNK ***\n%v\n*** END CHUNK ***\n", string(jsonContent))
-
 				switch mode {
-				case StreamingModeComplete:
+				case StreamingModeMessages:
 					if resp.Done {
 						ch <- &AgentUpdate{Text: resp.Output}
 					} else if resp.Stream.ToolCall == nil {

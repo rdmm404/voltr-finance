@@ -89,7 +89,7 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		aiMsg.Attachments = append(aiMsg.Attachments, &agent.Attachment{URI: att.URL, Mimetype: att.ContentType})
 	}
 
-	ch, err := b.agent.Run(ctx, aiMsg, agent.StreamingModeComplete)
+	ch, err := b.agent.Run(ctx, aiMsg, agent.StreamingModeMessages)
 
 	if err != nil {
 		log.Printf("Bot: Error received from agent %v", err)

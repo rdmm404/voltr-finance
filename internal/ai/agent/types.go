@@ -55,13 +55,13 @@ type ToolResponseUpdate struct {
 type StreamingMode string
 
 const (
-	StreamingModeComplete StreamingMode = "complete"
+	StreamingModeMessages StreamingMode = "messages"
 	StreamingModeChunks   StreamingMode = "chunks"
 )
 
 func (s StreamingMode) Valid() bool {
 	switch s {
-	case StreamingModeComplete, StreamingModeChunks:
+	case StreamingModeMessages, StreamingModeChunks:
 		return true
 	default:
 		return false
