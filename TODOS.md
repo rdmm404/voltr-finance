@@ -5,18 +5,18 @@
   - [x] find a way for the agent func to reply to the bot (caller) and come back (like python yield)
   - [x] reply only with text from LLM (no tools)
 
-- [ ] store transactions first then ask details
-  - [x] return created transaction ids from db
-  - [ ] refactor mapstructure logic with hooks and WeaklyTyped parameter
-  - [ ] add update transactions tool
-  - [ ] add instructions to system prompt
-
-- [ ] Add user and message in single message
-
 - [ ] MAKE IT STATELESS!!!
   - [ ] Include all details from LLM in discord message, like tool cals to preserve the history
   - [ ] Get last N messages from discord and pass into LLM
   - [ ] overall improve context management
+
+- [ ] store transactions first then ask details
+  - [x] return created transaction ids from db
+  - [x] refactor mapstructure logic with hooks and WeaklyTyped parameter
+  - [ ] add update transactions tool
+  - [ ] add instructions to system prompt
+
+- [ ] Add user and message in single message
 
 - [ ] if message comes from server -> household by default, if comes from pm -> personal by default if not otherwise specified
 
@@ -39,6 +39,8 @@
 - [ ] tools to get transactions using natural language
 - [ ] Add more context from the incoming message, like message time
 - [ ] improve system prompt
+
+- [ ] Access to tools per user
 
 MAYBE
 - [ ] Handle simultaneous messages 
