@@ -41,15 +41,19 @@ type HouseholdUser struct {
 }
 
 type LlmMessage struct {
-	ID        int32  `json:"id"`
-	SessionID int32  `json:"sessionId"`
-	Role      string `json:"role"`
-	Contents  []byte `json:"contents"`
+	ID        int32              `json:"id"`
+	SessionID int32              `json:"sessionId"`
+	Role      string             `json:"role"`
+	Contents  []byte             `json:"contents"`
+	UserID    int32              `json:"userId"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type LlmSession struct {
 	ID        int32              `json:"id"`
 	UserID    int32              `json:"userId"`
+	SourceID  string             `json:"sourceId"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
@@ -75,7 +79,7 @@ type Transaction struct {
 
 type User struct {
 	ID        int32              `json:"id"`
-	DiscordID *string            `json:"discordId"`
+	DiscordID string             `json:"discordId"`
 	Name      string             `json:"name"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`

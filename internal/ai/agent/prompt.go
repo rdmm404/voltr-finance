@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -54,32 +55,51 @@ func systemPrompt(defaultPercentage float32) (string, error) {
 	), nil
 }
 
-const userInfoPromptTemplate = `
+const userMsgPromptTemplate = `
 The following information belongs to the human who is the message sender.
-# User Information
+<user-data>
 - ID: %v
 - Name: %v
-# Household Information
 - Household ID: %v
+</household-data>
+
+This is the message sent by the user:
+%v
 `
 
-func userInfoPrompt(senderInfo *MessageSenderInfo) (string, error) {
-	if senderInfo == nil {
-		return "", fmt.Errorf("sender info is required")
-	}
-
-	if senderInfo.User == nil {
+func userMsgPrompt(userId int, userName string, householdId int, msg string, attachmentCount int) (string, error) {
+	if userId == 0 {
 		return "", fmt.Errorf("user is required")
 	}
 
-	if senderInfo.Household == nil {
+	if householdId == 0 {
 		return "", fmt.Errorf("household is required")
 	}
 
+	if msg == "" && attachmentCount == 0 {
+		return "", fmt.Errorf("either msg or attachments must be set")
+	}
+
+	var mb strings.Builder
+
+	if msg != "" {
+		mb.WriteString("<message>\n")
+		mb.WriteString(msg)
+		mb.WriteString("\n")
+		mb.WriteString("</message>\n")
+	}
+
+	if attachmentCount != 0 {
+		mb.WriteString("<attachments>\n")
+		mb.WriteString(fmt.Sprintf("The user has also included %v attachments.\n", attachmentCount))
+		mb.WriteString("</attachments>\n")
+	}
+
 	return fmt.Sprintf(
-		userInfoPromptTemplate,
-		senderInfo.User.ID,
-		senderInfo.User.Name,
-		senderInfo.Household.ID,
+		userMsgPromptTemplate,
+		userId,
+		userName,
+		householdId,
+		mb.String(),
 	), nil
 }

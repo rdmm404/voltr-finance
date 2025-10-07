@@ -12,31 +12,51 @@ import (
 )
 
 const createLlmMessage = `-- name: CreateLlmMessage :exec
-INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3)
+INSERT INTO
+    llm_message (session_id, user_id, role, contents)
+VALUES
+    ($1, $2, $3, $4)
 `
 
 type CreateLlmMessageParams struct {
 	SessionID int32  `json:"sessionId"`
+	UserID    int32  `json:"userId"`
 	Role      string `json:"role"`
 	Contents  []byte `json:"contents"`
 }
 
+// Messages
 func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) error {
-	_, err := q.db.Exec(ctx, createLlmMessage, arg.SessionID, arg.Role, arg.Contents)
+	_, err := q.db.Exec(ctx, createLlmMessage,
+		arg.SessionID,
+		arg.UserID,
+		arg.Role,
+		arg.Contents,
+	)
 	return err
 }
 
 const createLlmSession = `-- name: CreateLlmSession :one
-INSERT INTO llm_session (user_id) VALUES ($1) RETURNING id, user_id, created_at, updated_at
+INSERT INTO
+    llm_session (user_id, source_id)
+VALUES
+    ($1, $2) RETURNING id, user_id, source_id, created_at, updated_at
 `
 
+type CreateLlmSessionParams struct {
+	UserID   int32  `json:"userId"`
+	SourceID string `json:"sourceId"`
+}
+
 // ******************* LLM *******************
-func (q *Queries) CreateLlmSession(ctx context.Context, userID int32) (LlmSession, error) {
-	row := q.db.QueryRow(ctx, createLlmSession, userID)
+// Session
+func (q *Queries) CreateLlmSession(ctx context.Context, arg CreateLlmSessionParams) (LlmSession, error) {
+	row := q.db.QueryRow(ctx, createLlmSession, arg.UserID, arg.SourceID)
 	var i LlmSession
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.SourceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -115,6 +135,30 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	return i, err
 }
 
+const getCurrentSessionBySourceId = `-- name: GetCurrentSessionBySourceId :one
+SELECT
+    id, user_id, source_id, created_at, updated_at
+FROM
+    llm_session
+WHERE
+    source_id = $1
+    AND created_at >= date_trunc('day', now())
+    AND created_at < date_trunc('day', now()) + interval '1 day'
+`
+
+func (q *Queries) GetCurrentSessionBySourceId(ctx context.Context, sourceID string) (LlmSession, error) {
+	row := q.db.QueryRow(ctx, getCurrentSessionBySourceId, sourceID)
+	var i LlmSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserDetailsByDiscordId = `-- name: GetUserDetailsByDiscordId :one
 
 SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, household.id, household.name, household.created_at, household.updated_at FROM users
@@ -130,7 +174,7 @@ type GetUserDetailsByDiscordIdRow struct {
 
 // ******************* users *******************
 // READS
-func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *string) (GetUserDetailsByDiscordIdRow, error) {
+func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID string) (GetUserDetailsByDiscordIdRow, error) {
 	row := q.db.QueryRow(ctx, getUserDetailsByDiscordId, discordID)
 	var i GetUserDetailsByDiscordIdRow
 	err := row.Scan(
@@ -147,26 +191,53 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *stri
 	return i, err
 }
 
-const listLlmMessagesByUserId = `-- name: ListLlmMessagesByUserId :many
-SELECT m.id, m.session_id, m.role, m.contents FROM llm_message m
-JOIN llm_session s ON m.session_id = s.id
-WHERE s.user_id = $1
+const listLlmMessagesBySessionId = `-- name: ListLlmMessagesBySessionId :many
+SELECT
+    m.id, m.session_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at, h.id, h.name, h.created_at, h.updated_at
+FROM
+    llm_message m
+JOIN
+    users u on u.id = m.user_id
+LEFT JOIN household_user hu on hu.user_id = u.id
+LEFT JOIN household h on h.id = hu.household_id
+WHERE
+    m.session_id = $1
+ORDER BY
+    m.created_at ASC
 `
 
-func (q *Queries) ListLlmMessagesByUserId(ctx context.Context, userID int32) ([]LlmMessage, error) {
-	rows, err := q.db.Query(ctx, listLlmMessagesByUserId, userID)
+type ListLlmMessagesBySessionIdRow struct {
+	LlmMessage LlmMessage `json:"llmMessage"`
+	User       User       `json:"user"`
+	Household  Household  `json:"household"`
+}
+
+func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int32) ([]ListLlmMessagesBySessionIdRow, error) {
+	rows, err := q.db.Query(ctx, listLlmMessagesBySessionId, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LlmMessage
+	var items []ListLlmMessagesBySessionIdRow
 	for rows.Next() {
-		var i LlmMessage
+		var i ListLlmMessagesBySessionIdRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.SessionID,
-			&i.Role,
-			&i.Contents,
+			&i.LlmMessage.ID,
+			&i.LlmMessage.SessionID,
+			&i.LlmMessage.Role,
+			&i.LlmMessage.Contents,
+			&i.LlmMessage.UserID,
+			&i.LlmMessage.CreatedAt,
+			&i.LlmMessage.UpdatedAt,
+			&i.User.ID,
+			&i.User.DiscordID,
+			&i.User.Name,
+			&i.User.CreatedAt,
+			&i.User.UpdatedAt,
+			&i.Household.ID,
+			&i.Household.Name,
+			&i.Household.CreatedAt,
+			&i.Household.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

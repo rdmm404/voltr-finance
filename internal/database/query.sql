@@ -94,13 +94,40 @@ JOIN household on household_user.household_id = household.id
 WHERE users.discord_id = $1;
 
 -- ******************* LLM *******************
+-- Session
 -- name: CreateLlmSession :one
-INSERT INTO llm_session (user_id) VALUES ($1) RETURNING *;
+INSERT INTO
+    llm_session (user_id, source_id)
+VALUES
+    ($1, $2) RETURNING *;
 
+-- name: GetCurrentSessionBySourceId :one
+SELECT
+    *
+FROM
+    llm_session
+WHERE
+    source_id = $1
+    AND created_at >= date_trunc('day', now())
+    AND created_at < date_trunc('day', now()) + interval '1 day';
+
+-- Messages
 -- name: CreateLlmMessage :exec
-INSERT INTO llm_message (session_id, role, contents) VALUES ($1, $2, $3);
+INSERT INTO
+    llm_message (session_id, user_id, role, contents)
+VALUES
+    ($1, $2, $3, $4);
 
--- name: ListLlmMessagesByUserId :many
-SELECT m.* FROM llm_message m
-JOIN llm_session s ON m.session_id = s.id
-WHERE s.user_id = $1;
+-- name: ListLlmMessagesBySessionId :many
+SELECT
+    sqlc.embed(m), sqlc.embed(u), sqlc.embed(h)
+FROM
+    llm_message m
+JOIN
+    users u on u.id = m.user_id
+LEFT JOIN household_user hu on hu.user_id = u.id
+LEFT JOIN household h on h.id = hu.household_id
+WHERE
+    m.session_id = $1
+ORDER BY
+    m.created_at ASC;

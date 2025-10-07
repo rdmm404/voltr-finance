@@ -22,7 +22,13 @@ func main() {
 
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 
-	a, err := agent.NewChatAgent(ctx, tp)
+	sm, err := agent.NewSessionManager(db, repository)
+
+	if err != nil {
+		log.Fatalf("Failed to initialize session manager %v", err)
+	}
+
+	a, err := agent.NewChatAgent(ctx, tp, sm)
 
 	if err != nil {
 		log.Fatalf("Failed to initialize agent %v", err)

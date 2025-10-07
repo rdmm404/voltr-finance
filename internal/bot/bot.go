@@ -19,8 +19,8 @@ import (
 var ErrInvalidBotConfig = errors.New("bot is not set up correctly")
 
 type Bot struct {
-	session *discordgo.Session
-	agent agent.ChatAgent
+	session    *discordgo.Session
+	agent      agent.ChatAgent
 	repository *database.Queries
 }
 
@@ -36,8 +36,8 @@ func NewBot(a agent.ChatAgent, repository *database.Queries) (*Bot, error) {
 	}
 
 	bot := &Bot{
-		session: dg,
-		agent: a,
+		session:    dg,
+		agent:      a,
 		repository: repository,
 	}
 
@@ -54,6 +54,7 @@ func (b *Bot) Run() error {
 		return fmt.Errorf("error opening ws connection - %w", err)
 	}
 
+	// TODO handle interrupts in main instead of here
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
@@ -75,7 +76,7 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 
 	s.ChannelTyping(m.ChannelID)
 
-	senderInfo, err := b.getSenderIntoFromMessage(ctx, m)
+	senderInfo, err := b.getSenderInfoFromMessage(ctx, m)
 
 	if err != nil {
 		fmt.Printf("Bot: Error while getting sender info %v", err)
@@ -83,7 +84,6 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	}
 
 	aiMsg := &agent.Message{Msg: m.Content, SenderInfo: senderInfo}
-
 
 	for _, att := range m.Attachments {
 		aiMsg.Attachments = append(aiMsg.Attachments, &agent.Attachment{URI: att.URL, Mimetype: att.ContentType})
@@ -99,14 +99,19 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	for update := range ch {
 		s.ChannelTyping(m.ChannelID)
 
-		if (update.Err != nil) {
-			fmt.Printf("error %v\n", err)
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", err))
+		updateJson, err := json.Marshal(update)
+		fmt.Printf("update received: %s\n", updateJson)
+
+		if update.Err != nil {
+			fmt.Printf("error %v\n", update.Err)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", update.Err))
+			continue
 			// TODO: Send debug trace as spoiler or something that makes it hidden
 		}
 
 		if update.Text == "" && update.ToolCall == nil && update.ToolResponse == nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", update))
+			s.ChannelMessageSend(m.ChannelID, "Something went wrong :( - Empty update received")
+			continue
 		}
 
 		// TODO: include tool call in msg
@@ -114,18 +119,18 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 			err = b.sendMessageInChunks(update.Text, nil, s, m)
 		}
 
-		if (err != nil) {
+		if err != nil {
 			fmt.Println(err)
 		}
 	}
 }
 
-func (b *Bot) getSenderIntoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*agent.MessageSenderInfo, error) {
+func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*agent.MessageSenderInfo, error) {
 	if m == nil || m.Author == nil {
-		return nil, fmt.Errorf("message received does not have an authoor")
+		return nil, fmt.Errorf("message received does not have an author")
 	}
 
-	result, err := b.repository.GetUserDetailsByDiscordId(ctx, &m.Author.ID)
+	result, err := b.repository.GetUserDetailsByDiscordId(ctx, m.Author.ID)
 
 	if err != nil {
 		return nil, err
@@ -133,14 +138,15 @@ func (b *Bot) getSenderIntoFromMessage(ctx context.Context, m *discordgo.Message
 
 	return &agent.MessageSenderInfo{
 		User: &agent.MessageUser{
-			ID: result.User.ID,
-			Name: result.User.Name,
+			ID:        result.User.ID,
+			Name:      result.User.Name,
 			DiscordID: result.User.DiscordID,
 		},
 		Household: &agent.MessageHousehold{
-			ID: result.Household.ID,
+			ID:   result.Household.ID,
 			Name: result.Household.Name,
 		},
+		ChannelID: m.ChannelID,
 	}, nil
 }
 
@@ -150,7 +156,7 @@ func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Se
 	if chunkSizePtr != nil {
 		chunkSize = *chunkSizePtr
 	}
-	for (len(remainder) > 0) {
+	for len(remainder) > 0 {
 		var currMessage []rune
 		if len(remainder) > int(chunkSize) {
 			currMessage = remainder[:chunkSize]

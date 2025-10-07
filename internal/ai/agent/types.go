@@ -1,5 +1,12 @@
 package agent
 
+import (
+	"errors"
+	"fmt"
+
+	gai "github.com/firebase/genkit/go/ai"
+)
+
 type AttachmentFile []byte
 
 type Attachment struct {
@@ -13,15 +20,33 @@ type Message struct {
 	SenderInfo  *MessageSenderInfo
 }
 
+func (m *Message) ToGenkit() (*gai.Message, error) {
+	var parts []*gai.Part
+
+	if m.Msg != "" {
+		parts = append(parts, gai.NewTextPart(m.Msg))
+	}
+
+	for _, att := range m.Attachments {
+		if att.Mimetype == "" {
+			return nil, fmt.Errorf("attachment missing mimetype %+v", att)
+		}
+		parts = append(parts, gai.NewMediaPart(att.Mimetype, att.URI))
+	}
+
+	return gai.NewUserMessage(parts...), nil
+}
+
 type MessageSenderInfo struct {
 	User      *MessageUser
 	Household *MessageHousehold
+	ChannelID string
 }
 
 type MessageUser struct {
 	ID        int32
 	Name      string
-	DiscordID *string
+	DiscordID string
 }
 
 type MessageHousehold struct {
@@ -67,3 +92,5 @@ func (s StreamingMode) Valid() bool {
 		return false
 	}
 }
+
+var ErrMessagePersistance = errors.New("error persisting message")

@@ -9,7 +9,7 @@ import (
 )
 
 type TransactionService struct {
-	db *pgx.Conn
+	db         *pgx.Conn
 	repository *database.Queries
 }
 
@@ -21,6 +21,7 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 	}
 	defer tx.Rollback(ctx)
 
+	// TODO fix this
 	ts.repository.WithTx(tx)
 
 	createdTransactions := make(map[int32]*database.Transaction, len(transactions))

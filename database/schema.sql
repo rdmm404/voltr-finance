@@ -5,7 +5,7 @@ CREATE SCHEMA transactions;
 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
-    discord_id VARCHAR(255) UNIQUE,
+    discord_id VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -82,6 +82,7 @@ CREATE TABLE transaction (
 CREATE TABLE llm_session (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
+    source_id VARCHAR(255) NOT NULL, -- discord channel id, NULL if dm
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -92,5 +93,9 @@ CREATE TABLE llm_message (
     session_id INT NOT NULL,
     role VARCHAR(255) NOT NULL,
     contents JSONB NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES session(id)
+    user_id INT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES llm_session(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );

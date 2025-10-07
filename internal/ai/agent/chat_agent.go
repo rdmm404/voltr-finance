@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -23,18 +24,19 @@ type flows struct {
 type ChatAgent = Agent[Message, AgentUpdate]
 
 type chatAgent struct {
-	g          *genkit.Genkit
-	messages   []*gai.Message
-	tp         *tool.ToolProvider
+	g     *genkit.Genkit
+	tp    *tool.ToolProvider
+	sm    *SessionManager
+	flows *flows
+
 	usageStats UsageStats
-	flows      *flows
 }
 
-func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (ChatAgent, error) {
+func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager) (ChatAgent, error) {
 	g := genkit.Init(
 		ctx,
 		genkit.WithPlugins(&googlegenai.GoogleAI{}),
-		genkit.WithDefaultModel("googleai/gemini-2.0-flash"),
+		genkit.WithDefaultModel("googleai/gemini-2.5-flash"),
 	)
 
 	tp.Init(g)
@@ -42,6 +44,7 @@ func NewChatAgent(ctx context.Context, tp *tool.ToolProvider) (ChatAgent, error)
 	a := &chatAgent{
 		g:  g,
 		tp: tp,
+		sm: sm,
 	}
 
 	// TODO: Find a better way to do this
@@ -63,86 +66,122 @@ func (a *chatAgent) chatFlow() chatFlow {
 				return "", errors.New("at least one of (img, msg) must be set")
 			}
 
-			message := gai.NewUserMessage()
+			userID := msg.SenderInfo.User.ID
 
-			userInfoMsg, err := userInfoPrompt(msg.SenderInfo)
+			session, err := a.sm.GetOrCreateSession(ctx, msg.SenderInfo.ChannelID, userID)
 
 			if err != nil {
-				return "", fmt.Errorf("error while formatting user info msg - %w", err)
+				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
-			message.Content = append(message.Content, gai.NewTextPart(userInfoMsg))
+			genkitMsg, err := msg.ToGenkit()
 
-			if msg.Msg != "" {
-				message.Content = append(message.Content, gai.NewTextPart(msg.Msg))
+			if err != nil {
+				return "", fmt.Errorf("invalid message provided %w", err)
 			}
 
-			for _, attachment := range msg.Attachments {
-				if attachment.Mimetype == "" {
-					return "", fmt.Errorf("attachment missing mimetype %+v", attachment)
-				}
-
-				// if len(attachment.File) > 0 {
-				// 	message.Content = append(
-				// 		message.Content,
-				// 		gai.NewMediaPart(
-				// 			attachment.Mimetype,
-				// 			"data:" + attachment.Mimetype + ";base64," + base64.StdEncoding.EncodeToString(attachment.File),
-				// 		),
-				// 	)
-				// }
-
-				if attachment.URI != "" {
-					message.Content = append(message.Content, gai.NewMediaPart(attachment.Mimetype, attachment.URI))
-				} else {
-					return "", fmt.Errorf("invalid attachment provided - %+v", attachment)
-				}
+			if err = session.StoreMessage(ctx, genkitMsg, userID); err != nil {
+				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
-			a.messages = append(a.messages, message)
+			msgHistory, err := session.GetMessageHistory(ctx)
+
+			if err != nil {
+				return "", errors.Join(ErrMessagePersistance, err)
+			}
 
 			resp, err := genkit.Generate(
 				ctx,
 				a.g,
 				gai.WithTools(a.tp.GetAvailableTools()...),
+				gai.WithReturnToolRequests(true),
 				gai.WithSystem(systemPrompt(43)),
 				gai.WithMessages(
-					a.messages...,
+					msgHistory...,
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
-					update := AgentUpdate{Text: chunk.Text()}
-
-					for _, content := range chunk.Content {
-						if content.ToolRequest != nil {
-							update.ToolCall = &ToolCallUpdate{
-								Args: content.ToolRequest.Input,
-								Name: content.ToolRequest.Name,
-							}
-						}
-
-						if content.ToolResponse != nil {
-							update.ToolResponse = &ToolResponseUpdate{
-								Response: content.ToolResponse.Output,
-								Name:     content.ToolResponse.Name,
-							}
-						}
+					if chunk.Text() == "" {
+						return nil
 					}
-
-					err := callback(ctx, &update)
-					if err != nil {
+					if err := callback(ctx, &AgentUpdate{Text: chunk.Text()}); err != nil {
 						return fmt.Errorf("error in streaming callback - %w", err)
 					}
 					return nil
 				}),
 			)
 
+			if err != nil {
+				return "", fmt.Errorf("error while calling LLM %w", err)
+			}
+
+			// TODO store text as single part with resp.Text() + add tool calls iterating
+			if err = session.StoreMessage(ctx, gai.NewModelMessage(resp.Message.Content...), userID); err != nil {
+				return "", errors.Join(ErrMessagePersistance, err)
+			}
+
+			if len(resp.ToolRequests()) == 0 {
+				return resp.Text(), nil
+			}
+
+			var parts []*gai.Part
+			for _, req := range resp.ToolRequests() {
+
+				if err := callback(ctx, &AgentUpdate{ToolCall: &ToolCallUpdate{Name: req.Name, Args: req.Input}}); err != nil {
+					return "", fmt.Errorf("error in streaming callback - %w", err)
+				}
+
+				tool := genkit.LookupTool(a.g, req.Name)
+				if tool == nil {
+					log.Fatalf("tool %q not found", req.Name)
+				}
+
+				output, err := tool.RunRaw(ctx, req.Input)
+				if err != nil {
+					log.Fatalf("tool %q execution failed: %v", tool.Name(), err)
+				}
+
+				// TODO figure out this update when streaming tool calls
+				if err := callback(ctx, &AgentUpdate{ToolResponse: &ToolResponseUpdate{Name: req.Name, Response: output}}); err != nil {
+					return "", fmt.Errorf("error in streaming callback - %w", err)
+				}
+
+				parts = append(parts,
+					gai.NewToolResponsePart(&gai.ToolResponse{
+						Name:   req.Name,
+						Ref:    req.Ref,
+						Output: output,
+					}))
+			}
+
+			toolRespMsg := gai.NewMessage(gai.RoleTool, nil, parts...)
+
+			if err = session.StoreMessage(ctx, toolRespMsg, userID); err != nil {
+				return "", errors.Join(ErrMessagePersistance, err)
+			}
+
+			// TODO: track in db
 			a.trackUsage(resp)
+
+			resp, err = genkit.Generate(ctx, a.g,
+				gai.WithMessages(append(resp.History(), toolRespMsg)...),
+				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
+					if chunk.Text() == "" {
+						return nil
+					}
+					if err := callback(ctx, &AgentUpdate{Text: chunk.Text()}); err != nil {
+						return fmt.Errorf("error in streaming callback - %w", err)
+					}
+					return nil
+				}),
+			)
 
 			if err != nil {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
 
-			a.messages = append(a.messages, gai.NewModelTextMessage(resp.Text()))
+			if err := session.StoreMessage(ctx, gai.NewModelTextMessage(resp.Text()), userID); err != nil {
+				return "", errors.Join(ErrMessagePersistance, err)
+			}
 
 			return resp.Text(), nil
 		},
@@ -168,15 +207,25 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 					return false
 				}
 
+				if !resp.Done {
+					jsonStream, _ := json.Marshal(resp.Stream)
+					fmt.Println(string(jsonStream))
+				} else {
+					fmt.Println(resp.Output)
+				}
+
 				switch mode {
 				case StreamingModeMessages:
 					if resp.Done {
 						ch <- &AgentUpdate{Text: resp.Output}
-					} else if resp.Stream.ToolCall == nil {
-						mb.WriteString(resp.Stream.Text)
-					} else {
+					} else if resp.Stream.ToolCall != nil {
 						resp.Stream.Text = mb.String()
 						ch <- resp.Stream
+						mb.Reset()
+					} else if resp.Stream.ToolResponse != nil {
+						ch <- resp.Stream
+					} else {
+						mb.WriteString(resp.Stream.Text)
 					}
 				case StreamingModeChunks:
 					if !resp.Done {
