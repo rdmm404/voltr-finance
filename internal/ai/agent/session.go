@@ -81,28 +81,24 @@ type Session struct {
 	SessionData *database.LlmSession
 }
 
-func (s *Session) StoreMessage(ctx context.Context, msg *gai.Message, userId int32) error {
+func (s *Session) StoreMessage(ctx context.Context, msg *gai.Message, userId int32, parentId *int32) (int32, error) {
 	if userId == 0 {
-		return errors.New("userId is required")
+		return 0, errors.New("userId is required")
 	}
 
 	jsonContent, err := json.Marshal(msg.Content)
 	if err != nil {
-		return fmt.Errorf("message contents are not valid json %w", err)
+		return 0, fmt.Errorf("message contents are not valid json %w", err)
 	}
 
-	err = s.repository.CreateLlmMessage(ctx, database.CreateLlmMessageParams{
+	return s.repository.CreateLlmMessage(ctx, database.CreateLlmMessageParams{
 		SessionID: s.SessionData.ID,
 		Role:      string(msg.Role),
 		Contents:  jsonContent,
 		UserID:    userId,
+		ParentID:  parentId,
 	})
 
-	if err != nil {
-		return fmt.Errorf("error creating message %w", err)
-	}
-
-	return nil
 }
 
 func (s *Session) GetMessageHistory(ctx context.Context) ([]*gai.Message, error) {

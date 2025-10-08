@@ -43,6 +43,7 @@ type HouseholdUser struct {
 type LlmMessage struct {
 	ID        int32              `json:"id"`
 	SessionID int32              `json:"sessionId"`
+	ParentID  *int32             `json:"parentId"`
 	Role      string             `json:"role"`
 	Contents  []byte             `json:"contents"`
 	UserID    int32              `json:"userId"`

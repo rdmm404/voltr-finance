@@ -112,11 +112,12 @@ WHERE
     AND created_at < date_trunc('day', now()) + interval '1 day';
 
 -- Messages
--- name: CreateLlmMessage :exec
+-- name: CreateLlmMessage :one
 INSERT INTO
-    llm_message (session_id, user_id, role, contents)
+    llm_message (session_id, user_id, role, contents, parent_id)
 VALUES
-    ($1, $2, $3, $4);
+    ($1, $2, $3, $4, $5)
+RETURNING id;
 
 -- name: ListLlmMessagesBySessionId :many
 SELECT

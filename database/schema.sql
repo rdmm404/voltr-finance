@@ -91,11 +91,13 @@ CREATE TABLE llm_session (
 CREATE TABLE llm_message (
     id SERIAL PRIMARY KEY,
     session_id INT NOT NULL,
+    parent_id INT,
     role VARCHAR(255) NOT NULL,
     contents JSONB NOT NULL,
     user_id INT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES llm_session(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (parent_id) REFERENCES llm_message(id)
 );

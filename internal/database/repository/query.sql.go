@@ -11,11 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createLlmMessage = `-- name: CreateLlmMessage :exec
+const createLlmMessage = `-- name: CreateLlmMessage :one
 INSERT INTO
-    llm_message (session_id, user_id, role, contents)
+    llm_message (session_id, user_id, role, contents, parent_id)
 VALUES
-    ($1, $2, $3, $4)
+    ($1, $2, $3, $4, $5)
+RETURNING id
 `
 
 type CreateLlmMessageParams struct {
@@ -23,17 +24,21 @@ type CreateLlmMessageParams struct {
 	UserID    int32  `json:"userId"`
 	Role      string `json:"role"`
 	Contents  []byte `json:"contents"`
+	ParentID  *int32 `json:"parentId"`
 }
 
 // Messages
-func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) error {
-	_, err := q.db.Exec(ctx, createLlmMessage,
+func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) (int32, error) {
+	row := q.db.QueryRow(ctx, createLlmMessage,
 		arg.SessionID,
 		arg.UserID,
 		arg.Role,
 		arg.Contents,
+		arg.ParentID,
 	)
-	return err
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createLlmSession = `-- name: CreateLlmSession :one
@@ -193,7 +198,7 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID strin
 
 const listLlmMessagesBySessionId = `-- name: ListLlmMessagesBySessionId :many
 SELECT
-    m.id, m.session_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at, h.id, h.name, h.created_at, h.updated_at
+    m.id, m.session_id, m.parent_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at, h.id, h.name, h.created_at, h.updated_at
 FROM
     llm_message m
 JOIN
@@ -224,6 +229,7 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int3
 		if err := rows.Scan(
 			&i.LlmMessage.ID,
 			&i.LlmMessage.SessionID,
+			&i.LlmMessage.ParentID,
 			&i.LlmMessage.Role,
 			&i.LlmMessage.Contents,
 			&i.LlmMessage.UserID,

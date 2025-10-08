@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -28,8 +27,6 @@ type chatAgent struct {
 	tp    *tool.ToolProvider
 	sm    *SessionManager
 	flows *flows
-
-	usageStats UsageStats
 }
 
 func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager) (ChatAgent, error) {
@@ -80,7 +77,7 @@ func (a *chatAgent) chatFlow() chatFlow {
 				return "", fmt.Errorf("invalid message provided %w", err)
 			}
 
-			if err = session.StoreMessage(ctx, genkitMsg, userID); err != nil {
+			if _, err = session.StoreMessage(ctx, genkitMsg, userID, nil); err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
@@ -114,8 +111,17 @@ func (a *chatAgent) chatFlow() chatFlow {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
 
-			// TODO store text as single part with resp.Text() + add tool calls iterating
-			if err = session.StoreMessage(ctx, gai.NewModelMessage(resp.Message.Content...), userID); err != nil {
+			a.trackUsage(resp)
+
+			modelMsg := gai.NewModelTextMessage(resp.Message.Text())
+			for _, part := range resp.Message.Content {
+				if part.Kind == gai.PartToolRequest {
+					modelMsg.Content = append(modelMsg.Content, part)
+				}
+			}
+
+			msgID, err := session.StoreMessage(ctx, modelMsg, userID, nil)
+			if err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
@@ -125,19 +131,18 @@ func (a *chatAgent) chatFlow() chatFlow {
 
 			var parts []*gai.Part
 			for _, req := range resp.ToolRequests() {
-
 				if err := callback(ctx, &AgentUpdate{ToolCall: &ToolCallUpdate{Name: req.Name, Args: req.Input}}); err != nil {
 					return "", fmt.Errorf("error in streaming callback - %w", err)
 				}
 
 				tool := genkit.LookupTool(a.g, req.Name)
 				if tool == nil {
-					log.Fatalf("tool %q not found", req.Name)
+					return "", fmt.Errorf("tool %q not found", req.Name)
 				}
 
 				output, err := tool.RunRaw(ctx, req.Input)
 				if err != nil {
-					log.Fatalf("tool %q execution failed: %v", tool.Name(), err)
+					return "", fmt.Errorf("tool %q execution failed: %v", tool.Name(), err)
 				}
 
 				// TODO figure out this update when streaming tool calls
@@ -155,11 +160,10 @@ func (a *chatAgent) chatFlow() chatFlow {
 
 			toolRespMsg := gai.NewMessage(gai.RoleTool, nil, parts...)
 
-			if err = session.StoreMessage(ctx, toolRespMsg, userID); err != nil {
+			if _, err = session.StoreMessage(ctx, toolRespMsg, userID, &msgID); err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
-			// TODO: track in db
 			a.trackUsage(resp)
 
 			resp, err = genkit.Generate(ctx, a.g,
@@ -179,7 +183,7 @@ func (a *chatAgent) chatFlow() chatFlow {
 				return "", fmt.Errorf("error while calling LLM %w", err)
 			}
 
-			if err := session.StoreMessage(ctx, gai.NewModelTextMessage(resp.Text()), userID); err != nil {
+			if _, err := session.StoreMessage(ctx, gai.NewModelTextMessage(resp.Text()), userID, nil); err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
@@ -205,13 +209,6 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 					log.Printf("Error while streaming response %v\n", err)
 					ch <- &AgentUpdate{Err: err}
 					return false
-				}
-
-				if !resp.Done {
-					jsonStream, _ := json.Marshal(resp.Stream)
-					fmt.Println(string(jsonStream))
-				} else {
-					fmt.Println(resp.Output)
 				}
 
 				switch mode {
@@ -243,14 +240,12 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 	return ch, nil
 }
 
+// TODO: track in db
 func (a *chatAgent) trackUsage(resp *gai.ModelResponse) {
 	if resp == nil || resp.Usage == nil {
+		fmt.Println("nil")
 		return
 	}
 
-	a.usageStats.InputTokens += resp.Usage.InputTokens
-	a.usageStats.OutputTokens += resp.Usage.OutputTokens
-	a.usageStats.TotalTokens += resp.Usage.TotalTokens
-
-	fmt.Printf("\nCurrent usage stats: %+v\n", a.usageStats)
+	fmt.Printf("\nCurrent usage stats: %+v\n", *resp.Usage)
 }
