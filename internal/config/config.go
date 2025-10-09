@@ -7,22 +7,28 @@ import (
 )
 
 var (
-	DEBUG         bool
-	DISCORD_TOKEN string
-	DB_USER string
-	DB_PASSWORD string
-	DB_NAME string
-	DB_HOST string
-	DB_PORT string
+	DEBUG          bool
+	DISCORD_TOKEN  string
+	DISCORD_APP_ID string
+	DB_USER        string
+	DB_PASSWORD    string
+	DB_NAME        string
+	DB_HOST        string
+	DB_PORT        string
 )
 
 func init() {
 	if err := godotenv.Load(); err != nil {
 		log.Printf("Failed to load .env file %v. Using environment variables instead", err)
 	}
-
-	DISCORD_TOKEN = GetEnvString("DISCORD_TOKEN", "")
+	// general
 	DEBUG = GetEnvBool("DEBUG", true)
+
+	//discord
+	DISCORD_TOKEN = GetEnvString("DISCORD_TOKEN", "")
+	DISCORD_APP_ID = GetEnvString("DISCORD_APP_ID", "")
+
+	// database
 	DB_USER = GetEnvString("DB_USER", "")
 	DB_PASSWORD = GetEnvString("DB_PASSWORD", "")
 	DB_HOST = GetEnvString("DB_HOST", "")

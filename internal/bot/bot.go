@@ -11,6 +11,7 @@ import (
 	"rdmm404/voltr-finance/internal/ai/agent"
 	"rdmm404/voltr-finance/internal/config"
 	database "rdmm404/voltr-finance/internal/database/repository"
+	"rdmm404/voltr-finance/internal/utils"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -24,16 +25,37 @@ type Bot struct {
 	repository *database.Queries
 }
 
+var commands = []*discordgo.ApplicationCommand{
+	{
+		Name:        "session",
+		Description: "Create a brand new session for chatting with Voltio.",
+		DescriptionLocalizations: &map[discordgo.Locale]string{
+			discordgo.SpanishES:    "Crear una nueva sesión para hablar con Voltio.",
+			discordgo.SpanishLATAM: "Crear una nueva sesión para hablar con Voltio.",
+		},
+		Contexts: &[]discordgo.InteractionContextType{
+			discordgo.InteractionContextBotDM, discordgo.InteractionContextGuild,
+		},
+		Type: discordgo.ChatApplicationCommand,
+	},
+}
+
 func NewBot(a agent.ChatAgent, repository *database.Queries) (*Bot, error) {
-	token := config.DISCORD_TOKEN
-	if token == "" {
-		return nil, fmt.Errorf("%w - DISCORD_TOKEN environment variable is not set", ErrInvalidBotConfig)
+	if err := validateDiscordConfig(); err != nil {
+		return nil, err
 	}
 
-	dg, err := discordgo.New("Bot " + token)
+	dg, err := discordgo.New("Bot " + config.DISCORD_TOKEN)
 	if err != nil {
 		return nil, fmt.Errorf("error creating discord session - %w", err)
 	}
+	createdCommands, err := dg.ApplicationCommandBulkOverwrite(config.DISCORD_APP_ID, "", commands)
+	if err != nil {
+		return nil, fmt.Errorf("error creating application commands %w", err)
+	}
+
+	jsonCommands, _ := json.Marshal(createdCommands)
+	fmt.Printf("created commands %s\n", jsonCommands)
 
 	bot := &Bot{
 		session:    dg,
@@ -42,10 +64,22 @@ func NewBot(a agent.ChatAgent, repository *database.Queries) (*Bot, error) {
 	}
 
 	dg.AddHandler(bot.handlerMessageCreate)
+	dg.AddHandler(bot.handlerInteractionCreate)
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 
 	return bot, nil
+}
+
+func validateDiscordConfig() error {
+	if config.DISCORD_TOKEN == "" {
+		return fmt.Errorf("%w - DISCORD_TOKEN environment variable is not set", ErrInvalidBotConfig)
+	}
+
+	if config.DISCORD_APP_ID == "" {
+		return fmt.Errorf("%w - DISCORD_APP_ID environment variable is not set", ErrInvalidBotConfig)
+	}
+	return nil
 }
 
 func (b *Bot) Run() error {
@@ -67,7 +101,6 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	ctx := context.Background()
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	// Ignore all messages created by the bot itself
-	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
@@ -174,4 +207,63 @@ func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Se
 	}
 
 	return nil
+}
+
+func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	ctx := context.Background()
+	jsonEvent, _ := json.MarshalIndent(i, "", "  ")
+	fmt.Printf("Interaction event received: %s", jsonEvent)
+
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return
+	}
+
+	data := i.ApplicationCommandData()
+	// TODO turn this into a map or something if adding more commands
+	switch data.Name {
+	case "session":
+		var discordUser *discordgo.User
+		if i.Member != nil {
+			discordUser = i.Member.User
+		} else {
+			discordUser = i.User
+		}
+
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Creating session...",
+			},
+		})
+
+		user, err := b.repository.GetUserByDiscordId(ctx, discordUser.ID)
+
+		if err != nil {
+			log.Printf("Bot: error getting user details %v", err)
+			s.InteractionResponseEdit(
+				i.Interaction,
+				&discordgo.WebhookEdit{Content: utils.StringPtr("Something went wrong while creating session :(")},
+			)
+			return
+		}
+
+		params := database.CreateLlmSessionParams{UserID: user.ID, SourceID: i.ChannelID}
+
+		if _, err = b.repository.CreateLlmSession(ctx, params); err != nil {
+			log.Printf("Bot: error creating new session %v", err)
+			s.InteractionResponseEdit(
+				i.Interaction,
+				&discordgo.WebhookEdit{Content: utils.StringPtr("Something went wrong while creating session :(")},
+			)
+			return
+		}
+
+		s.InteractionResponseEdit(
+			i.Interaction,
+			&discordgo.WebhookEdit{Content: utils.StringPtr("Session created successfully!")},
+		)
+
+	default:
+		fmt.Printf("Unrecognized command received %s, ignoring", data.Name)
+	}
 }

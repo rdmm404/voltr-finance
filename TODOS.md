@@ -13,7 +13,7 @@
   - [ ] ~~Get last N messages from discord and pass into LLM~~
   - [x] Write llm messages and sessions in db table
   - [x] Read from db instead of messages in memory
-  - [ ] Keep track of parent messages (for tool calls and results only for now)
+  - [x] Keep track of parent messages (for tool calls and results only for now)
 
 - [ ] store transactions first then ask details
 
@@ -44,12 +44,17 @@
 
   - [ ] TODO for errors as spoilers
   - [ ] Add tool calls with args and results in a non-intrusive Wy
+  - [ ] Handle message mentions correctly
+  - [ ] Consider only triggering bot if mentioned
 
 - [ ] tools to get transactions using natural language
 - [ ] Add more context from the incoming message, like message time
 - [ ] Keep track of token usage per db message
 - [ ] improve system prompt
+
 - [ ] improve context management
+
+  - [ ] reset or compact session automatically when a context threshold is reached
 
 - [ ] Access to tools per user
 

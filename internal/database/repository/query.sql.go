@@ -140,24 +140,40 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	return i, err
 }
 
-const getCurrentSessionBySourceId = `-- name: GetCurrentSessionBySourceId :one
+const getActiveSessionBySourceId = `-- name: GetActiveSessionBySourceId :one
 SELECT
     id, user_id, source_id, created_at, updated_at
 FROM
     llm_session
 WHERE
     source_id = $1
-    AND created_at >= date_trunc('day', now())
-    AND created_at < date_trunc('day', now()) + interval '1 day'
+ORDER BY created_at DESC
 `
 
-func (q *Queries) GetCurrentSessionBySourceId(ctx context.Context, sourceID string) (LlmSession, error) {
-	row := q.db.QueryRow(ctx, getCurrentSessionBySourceId, sourceID)
+func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID string) (LlmSession, error) {
+	row := q.db.QueryRow(ctx, getActiveSessionBySourceId, sourceID)
 	var i LlmSession
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.SourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByDiscordId = `-- name: GetUserByDiscordId :one
+SELECT id, discord_id, name, created_at, updated_at FROM users WHERE discord_id = $1
+`
+
+func (q *Queries) GetUserByDiscordId(ctx context.Context, discordID string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByDiscordId, discordID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

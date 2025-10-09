@@ -46,7 +46,7 @@ func (ms *SessionManager) GetOrCreateSession(ctx context.Context, sourceId strin
 	rtx := ms.repository.WithTx(tx)
 	defer tx.Rollback(ctx)
 
-	session, err := rtx.GetCurrentSessionBySourceId(ctx, sourceId)
+	session, err := rtx.GetActiveSessionBySourceId(ctx, sourceId)
 
 	if err == nil {
 		if err := tx.Commit(ctx); err != nil {

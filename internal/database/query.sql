@@ -93,6 +93,9 @@ JOIN household_user on users.id = household_user.user_id
 JOIN household on household_user.household_id = household.id
 WHERE users.discord_id = $1;
 
+-- name: GetUserByDiscordId :one
+SELECT * FROM users WHERE discord_id = $1;
+
 -- ******************* LLM *******************
 -- Session
 -- name: CreateLlmSession :one
@@ -101,15 +104,14 @@ INSERT INTO
 VALUES
     ($1, $2) RETURNING *;
 
--- name: GetCurrentSessionBySourceId :one
+-- name: GetActiveSessionBySourceId :one
 SELECT
     *
 FROM
     llm_session
 WHERE
     source_id = $1
-    AND created_at >= date_trunc('day', now())
-    AND created_at < date_trunc('day', now()) + interval '1 day';
+ORDER BY created_at DESC;
 
 -- Messages
 -- name: CreateLlmMessage :one
