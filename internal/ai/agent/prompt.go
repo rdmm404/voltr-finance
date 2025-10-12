@@ -57,15 +57,19 @@ func systemPrompt(defaultPercentage float32) (string, error) {
 }
 
 const userMsgPromptTemplate = `
-The following information belongs to the human who is the message sender.
+This is a message sent by the human:
+
+<message>
+%v
+</message>
+
+The following information belongs to the mesage sender:
+
 <user-data>
 - ID: %v
 - Name: %v
 - Household ID: %v
 </user-data>
-
-This is the message sent by the user:
-%v
 `
 
 func userMsgPrompt(userId int, userName string, householdId int, msg string, attachmentCount int) (string, error) {
@@ -84,10 +88,10 @@ func userMsgPrompt(userId int, userName string, householdId int, msg string, att
 	var mb strings.Builder
 
 	if msg != "" {
-		mb.WriteString("<message>\n")
+		mb.WriteString("<text>\n")
 		mb.WriteString(msg)
 		mb.WriteString("\n")
-		mb.WriteString("</message>\n")
+		mb.WriteString("</text>\n")
 	}
 
 	if attachmentCount != 0 {
@@ -98,9 +102,9 @@ func userMsgPrompt(userId int, userName string, householdId int, msg string, att
 
 	return fmt.Sprintf(
 		userMsgPromptTemplate,
+		mb.String(),
 		userId,
 		userName,
 		householdId,
-		mb.String(),
 	), nil
 }

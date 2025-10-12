@@ -51,6 +51,7 @@
 - [ ] Add more context from the incoming message, like message time
 - [ ] Keep track of token usage per db message
 - [ ] improve system prompt
+- [ ] add session summary (like what chat apps do)
 
 - [ ] improve context management
 
