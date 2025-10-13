@@ -9,8 +9,8 @@
 
 - [x] MAKE IT STATELESS!!!
 
-  - [ ] ~~Include all details from LLM in discord message, like tool cals to preserve the history~~
-  - [ ] ~~Get last N messages from discord and pass into LLM~~
+  - [x] ~~Include all details from LLM in discord message, like tool cals to preserve the history~~
+  - [x] ~~Get last N messages from discord and pass into LLM~~
   - [x] Write llm messages and sessions in db table
   - [x] Read from db instead of messages in memory
   - [x] Keep track of parent messages (for tool calls and results only for now)
