@@ -54,25 +54,16 @@ CREATE TABLE budget_category (
 CREATE TABLE transaction (
     id SERIAL PRIMARY KEY,
     amount REAL NOT NULL,
-    paid_by INT NOT NULL,
-    amount_owed REAL,
+    author_id INT NOT NULL,
     budget_category_id INT,
     description VARCHAR(255),
-    transaction_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    transaction_date TIMESTAMP WITH TIME ZONE,
     transaction_id VARCHAR(255) UNIQUE, -- hash
-    transaction_type INT, -- 1=personal, 2=household
-    notes TEXT,
-
-    -- for household
-    owed_by INT,
     household_id INT,
-    is_paid BOOLEAN,
-    payment_date TIMESTAMP WITH TIME ZONE,
-
+    notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (paid_by) REFERENCES users(id),
-    FOREIGN KEY (owed_by) REFERENCES users(id),
+    FOREIGN KEY (author_id) REFERENCES users(id),
     FOREIGN KEY (budget_category_id) REFERENCES budget_category(id),
     FOREIGN KEY (household_id) REFERENCES household(id)
 );

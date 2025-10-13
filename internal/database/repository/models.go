@@ -62,18 +62,13 @@ type LlmSession struct {
 type Transaction struct {
 	ID               int32              `json:"id"`
 	Amount           float32            `json:"amount"`
-	PaidBy           int32              `json:"paidBy"`
-	AmountOwed       *float32           `json:"amountOwed"`
+	AuthorID         int32              `json:"authorId"`
 	BudgetCategoryID *int32             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
 	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
 	TransactionID    *string            `json:"transactionId"`
-	TransactionType  *int32             `json:"transactionType"`
-	Notes            *string            `json:"notes"`
-	OwedBy           *int32             `json:"owedBy"`
 	HouseholdID      *int32             `json:"householdId"`
-	IsPaid           *bool              `json:"isPaid"`
-	PaymentDate      pgtype.Timestamptz `json:"paymentDate"`
+	Notes            *string            `json:"notes"`
 	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
 }

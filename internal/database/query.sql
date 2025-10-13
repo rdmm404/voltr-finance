@@ -11,19 +11,16 @@ WHERE transaction_type=2 AND household_id = $1;
 INSERT INTO transaction
 (
     amount,
-    is_paid,
-    amount_owed,
     budget_category_id,
     description,
     transaction_date,
     transaction_id,
-    transaction_type,
-    paid_by,
+    author_id,
     household_id,
     notes
 )
 VALUES
-($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: UpdateTransactionById :one
@@ -34,9 +31,9 @@ SET
         WHEN sqlc.arg(set_amount)::bool THEN sqlc.arg(amount)::real
         ELSE amount
     END,
-    paid_by = CASE
-        WHEN sqlc.arg(set_paid_by)::bool THEN sqlc.arg(paid_by)::int
-        ELSE paid_by
+    author_id = CASE
+        WHEN sqlc.arg(set_author_id)::bool THEN sqlc.arg(author_id)::int
+        ELSE author_id
     END,
     budget_category_id = CASE
         WHEN sqlc.arg(set_budget_category_id)::bool THEN sqlc.narg(budget_category_id)::int
@@ -54,10 +51,6 @@ SET
         WHEN sqlc.arg(set_transaction_id)::bool THEN sqlc.narg(transaction_id)::text
         ELSE transaction_id
     END,
-    transaction_type = CASE
-        WHEN sqlc.arg(set_transaction_type)::bool THEN sqlc.narg(transaction_type)::text
-        ELSE transaction_type
-    END,
     notes = CASE
         WHEN sqlc.arg(set_notes)::bool THEN sqlc.narg(notes)::text
         ELSE notes
@@ -65,22 +58,6 @@ SET
     household_id = CASE
         WHEN sqlc.arg(set_household_id)::bool THEN sqlc.narg(household_id)::int
         ELSE household_id
-    END,
-    owed_by = CASE
-        WHEN sqlc.arg(set_owed_by)::bool THEN sqlc.narg(owed_by)::int
-        ELSE owed_by
-    END,
-    amount_owed = CASE
-        WHEN sqlc.arg(set_amount_owed)::bool THEN sqlc.narg(amount_owed)::real
-        ELSE amount_owed
-    END,
-    is_paid = CASE
-        WHEN sqlc.arg(set_is_paid)::bool THEN sqlc.narg(is_paid)::bool
-        ELSE is_paid
-    END,
-    payment_date = CASE
-        WHEN sqlc.arg(set_payment_date)::bool THEN sqlc.narg(payment_date)::timestamp
-        ELSE payment_date
     END
 WHERE
     id = ANY(sqlc.arg(ids)::int[]) RETURNING *;

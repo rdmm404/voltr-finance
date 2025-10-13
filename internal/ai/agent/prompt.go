@@ -52,7 +52,7 @@ func systemPrompt(defaultPercentage float32) (string, error) {
 
 	return fmt.Sprintf(
 		systemPromptTemplate,
-		now.Format("Monday, August 02, 2006"),
+		now.Format("Monday, Jan 02, 2006"),
 	), nil
 }
 

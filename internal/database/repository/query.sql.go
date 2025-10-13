@@ -73,32 +73,26 @@ const createTransaction = `-- name: CreateTransaction :one
 INSERT INTO transaction
 (
     amount,
-    is_paid,
-    amount_owed,
     budget_category_id,
     description,
     transaction_date,
     transaction_id,
-    transaction_type,
-    paid_by,
+    author_id,
     household_id,
     notes
 )
 VALUES
-($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at
+($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
 `
 
 type CreateTransactionParams struct {
 	Amount           float32            `json:"amount"`
-	IsPaid           *bool              `json:"isPaid"`
-	AmountOwed       *float32           `json:"amountOwed"`
 	BudgetCategoryID *int32             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
 	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
 	TransactionID    *string            `json:"transactionId"`
-	TransactionType  *int32             `json:"transactionType"`
-	PaidBy           int32              `json:"paidBy"`
+	AuthorID         int32              `json:"authorId"`
 	HouseholdID      *int32             `json:"householdId"`
 	Notes            *string            `json:"notes"`
 }
@@ -107,14 +101,11 @@ type CreateTransactionParams struct {
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
 	row := q.db.QueryRow(ctx, createTransaction,
 		arg.Amount,
-		arg.IsPaid,
-		arg.AmountOwed,
 		arg.BudgetCategoryID,
 		arg.Description,
 		arg.TransactionDate,
 		arg.TransactionID,
-		arg.TransactionType,
-		arg.PaidBy,
+		arg.AuthorID,
 		arg.HouseholdID,
 		arg.Notes,
 	)
@@ -122,18 +113,13 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	err := row.Scan(
 		&i.ID,
 		&i.Amount,
-		&i.PaidBy,
-		&i.AmountOwed,
+		&i.AuthorID,
 		&i.BudgetCategoryID,
 		&i.Description,
 		&i.TransactionDate,
 		&i.TransactionID,
-		&i.TransactionType,
-		&i.Notes,
-		&i.OwedBy,
 		&i.HouseholdID,
-		&i.IsPaid,
-		&i.PaymentDate,
+		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -273,7 +259,7 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int3
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
 
-SELECT id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at FROM transaction
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
@@ -291,18 +277,13 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 		if err := rows.Scan(
 			&i.ID,
 			&i.Amount,
-			&i.PaidBy,
-			&i.AmountOwed,
+			&i.AuthorID,
 			&i.BudgetCategoryID,
 			&i.Description,
 			&i.TransactionDate,
 			&i.TransactionID,
-			&i.TransactionType,
-			&i.Notes,
-			&i.OwedBy,
 			&i.HouseholdID,
-			&i.IsPaid,
-			&i.PaymentDate,
+			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -324,9 +305,9 @@ SET
         WHEN $1::bool THEN $2::real
         ELSE amount
     END,
-    paid_by = CASE
+    author_id = CASE
         WHEN $3::bool THEN $4::int
-        ELSE paid_by
+        ELSE author_id
     END,
     budget_category_id = CASE
         WHEN $5::bool THEN $6::int
@@ -344,43 +325,23 @@ SET
         WHEN $11::bool THEN $12::text
         ELSE transaction_id
     END,
-    transaction_type = CASE
-        WHEN $13::bool THEN $14::text
-        ELSE transaction_type
-    END,
     notes = CASE
-        WHEN $15::bool THEN $16::text
+        WHEN $13::bool THEN $14::text
         ELSE notes
     END,
     household_id = CASE
-        WHEN $17::bool THEN $18::int
+        WHEN $15::bool THEN $16::int
         ELSE household_id
-    END,
-    owed_by = CASE
-        WHEN $19::bool THEN $20::int
-        ELSE owed_by
-    END,
-    amount_owed = CASE
-        WHEN $21::bool THEN $22::real
-        ELSE amount_owed
-    END,
-    is_paid = CASE
-        WHEN $23::bool THEN $24::bool
-        ELSE is_paid
-    END,
-    payment_date = CASE
-        WHEN $25::bool THEN $26::timestamp
-        ELSE payment_date
     END
 WHERE
-    id = ANY($27::int[]) RETURNING id, amount, paid_by, amount_owed, budget_category_id, description, transaction_date, transaction_id, transaction_type, notes, owed_by, household_id, is_paid, payment_date, created_at, updated_at
+    id = ANY($17::int[]) RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
 `
 
 type UpdateTransactionByIdParams struct {
 	SetAmount           bool             `json:"setAmount"`
 	Amount              float32          `json:"amount"`
-	SetPaidBy           bool             `json:"setPaidBy"`
-	PaidBy              int32            `json:"paidBy"`
+	SetAuthorID         bool             `json:"setAuthorId"`
+	AuthorID            int32            `json:"authorId"`
 	SetBudgetCategoryID bool             `json:"setBudgetCategoryId"`
 	BudgetCategoryID    *int32           `json:"budgetCategoryId"`
 	SetDescription      bool             `json:"setDescription"`
@@ -389,20 +350,10 @@ type UpdateTransactionByIdParams struct {
 	TransactionDate     pgtype.Timestamp `json:"transactionDate"`
 	SetTransactionID    bool             `json:"setTransactionId"`
 	TransactionID       *string          `json:"transactionId"`
-	SetTransactionType  bool             `json:"setTransactionType"`
-	TransactionType     *string          `json:"transactionType"`
 	SetNotes            bool             `json:"setNotes"`
 	Notes               *string          `json:"notes"`
 	SetHouseholdID      bool             `json:"setHouseholdId"`
 	HouseholdID         *int32           `json:"householdId"`
-	SetOwedBy           bool             `json:"setOwedBy"`
-	OwedBy              *int32           `json:"owedBy"`
-	SetAmountOwed       bool             `json:"setAmountOwed"`
-	AmountOwed          *float32         `json:"amountOwed"`
-	SetIsPaid           bool             `json:"setIsPaid"`
-	IsPaid              *bool            `json:"isPaid"`
-	SetPaymentDate      bool             `json:"setPaymentDate"`
-	PaymentDate         pgtype.Timestamp `json:"paymentDate"`
 	Ids                 []int32          `json:"ids"`
 }
 
@@ -410,8 +361,8 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 	row := q.db.QueryRow(ctx, updateTransactionById,
 		arg.SetAmount,
 		arg.Amount,
-		arg.SetPaidBy,
-		arg.PaidBy,
+		arg.SetAuthorID,
+		arg.AuthorID,
 		arg.SetBudgetCategoryID,
 		arg.BudgetCategoryID,
 		arg.SetDescription,
@@ -420,38 +371,23 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		arg.TransactionDate,
 		arg.SetTransactionID,
 		arg.TransactionID,
-		arg.SetTransactionType,
-		arg.TransactionType,
 		arg.SetNotes,
 		arg.Notes,
 		arg.SetHouseholdID,
 		arg.HouseholdID,
-		arg.SetOwedBy,
-		arg.OwedBy,
-		arg.SetAmountOwed,
-		arg.AmountOwed,
-		arg.SetIsPaid,
-		arg.IsPaid,
-		arg.SetPaymentDate,
-		arg.PaymentDate,
 		arg.Ids,
 	)
 	var i Transaction
 	err := row.Scan(
 		&i.ID,
 		&i.Amount,
-		&i.PaidBy,
-		&i.AmountOwed,
+		&i.AuthorID,
 		&i.BudgetCategoryID,
 		&i.Description,
 		&i.TransactionDate,
 		&i.TransactionID,
-		&i.TransactionType,
-		&i.Notes,
-		&i.OwedBy,
 		&i.HouseholdID,
-		&i.IsPaid,
-		&i.PaymentDate,
+		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -34,6 +34,7 @@
 - [ ] tools to get transactions using natural language
 - [ ] improve system prompt
 - [ ] csv report of transactions by date range
+- [ ] INVESTIGATE: extract timestamp from picture metadata
 
 - [ ] improve discord interactions
 
