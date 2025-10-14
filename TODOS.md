@@ -17,8 +17,9 @@
 
 - [x] db structure review
 
-- [ ] hash per transaction
-
+- [x] hash per transaction
+  - [ ] handle tool calls errors correctly (see TODO)
+  - [ ] handle sql duplicate error gracefully
 - [ ] improve transaction create + update logic
 
   - [x] return created transaction ids from db
@@ -49,6 +50,11 @@
   - [ ] Deploy to server
   - [ ] Set up CI/CD
   - [ ] maybe use docker swarm / k8s
+
+- [ ] Improve logging and monitoring
+
+  - [ ] Use structured logging https://go.dev/blog/slog
+  - [ ] Set up Grafana + Prometheus + Loki
 
 - [ ] Keep track of token usage per db message
 - [ ] add session summary (like what chat apps do)

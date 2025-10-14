@@ -141,6 +141,7 @@ func (a *chatAgent) chatFlow() chatFlow {
 				}
 
 				output, err := tool.RunRaw(ctx, req.Input)
+				// TODO instead of returnig error, pass to agent
 				if err != nil {
 					return "", fmt.Errorf("tool %q execution failed: %v", tool.Name(), err)
 				}

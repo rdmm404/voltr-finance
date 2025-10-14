@@ -13,6 +13,10 @@ type TransactionService struct {
 	repository *database.Queries
 }
 
+func NewTransactionService(db *pgx.Conn, repository *database.Queries) *TransactionService {
+	return &TransactionService{db: db, repository: repository}
+}
+
 func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []database.CreateTransactionParams) (map[int32]*database.Transaction, error) {
 	tx, err := ts.db.Begin(ctx)
 
@@ -27,6 +31,26 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 	createdTransactions := make(map[int32]*database.Transaction, len(transactions))
 
 	for _, trans := range transactions {
+		hashParams := transactionHashParams{
+			AuthorId:        trans.AuthorID,
+			Amount:          trans.Amount,
+			TransactionDate: trans.TransactionDate.Time,
+		}
+
+		if trans.Description != nil {
+			hashParams.Description = *trans.Description
+		}
+
+		if trans.HouseholdID != nil {
+			hashParams.HouseholdId = *trans.HouseholdID
+		}
+		transHash, err := generateTransactionHash(hashParams)
+
+		if err != nil {
+			return nil, fmt.Errorf("error creating transaction hash %w", err)
+		}
+		trans.TransactionID = &transHash
+
 		createdTrans, err := ts.repository.CreateTransaction(ctx, trans)
 
 		if err != nil {
@@ -42,8 +66,4 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 	}
 
 	return createdTransactions, nil
-}
-
-func NewTransactionService(db *pgx.Conn, repository *database.Queries) *TransactionService {
-	return &TransactionService{db: db, repository: repository}
 }
