@@ -25,8 +25,7 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 	}
 	defer tx.Rollback(ctx)
 
-	// TODO fix this
-	ts.repository.WithTx(tx)
+	txRepo := ts.repository.WithTx(tx)
 
 	createdTransactions := make(map[int32]*database.Transaction, len(transactions))
 
@@ -51,7 +50,7 @@ func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions
 		}
 		trans.TransactionID = &transHash
 
-		createdTrans, err := ts.repository.CreateTransaction(ctx, trans)
+		createdTrans, err := txRepo.CreateTransaction(ctx, trans)
 
 		if err != nil {
 			return nil, fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)

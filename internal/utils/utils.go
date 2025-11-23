@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -33,6 +34,6 @@ func DownloadFileBytes(url string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read response contents %w", err)
 	}
 
-	fmt.Printf("Downloaded %d bytes\n", len(out))
+	slog.Info("Downloaded file", "bytes", len(out))
 	return out, nil
 }

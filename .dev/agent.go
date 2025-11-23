@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"rdmm404/voltr-finance/internal/ai/agent"
@@ -21,13 +21,16 @@ import (
 func main() {
 	defer func() {
         if r := recover(); r != nil {
-            log.Printf("recovered from panic: %v\n%s", r, debug.Stack())
-			log.Println("Process still running. Press Ctrl+C to exit.")
+            slog.Error("recovered from panic", "panic", r, "stack", string(debug.Stack()))
+			slog.Info("Process still running. Press Ctrl+C to exit.")
         }
     }()
 
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Failed to load .env file %v", err)
+		slog.Error("Failed to load .env file", "error", err)
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -44,10 +47,11 @@ func main() {
 	a, err := agent.NewChatAgent(ctx, tp)
 
 	if err != nil {
-		log.Fatalf("Failed to initialize agent %v", err)
+		slog.Error("Failed to initialize agent", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Running. Press Ctrl+C to exit…")
+	slog.Info("Running. Press Ctrl+C to exit…")
 
 	// agent.SendMessage(ctx, gagent.NewUserTextMessage("What tools do you have available?"))
 	res, _ := repository.GetUserDetailsByDiscordId(ctx, utils.StringPtr("263106741711929351"))
@@ -76,21 +80,22 @@ func main() {
 
 	for update := range ch {
 		if update == nil {
-			log.Println("CRITICAL: nil model update received")
+			slog.Error("CRITICAL: nil model update received")
 		}
 
-		log.Println("**** BEGIN UPDATE ****")
+		slog.Debug("**** BEGIN UPDATE ****")
 		jsonUpdate, _ := json.Marshal(update)
 		fmt.Println(string(jsonUpdate))
-		log.Println("**** END UPDATE ****")
+		slog.Debug("**** END UPDATE ****")
 	}
 
 
 	if err != nil {
-		log.Fatalf("Error while sending message to agent - %v", err)
+		slog.Error("Error while sending message to agent", "error", err)
+		os.Exit(1)
 	}
 
 	<-ctx.Done()
-	log.Println("Signal received, exiting.")
+	slog.Info("Signal received, exiting.")
 	stop()
 }

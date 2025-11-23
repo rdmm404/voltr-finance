@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 	"rdmm404/voltr-finance/internal/ai/agent"
 	"rdmm404/voltr-finance/internal/ai/tool"
 	"rdmm404/voltr-finance/internal/bot"
+	"rdmm404/voltr-finance/internal/config"
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"rdmm404/voltr-finance/internal/transaction"
 )
 
 func main() {
+	slog.SetLogLoggerLevel(config.LOG_LEVEL.ToSlog())
 	ctx := context.Background()
 
 	db := database.Init()
@@ -25,22 +28,26 @@ func main() {
 	sm, err := agent.NewSessionManager(db, repository)
 
 	if err != nil {
-		log.Fatalf("Failed to initialize session manager %v", err)
+		slog.Error("Failed to initialize session manager", "error", err)
+		os.Exit(1)
 	}
 
 	a, err := agent.NewChatAgent(ctx, tp, sm)
 
 	if err != nil {
-		log.Fatalf("Failed to initialize agent %v", err)
+		slog.Error("Failed to initialize agent", "error", err)
+		os.Exit(1)
 	}
 
 	bot, err := bot.NewBot(a, repository)
 	if err != nil {
-		log.Panicf("Error creating bot %v", err)
+		slog.Error("Error creating bot", "error", err)
+		panic(err)
 	}
 
 	err = bot.Run()
 	if err != nil {
-		log.Panicf("Error running bot %v", err)
+		slog.Error("Error running bot", "error", err)
+		panic(err)
 	}
 }

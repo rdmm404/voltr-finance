@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"rdmm404/voltr-finance/internal/ai/tool"
 	"strings"
 
@@ -207,7 +207,7 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 		a.flows.chat.Stream(ctx, input)(
 			func(resp *core.StreamingFlowValue[string, *AgentUpdate], err error) bool {
 				if err != nil {
-					log.Printf("Error while streaming response %v\n", err)
+					slog.Error("Error while streaming response", "error", err)
 					ch <- &AgentUpdate{Err: err}
 					return false
 				}
@@ -244,9 +244,9 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 // TODO: track in db
 func (a *chatAgent) trackUsage(resp *gai.ModelResponse) {
 	if resp == nil || resp.Usage == nil {
-		fmt.Println("nil")
+		slog.Debug("Usage tracking: nil response or usage data")
 		return
 	}
 
-	fmt.Printf("\nCurrent usage stats: %+v\n", *resp.Usage)
+	slog.Info("Current usage stats", "usage", *resp.Usage)
 }

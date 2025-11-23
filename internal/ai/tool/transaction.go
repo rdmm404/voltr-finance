@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	database "rdmm404/voltr-finance/internal/database/repository"
 	"strings"
 
@@ -72,11 +73,11 @@ func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransact
 	if err != nil {
 		return "", fmt.Errorf("unknown error while saving transactions - %w", err)
 	}
-	// consider formatting transactions to MD instead
+	// consider formatting transactions to MD inste	ad
 	// TODO: look into returning transaction structs directly instead of formatting
 	formattedTrans, err := formatTransactionsForLLM(createdTrans)
 	if err != nil {
-		fmt.Printf("SaveTransactionsTool: Error received when formatting transactions - %v", err)
+		slog.Error("SaveTransactionsTool: Error received when formatting transactions", "error", err)
 		return "", fmt.Errorf("unknown error while reading created transactions. insert was successful %w", err)
 	}
 

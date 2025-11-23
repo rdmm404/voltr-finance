@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 )
@@ -12,7 +12,7 @@ func GetEnvBool(key string, defaultValue bool) bool {
 		if err == nil {
 			return b
 		}
-		fmt.Printf("Warning: Environment variable %s='%s' cannot be parsed as bool. Using default %t.\n", key, value, defaultValue)
+		slog.Warn("Environment variable cannot be parsed as bool, using default", "key", key, "value", value, "default", defaultValue)
 	}
 	return defaultValue
 }

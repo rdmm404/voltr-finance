@@ -20,8 +20,8 @@
 - [x] hash per transaction
   - [ ] handle tool calls errors correctly (see TODO)
   - [ ] handle sql duplicate error gracefully
-- [ ] improve transaction create + update logic
 
+- [ ] improve transaction create + update logic
   - [x] return created transaction ids from db
   - [x] refactor mapstructure logic with hooks and WeaklyTyped parameter
   - [ ] add update transactions tool (or rewrite create to be upsert)

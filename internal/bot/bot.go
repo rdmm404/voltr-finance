@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"rdmm404/voltr-finance/internal/ai/agent"
@@ -55,7 +55,7 @@ func NewBot(a agent.ChatAgent, repository *database.Queries) (*Bot, error) {
 	}
 
 	jsonCommands, _ := json.Marshal(createdCommands)
-	fmt.Printf("created commands %s\n", jsonCommands)
+	slog.Info("created commands", "commands", string(jsonCommands))
 
 	bot := &Bot{
 		session:    dg,
@@ -89,7 +89,7 @@ func (b *Bot) Run() error {
 	}
 
 	// TODO handle interrupts in main instead of here
-	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
+	slog.Info("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
@@ -105,14 +105,14 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		return
 	}
 
-	fmt.Printf("message received %v\n", string(msgJson))
+	slog.Debug("message received", "message", string(msgJson))
 
 	s.ChannelTyping(m.ChannelID)
 
 	senderInfo, err := b.getSenderInfoFromMessage(ctx, m)
 
 	if err != nil {
-		fmt.Printf("Bot: Error while getting sender info %v", err)
+		slog.Error("Bot: Error while getting sender info", "error", err)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	ch, err := b.agent.Run(ctx, aiMsg, agent.StreamingModeMessages)
 
 	if err != nil {
-		log.Printf("Bot: Error received from agent %v", err)
+		slog.Error("Bot: Error received from agent", "error", err)
 		return
 	}
 
@@ -133,10 +133,10 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		s.ChannelTyping(m.ChannelID)
 
 		updateJson, err := json.Marshal(update)
-		fmt.Printf("update received: %s\n", updateJson)
+		slog.Debug("update received", "update", string(updateJson))
 
 		if update.Err != nil {
-			fmt.Printf("error %v\n", update.Err)
+			slog.Error("update error", "error", update.Err)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Something went wrong :( - %v", update.Err))
 			continue
 			// TODO: Send debug trace as spoiler or something that makes it hidden
@@ -153,7 +153,7 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 		}
 
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("error sending message", "error", err)
 		}
 	}
 }
@@ -212,7 +212,7 @@ func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Se
 func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	ctx := context.Background()
 	jsonEvent, _ := json.MarshalIndent(i, "", "  ")
-	fmt.Printf("Interaction event received: %s", jsonEvent)
+	slog.Debug("Interaction event received", "event", string(jsonEvent))
 
 	if i.Type != discordgo.InteractionApplicationCommand {
 		return
@@ -239,7 +239,7 @@ func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.Intera
 		user, err := b.repository.GetUserByDiscordId(ctx, discordUser.ID)
 
 		if err != nil {
-			log.Printf("Bot: error getting user details %v", err)
+			slog.Error("Bot: error getting user details", "error", err)
 			s.InteractionResponseEdit(
 				i.Interaction,
 				&discordgo.WebhookEdit{Content: utils.StringPtr("Something went wrong while creating session :(")},
@@ -250,7 +250,7 @@ func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.Intera
 		params := database.CreateLlmSessionParams{UserID: user.ID, SourceID: i.ChannelID}
 
 		if _, err = b.repository.CreateLlmSession(ctx, params); err != nil {
-			log.Printf("Bot: error creating new session %v", err)
+			slog.Error("Bot: error creating new session", "error", err)
 			s.InteractionResponseEdit(
 				i.Interaction,
 				&discordgo.WebhookEdit{Content: utils.StringPtr("Something went wrong while creating session :(")},
@@ -264,6 +264,6 @@ func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.Intera
 		)
 
 	default:
-		fmt.Printf("Unrecognized command received %s, ignoring", data.Name)
+		slog.Debug("Unrecognized command received", "command", data.Name)
 	}
 }

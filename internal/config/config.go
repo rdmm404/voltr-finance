@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/joho/godotenv"
 )
@@ -15,11 +15,12 @@ var (
 	DB_NAME        string
 	DB_HOST        string
 	DB_PORT        string
+	LOG_LEVEL LogLevel
 )
 
 func init() {
 	if err := godotenv.Load(); err != nil {
-		log.Printf("Failed to load .env file %v. Using environment variables instead", err)
+		slog.Warn("Failed to load .env file. Using environment variables instead", "error", err)
 	}
 	// general
 	DEBUG = GetEnvBool("DEBUG", true)
@@ -27,6 +28,13 @@ func init() {
 	//discord
 	DISCORD_TOKEN = GetEnvString("DISCORD_TOKEN", "")
 	DISCORD_APP_ID = GetEnvString("DISCORD_APP_ID", "")
+
+	logLevel := LogLevel(GetEnvString("LOG_LEVEL", "INFO"))
+	LOG_LEVEL = logLevel
+	if !logLevel.Valid() {
+		slog.Warn("Invalid log level received, defaulting to INFO", "log_level", logLevel)
+		LOG_LEVEL = LogLevelInfo
+	}
 
 	// database
 	DB_USER = GetEnvString("DB_USER", "")
