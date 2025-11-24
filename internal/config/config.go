@@ -7,15 +7,16 @@ import (
 )
 
 var (
-	DEBUG          bool
-	DISCORD_TOKEN  string
-	DISCORD_APP_ID string
-	DB_USER        string
-	DB_PASSWORD    string
-	DB_NAME        string
-	DB_HOST        string
-	DB_PORT        string
-	LOG_LEVEL LogLevel
+	DEBUG                      bool
+	DISCORD_TOKEN              string
+	DISCORD_APP_ID             string
+	DISCORD_MAX_MESSAGE_LENGTH int
+	DB_USER                    string
+	DB_PASSWORD                string
+	DB_NAME                    string
+	DB_HOST                    string
+	DB_PORT                    string
+	LOG_LEVEL                  LogLevel
 )
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 	//discord
 	DISCORD_TOKEN = GetEnvString("DISCORD_TOKEN", "")
 	DISCORD_APP_ID = GetEnvString("DISCORD_APP_ID", "")
+	DISCORD_MAX_MESSAGE_LENGTH = GetEnvInt("DISCORD_MAX_MESSAGE_LENGTH", 2000)
 
 	logLevel := LogLevel(GetEnvString("LOG_LEVEL", "INFO"))
 	LOG_LEVEL = logLevel

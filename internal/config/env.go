@@ -23,3 +23,14 @@ func GetEnvString(key string, defaultValue string) string {
 	}
 	return defaultValue
 }
+
+func GetEnvInt(key string, defaultValue int) int {
+	if value, ok := os.LookupEnv(key); ok {
+		i, err := strconv.Atoi(value)
+		if err == nil {
+			return i
+		}
+		slog.Warn("Environment variable cannot be parsed as int, using default", "key", key, "value", value, "default", defaultValue)
+	}
+	return defaultValue
+}

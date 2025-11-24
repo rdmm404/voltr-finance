@@ -16,16 +16,15 @@ type Tool interface {
 }
 
 type ToolProvider struct {
-	allTools      []ai.Tool
-	deps *ToolDependencies
+	allTools []ai.Tool
+	deps     *ToolDependencies
 }
 
 type ToolDependencies struct {
 	Ts *transaction.TransactionService
 }
 
-
-var toolFactories = []func(deps *ToolDependencies) (Tool, error) {
+var toolFactories = []func(deps *ToolDependencies) (Tool, error){
 	NewSaveTransactionsTool,
 }
 
@@ -63,9 +62,9 @@ func DefineTool[I any, O any](
 		tool.Name(),
 		tool.Description(),
 		func(ctx *ai.ToolContext, input I) (O, error) {
-			slog.Debug(fmt.Sprintf("Calling tool %s with input %+v", tool.Name(), input))
+			slog.Debug("Tool called", "name", tool.Name(), "input", input)
 			res, err := handler(ctx, input)
-			slog.Debug(fmt.Sprintf("Response from tool %s received %+v", tool.Name(), res))
+			slog.Debug("Tool response reeived", "tool", tool.Name(), "response", res)
 			if err != nil {
 				return res, err
 			}

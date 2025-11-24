@@ -185,7 +185,7 @@ func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.Message
 
 func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Session, m *discordgo.MessageCreate) error {
 	remainder := []rune(msg)
-	chunkSize := MAX_MESSAGE_LENGTH
+	chunkSize := config.DISCORD_MAX_MESSAGE_LENGTH
 	if chunkSizePtr != nil {
 		chunkSize = *chunkSizePtr
 	}
