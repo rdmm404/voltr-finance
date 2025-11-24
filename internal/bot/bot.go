@@ -49,13 +49,13 @@ func NewBot(a agent.ChatAgent, repository *sqlc.Queries) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating discord session - %w", err)
 	}
-	createdCommands, err := dg.ApplicationCommandBulkOverwrite(config.DISCORD_APP_ID, "", commands)
-	if err != nil {
-		return nil, fmt.Errorf("error creating application commands %w", err)
-	}
+	// createdCommands, err := dg.ApplicationCommandBulkOverwrite(config.DISCORD_APP_ID, "", commands)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error creating application commands %w", err)
+	// }
 
-	jsonCommands, _ := json.Marshal(createdCommands)
-	slog.Info("created commands", "commands", string(jsonCommands))
+	// jsonCommands, _ := json.Marshal(createdCommands)
+	// slog.Info("created commands", "commands", string(jsonCommands))
 
 	bot := &Bot{
 		session:    dg,

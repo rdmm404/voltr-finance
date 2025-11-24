@@ -135,25 +135,25 @@ func (a *chatAgent) chatFlow() chatFlow {
 
 			a.trackUsage(resp)
 
-			modelMsg := gai.NewModelTextMessage(resp.Message.Text())
-			for _, part := range resp.Message.Content {
-				if part.Kind == gai.PartToolRequest {
-					modelMsg.Content = append(modelMsg.Content, part)
+			for i := len(msgHistory) + 1; i < len(resp.Request.Messages); i++ {
+				msg := resp.Request.Messages[i]
+				if msg.Role == "" {
+					msg.Role = gai.RoleModel
+				}
+				switch msg.Role {
+				case gai.RoleModel, gai.RoleTool:
+					_, err = session.StoreMessage(ctx, msg, userID, nil)
+					if err != nil {
+						return "", errors.Join(ErrMessagePersistance, err)
+					}
+				default:
+					slog.Warn("unexpected role received", "role", msg.Role)
 				}
 			}
 
-			_, err = session.StoreMessage(ctx, modelMsg, userID, nil)
+			// the model's message has an empty Role
+			_, err = session.StoreMessage(ctx, gai.NewModelTextMessage(resp.Message.Text()), userID, nil)
 			if err != nil {
-				return "", errors.Join(ErrMessagePersistance, err)
-			}
-
-			if len(resp.ToolRequests()) == 0 {
-				return resp.Text(), nil
-			}
-
-			a.trackUsage(resp)
-
-			if _, err := session.StoreMessage(ctx, gai.NewModelTextMessage(resp.Text()), userID, nil); err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
