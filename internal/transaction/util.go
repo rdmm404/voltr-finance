@@ -1,50 +1,53 @@
 package transaction
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"time"
+
+	"github.com/cespare/xxhash"
+	"github.com/jxskiss/base62"
 )
 
-type transactionHashParams struct {
-	Description     string    `json:",omitempty"`
-	TransactionDate time.Time `json:",omitempty"`
-	AuthorId        int32     `json:",omitempty"`
-	HouseholdId     int32     `json:",omitempty"`
-	Amount          float32   `json:",omitempty"`
-}
-
-func generateTransactionHash(params transactionHashParams) (string, error) {
-	if params.AuthorId == 0 && params.HouseholdId == 0 {
+func generateTransactionHash(
+	description string,
+	transactionDate time.Time,
+	authorId, householdId int32,
+	amount float32,
+) (string, error) {
+	if authorId == 0 && householdId == 0 {
 		return "", fmt.Errorf("either authorId or householdId must be set")
 	}
 
-	jsonHash, err := json.Marshal(params)
-	if err != nil {
-		return "", fmt.Errorf("error marshalling json %w", err)
-	}
+	h := xxhash.New()
 
-	hash := sha256.Sum256(jsonHash)
-	return hex.EncodeToString(hash[:]), nil
+	fmt.Fprintf(h, "%s|%d|%d|%d|%.2f",
+		description,
+		transactionDate.Unix(),
+		authorId,
+		householdId,
+		amount,
+	)
+
+	return base62.EncodeToString(h.Sum(nil)), nil
 }
 
 func generateHashForTransactionCreate(transaction sqlc.CreateTransactionParams) (string, error) {
-	hashParams := transactionHashParams{
-		AuthorId:        transaction.AuthorID,
-		Amount:          transaction.Amount,
-		TransactionDate: transaction.TransactionDate.Time,
-	}
-
+	var description string
 	if transaction.Description != nil {
-		hashParams.Description = *transaction.Description
+		description = *transaction.Description
 	}
 
+	var householdId int32
 	if transaction.HouseholdID != nil {
-		hashParams.HouseholdId = *transaction.HouseholdID
+		householdId = *transaction.HouseholdID
 	}
 
-	return generateTransactionHash(hashParams)
+	return generateTransactionHash(
+		description,
+		transaction.TransactionDate.Time,
+		transaction.AuthorID,
+		householdId,
+		transaction.Amount,
+	)
 }
