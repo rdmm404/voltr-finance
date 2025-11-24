@@ -97,6 +97,11 @@ func (a *chatAgent) chatFlow() chatFlow {
 					msgHistory...,
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
+					if chunk == nil {
+						slog.Warn("ChatAgent: nil chunk received from LLM")
+						return nil
+					}
+
 					if chunk.Text() == "" {
 						return nil
 					}

@@ -4,17 +4,17 @@ ALTER DATABASE voltr_finance SET search_path TO transactions;
 CREATE SCHEMA transactions;
 
 CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    discord_id VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    discord_id VARCHAR UNIQUE NOT NULL,
+    name VARCHAR NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- TODO add discord server id to link server to household
 CREATE TABLE household (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR NOT NULL UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -31,7 +31,7 @@ CREATE TABLE household_user (
 );
 
 CREATE TABLE budget (
-    id SERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT,
     household_id INT,
     type VARCHAR(50) NOT NULL,
@@ -42,9 +42,9 @@ CREATE TABLE budget (
 );
 
 CREATE TABLE budget_category (
-    id SERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     budget_id INT,
-    category_name VARCHAR(255) NOT NULL,
+    category_name VARCHAR NOT NULL,
     allocation REAL NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -52,13 +52,13 @@ CREATE TABLE budget_category (
 );
 
 CREATE TABLE transaction (
-    id SERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     amount REAL NOT NULL,
     author_id INT NOT NULL,
     budget_category_id INT,
-    description VARCHAR(255),
-    transaction_date TIMESTAMP WITH TIME ZONE,
-    transaction_id VARCHAR(255) UNIQUE NOT NULL, -- hash
+    description VARCHAR,
+    transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    transaction_id VARCHAR UNIQUE NOT NULL, -- hash
     household_id INT,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -71,19 +71,19 @@ CREATE TABLE transaction (
 -- LLM messages
 -- TODO track token usage
 CREATE TABLE llm_session (
-    id SERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT NOT NULL,
-    source_id VARCHAR(255) NOT NULL, -- discord channel id, NULL if dm
+    source_id VARCHAR NOT NULL, -- discord channel id, NULL if dm
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE llm_message (
-    id SERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     session_id INT NOT NULL,
     parent_id INT,
-    role VARCHAR(255) NOT NULL,
+    role VARCHAR NOT NULL,
     contents JSONB NOT NULL,
     user_id INT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
