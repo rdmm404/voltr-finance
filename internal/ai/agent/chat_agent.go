@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"rdmm404/voltr-finance/internal/ai/tool"
+	"rdmm404/voltr-finance/internal/utils"
 	"strings"
 
 	gai "github.com/firebase/genkit/go/ai"
@@ -91,25 +92,41 @@ func (a *chatAgent) chatFlow() chatFlow {
 				ctx,
 				a.g,
 				gai.WithTools(a.tp.GetAvailableTools()...),
-				gai.WithReturnToolRequests(true),
 				gai.WithSystem(systemPrompt(43)),
 				gai.WithMessages(
 					msgHistory...,
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
+					slog.Info(fmt.Sprintf("chunk received: %s", utils.JsonMarshalIgnore(chunk)))
+
 					if chunk == nil {
 						slog.Warn("ChatAgent: nil chunk received from LLM")
 						return nil
 					}
 
-					if chunk.Text() == "" {
-						return nil
+					update := AgentUpdate{}
+					for _, part := range chunk.Content {
+						if part == nil {
+							slog.Warn("ChatAgent: nil part received in chunk")
+							continue
+						}
+
+						switch part.Kind {
+						case gai.PartText:
+							update.Text = part.Text
+						case gai.PartToolRequest:
+							update.ToolCall = &ToolCallUpdate{Name: part.ToolRequest.Name, Args: part.ToolRequest.Input}
+						case gai.PartToolResponse:
+							update.ToolResponse = &ToolResponseUpdate{Name: part.ToolResponse.Name, Response: part.ToolResponse.Output}
+						}
 					}
-					if err := callback(ctx, &AgentUpdate{Text: chunk.Text()}); err != nil {
+
+					if err := callback(ctx, &update); err != nil {
 						return fmt.Errorf("error in streaming callback - %w", err)
 					}
 					return nil
 				}),
+				gai.WithMaxTurns(3),
 			)
 
 			if err != nil {
@@ -125,7 +142,7 @@ func (a *chatAgent) chatFlow() chatFlow {
 				}
 			}
 
-			msgID, err := session.StoreMessage(ctx, modelMsg, userID, nil)
+			_, err = session.StoreMessage(ctx, modelMsg, userID, nil)
 			if err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
@@ -134,60 +151,7 @@ func (a *chatAgent) chatFlow() chatFlow {
 				return resp.Text(), nil
 			}
 
-			var parts []*gai.Part
-			for _, req := range resp.ToolRequests() {
-				if err := callback(ctx, &AgentUpdate{ToolCall: &ToolCallUpdate{Name: req.Name, Args: req.Input}}); err != nil {
-					return "", fmt.Errorf("error in streaming callback - %w", err)
-				}
-
-				tool := genkit.LookupTool(a.g, req.Name)
-				if tool == nil {
-					return "", fmt.Errorf("tool %q not found", req.Name)
-				}
-
-				output, err := tool.RunRaw(ctx, req.Input)
-				// TODO instead of returnig error, pass to agent
-				if err != nil {
-					return "", fmt.Errorf("tool %q execution failed: %v", tool.Name(), err)
-				}
-
-				// TODO figure out this update when streaming tool calls
-				if err := callback(ctx, &AgentUpdate{ToolResponse: &ToolResponseUpdate{Name: req.Name, Response: output}}); err != nil {
-					return "", fmt.Errorf("error in streaming callback - %w", err)
-				}
-
-				parts = append(parts,
-					gai.NewToolResponsePart(&gai.ToolResponse{
-						Name:   req.Name,
-						Ref:    req.Ref,
-						Output: output,
-					}))
-			}
-
-			toolRespMsg := gai.NewMessage(gai.RoleTool, nil, parts...)
-
-			if _, err = session.StoreMessage(ctx, toolRespMsg, userID, &msgID); err != nil {
-				return "", errors.Join(ErrMessagePersistance, err)
-			}
-
 			a.trackUsage(resp)
-
-			resp, err = genkit.Generate(ctx, a.g,
-				gai.WithMessages(append(resp.History(), toolRespMsg)...),
-				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
-					if chunk.Text() == "" {
-						return nil
-					}
-					if err := callback(ctx, &AgentUpdate{Text: chunk.Text()}); err != nil {
-						return fmt.Errorf("error in streaming callback - %w", err)
-					}
-					return nil
-				}),
-			)
-
-			if err != nil {
-				return "", fmt.Errorf("error while calling LLM %w", err)
-			}
 
 			if _, err := session.StoreMessage(ctx, gai.NewModelTextMessage(resp.Text()), userID, nil); err != nil {
 				return "", errors.Join(ErrMessagePersistance, err)

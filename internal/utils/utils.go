@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -45,4 +46,9 @@ func MapKeys[K comparable, V any](m map[K]V) []K {
 	}
 
 	return out
+}
+
+func JsonMarshalIgnore(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
