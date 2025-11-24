@@ -1,4 +1,3 @@
--- TODO: ADD INDEXES FOR QUERIED COLUMNS
 SET search_path = transactions;
 ALTER DATABASE voltr_finance SET search_path TO transactions;
 CREATE SCHEMA transactions;
@@ -10,6 +9,7 @@ CREATE TABLE users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_users_discord_id ON users(discord_id);
 
 -- TODO add discord server id to link server to household
 CREATE TABLE household (
@@ -29,6 +29,8 @@ CREATE TABLE household_user (
     FOREIGN KEY (household_id) REFERENCES household(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE INDEX idx_household_user_user_id ON household_user(user_id);
+CREATE INDEX idx_household_user_household_id ON household_user(household_id);
 
 CREATE TABLE budget (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -67,6 +69,10 @@ CREATE TABLE transaction (
     FOREIGN KEY (budget_category_id) REFERENCES budget_category(id),
     FOREIGN KEY (household_id) REFERENCES household(id)
 );
+CREATE INDEX idx_transaction_household_id ON transaction(household_id);
+CREATE INDEX idx_transaction_id_hash ON transaction(transaction_id);
+CREATE INDEX idx_transaction_author_id ON transaction(author_id);
+CREATE INDEX idx_transaction_budget_category_id ON transaction(budget_category_id);
 
 -- LLM messages
 -- TODO track token usage
@@ -78,6 +84,8 @@ CREATE TABLE llm_session (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE INDEX idx_llm_session_source_id ON llm_session(source_id);
+CREATE INDEX idx_llm_session_user_id ON llm_session(user_id);
 
 CREATE TABLE llm_message (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -92,3 +100,5 @@ CREATE TABLE llm_message (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (parent_id) REFERENCES llm_message(id)
 );
+CREATE INDEX idx_llm_message_session_id ON llm_message(session_id);
+CREATE INDEX idx_llm_message_created_at ON llm_message(created_at);
