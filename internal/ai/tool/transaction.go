@@ -1,11 +1,12 @@
 package tool
 
 import (
-	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
-	database "rdmm404/voltr-finance/internal/database/repository"
+	"rdmm404/voltr-finance/internal/database/sqlc"
+	"rdmm404/voltr-finance/internal/transaction"
+	"rdmm404/voltr-finance/internal/utils"
 	"strings"
 
 	"github.com/firebase/genkit/go/ai"
@@ -52,10 +53,10 @@ func (st *saveTransactionsTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.To
 }
 
 func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransactionsInput) (string, error) {
-	mappedTransactions := make([]database.CreateTransactionParams, 0)
+	mappedTransactions := make([]sqlc.CreateTransactionParams, 0)
 
 	for _, transaction := range input.Transactions {
-		mappedTransactions = append(mappedTransactions, database.CreateTransactionParams{
+		mappedTransactions = append(mappedTransactions, sqlc.CreateTransactionParams{
 			Amount:   transaction.Amount,
 			AuthorID: transaction.AuthorID,
 			TransactionDate: pgtype.Timestamptz{
@@ -68,20 +69,9 @@ func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransact
 		})
 	}
 
-	createdTrans, err := st.deps.Ts.SaveTransactions(context.TODO(), mappedTransactions)
+	result := st.deps.Ts.SaveTransactions(ctx, mappedTransactions)
 
-	if err != nil {
-		return "", fmt.Errorf("unknown error while saving transactions - %w", err)
-	}
-	// consider formatting transactions to MD inste	ad
-	// TODO: look into returning transaction structs directly instead of formatting
-	formattedTrans, err := formatTransactionsForLLM(createdTrans)
-	if err != nil {
-		slog.Error("SaveTransactionsTool: Error received when formatting transactions", "error", err)
-		return "", fmt.Errorf("unknown error while reading created transactions. insert was successful %w", err)
-	}
-
-	return "The following transactions were successfully stored:\n" + formattedTrans, nil
+	return formatResultsForLLM(result), nil
 
 }
 
@@ -106,25 +96,31 @@ func (ut UpdateTransactionsByIdTool) Create(g *genkit.Genkit, deps *ToolDependen
 	)
 }
 
-func formatTransactionsForLLM(transactions map[int32]*database.Transaction) (string, error) {
+func formatResultsForLLM(result transaction.SaveTransactionsResult) (string) {
 	var sb strings.Builder
-	sb.WriteString("[\n")
-	count := 0
-	for transId, trans := range transactions {
-		count++
 
-		transJson, err := json.MarshalIndent(trans, "  ", "  ")
+	if len(result.Created) > 0 {
+		sb.WriteString(fmt.Sprintf(
+			"%v transactions have been created successfully, with ids: %v\n",
+			len(result.Created),
+			strings.Join(utils.MapKeys(result.Created), ","),
+		))
+	}
 
-		if err != nil {
-			return "", fmt.Errorf("invalid JSON received for trans with id %v - %w", transId, err)
-		}
+	if len(result.Errors) > 0 {
+		slog.Error(fmt.Sprintf("SaveTransactionsTool: received errors %+v", result.Errors))
 
-		sb.WriteString(string(transJson))
-		if count != len(transactions) {
-			sb.WriteString(",\n")
+		sb.WriteString(fmt.Sprintf("%v transactions had errors:\n", len(result.Errors)))
+		for _, err := range result.Errors {
+			if errors.Is(err.Err, transaction.ErrTransactionValidation) {
+				sb.WriteString(fmt.Sprintf("- Transaction #%v: validation failed - %v\n", err.Index, err.Err))
+			} else if errors.Is(err.Err, transaction.ErrDuplicateTransaction) {
+				sb.WriteString(fmt.Sprintf("- Transaction #%v: already exists with id %s\n", err.Index, err.ID))
+			} else {
+				sb.WriteString(fmt.Sprintf("- Transaction #%v: %v\n", err.Index, err.Err))
+			}
 		}
 	}
-	sb.WriteString("]")
 
-	return sb.String(), nil
+	return sb.String()
 }

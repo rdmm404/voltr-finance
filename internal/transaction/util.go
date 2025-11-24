@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 	"time"
 )
 
@@ -28,4 +29,22 @@ func generateTransactionHash(params transactionHashParams) (string, error) {
 
 	hash := sha256.Sum256(jsonHash)
 	return hex.EncodeToString(hash[:]), nil
+}
+
+func generateHashForTransactionCreate(transaction sqlc.CreateTransactionParams) (string, error) {
+	hashParams := transactionHashParams{
+		AuthorId:        transaction.AuthorID,
+		Amount:          transaction.Amount,
+		TransactionDate: transaction.TransactionDate.Time,
+	}
+
+	if transaction.Description != nil {
+		hashParams.Description = *transaction.Description
+	}
+
+	if transaction.HouseholdID != nil {
+		hashParams.HouseholdId = *transaction.HouseholdID
+	}
+
+	return generateTransactionHash(hashParams)
 }

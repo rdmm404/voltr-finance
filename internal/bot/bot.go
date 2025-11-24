@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"rdmm404/voltr-finance/internal/ai/agent"
 	"rdmm404/voltr-finance/internal/config"
-	database "rdmm404/voltr-finance/internal/database/repository"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/utils"
 	"syscall"
 
@@ -22,7 +22,7 @@ var ErrInvalidBotConfig = errors.New("bot is not set up correctly")
 type Bot struct {
 	session    *discordgo.Session
 	agent      agent.ChatAgent
-	repository *database.Queries
+	repository *sqlc.Queries
 }
 
 var commands = []*discordgo.ApplicationCommand{
@@ -40,7 +40,7 @@ var commands = []*discordgo.ApplicationCommand{
 	},
 }
 
-func NewBot(a agent.ChatAgent, repository *database.Queries) (*Bot, error) {
+func NewBot(a agent.ChatAgent, repository *sqlc.Queries) (*Bot, error) {
 	if err := validateDiscordConfig(); err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.Intera
 			return
 		}
 
-		params := database.CreateLlmSessionParams{UserID: user.ID, SourceID: i.ChannelID}
+		params := sqlc.CreateLlmSessionParams{UserID: user.ID, SourceID: i.ChannelID}
 
 		if _, err = b.repository.CreateLlmSession(ctx, params); err != nil {
 			slog.Error("Bot: error creating new session", "error", err)

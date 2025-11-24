@@ -8,7 +8,8 @@ import (
 	"rdmm404/voltr-finance/internal/ai/tool"
 	"rdmm404/voltr-finance/internal/bot"
 	"rdmm404/voltr-finance/internal/config"
-	database "rdmm404/voltr-finance/internal/database/repository"
+	"rdmm404/voltr-finance/internal/database"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/transaction"
 )
 
@@ -19,7 +20,7 @@ func main() {
 	db := database.Init()
 	defer db.Close(ctx)
 
-	repository := database.New(db)
+	repository := sqlc.New(db)
 
 	ts := transaction.NewTransactionService(db, repository)
 

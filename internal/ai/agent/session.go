@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	database "rdmm404/voltr-finance/internal/database/repository"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 
 	gai "github.com/firebase/genkit/go/ai"
 	"github.com/jackc/pgx/v5"
@@ -14,10 +14,10 @@ import (
 
 type SessionManager struct {
 	db         *pgx.Conn
-	repository *database.Queries
+	repository *sqlc.Queries
 }
 
-func NewSessionManager(db *pgx.Conn, repository *database.Queries) (*SessionManager, error) {
+func NewSessionManager(db *pgx.Conn, repository *sqlc.Queries) (*SessionManager, error) {
 	if db == nil || repository == nil {
 		return nil, errors.New("db and repository must be set")
 	}
@@ -61,7 +61,7 @@ func (ms *SessionManager) GetOrCreateSession(ctx context.Context, sourceId strin
 
 	session, err = rtx.CreateLlmSession(
 		ctx,
-		database.CreateLlmSessionParams{UserID: userId, SourceID: sourceId},
+		sqlc.CreateLlmSessionParams{UserID: userId, SourceID: sourceId},
 	)
 
 	if err != nil {
@@ -77,8 +77,8 @@ func (ms *SessionManager) GetOrCreateSession(ctx context.Context, sourceId strin
 
 type Session struct {
 	db          *pgx.Conn
-	repository  *database.Queries
-	SessionData *database.LlmSession
+	repository  *sqlc.Queries
+	SessionData *sqlc.LlmSession
 }
 
 func (s *Session) StoreMessage(ctx context.Context, msg *gai.Message, userId int32, parentId *int32) (int32, error) {
@@ -91,7 +91,7 @@ func (s *Session) StoreMessage(ctx context.Context, msg *gai.Message, userId int
 		return 0, fmt.Errorf("message contents are not valid json %w", err)
 	}
 
-	return s.repository.CreateLlmMessage(ctx, database.CreateLlmMessageParams{
+	return s.repository.CreateLlmMessage(ctx, sqlc.CreateLlmMessageParams{
 		SessionID: s.SessionData.ID,
 		Role:      string(msg.Role),
 		Contents:  jsonContent,
@@ -125,7 +125,7 @@ func (s *Session) GetMessageHistory(ctx context.Context) ([]*gai.Message, error)
 	return messages, nil
 }
 
-func dbMessageToGenkit(msg *database.LlmMessage, user *database.User, household *database.Household) (*gai.Message, error) {
+func dbMessageToGenkit(msg *sqlc.LlmMessage, user *sqlc.User, household *sqlc.Household) (*gai.Message, error) {
 	content := []*gai.Part{}
 
 	if err := json.Unmarshal(msg.Contents, &content); err != nil {

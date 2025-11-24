@@ -2,6 +2,7 @@ package tool
 
 import (
 	"fmt"
+	"log/slog"
 	"rdmm404/voltr-finance/internal/transaction"
 
 	"github.com/firebase/genkit/go/ai"
@@ -62,7 +63,9 @@ func DefineTool[I any, O any](
 		tool.Name(),
 		tool.Description(),
 		func(ctx *ai.ToolContext, input I) (O, error) {
+			slog.Debug(fmt.Sprintf("Calling tool %s with input %+v", tool.Name(), input))
 			res, err := handler(ctx, input)
+			slog.Debug(fmt.Sprintf("Response from tool %s received %+v", tool.Name(), res))
 			if err != nil {
 				return res, err
 			}

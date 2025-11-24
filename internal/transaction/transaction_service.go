@@ -2,67 +2,65 @@ package transaction
 
 import (
 	"context"
-	"fmt"
-	database "rdmm404/voltr-finance/internal/database/repository"
+	"errors"
+	"rdmm404/voltr-finance/internal/database"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type TransactionService struct {
 	db         *pgx.Conn
-	repository *database.Queries
+	repository *sqlc.Queries
 }
 
-func NewTransactionService(db *pgx.Conn, repository *database.Queries) *TransactionService {
+func NewTransactionService(db *pgx.Conn, repository *sqlc.Queries) *TransactionService {
 	return &TransactionService{db: db, repository: repository}
 }
 
-func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []database.CreateTransactionParams) (map[int32]*database.Transaction, error) {
-	tx, err := ts.db.Begin(ctx)
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []sqlc.CreateTransactionParams) (SaveTransactionsResult) {
+	result := SaveTransactionsResult{}
+	result.Created = make(map[string]*sqlc.Transaction)
 
-	if err != nil {
-		return nil, fmt.Errorf("error while creating DB transaction %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	txRepo := ts.repository.WithTx(tx)
-
-	createdTransactions := make(map[int32]*database.Transaction, len(transactions))
-
-	for _, trans := range transactions {
-		hashParams := transactionHashParams{
-			AuthorId:        trans.AuthorID,
-			Amount:          trans.Amount,
-			TransactionDate: trans.TransactionDate.Time,
+	for i, trans := range transactions {
+		if err := validateTransactionCreate(trans); err != nil {
+			result.Errors = append(result.Errors, TransactionError{Index: i, Err: errors.Join(err, ErrTransactionValidation)})
+			continue
 		}
 
-		if trans.Description != nil {
-			hashParams.Description = *trans.Description
-		}
-
-		if trans.HouseholdID != nil {
-			hashParams.HouseholdId = *trans.HouseholdID
-		}
-		transHash, err := generateTransactionHash(hashParams)
+		transHash, err := generateHashForTransactionCreate(trans)
 
 		if err != nil {
-			return nil, fmt.Errorf("error creating transaction hash %w", err)
+			result.Errors = append(result.Errors, TransactionError{Index: i, Err: errors.Join(err, ErrHashCreation)})
+			continue
 		}
-		trans.TransactionID = &transHash
 
-		createdTrans, err := txRepo.CreateTransaction(ctx, trans)
+		trans.TransactionID = transHash
+		createdTrans, err := ts.repository.CreateTransaction(ctx, trans)
 
 		if err != nil {
-			return nil, fmt.Errorf("error while storing transaction %v - %w", trans.Description, err)
+			result.Errors = append(result.Errors, TransactionError{Index: i, ID: transHash, Err: handleCreateTransactionDbError(err)})
+			continue
 		}
 
-		createdTransactions[createdTrans.ID] = &createdTrans
+		result.Created[createdTrans.TransactionID] = &createdTrans
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error while committing db transaction - %w", err)
+	return result
+}
+
+func handleCreateTransactionDbError(err error) error {
+	var pgErr *pgconn.PgError
+
+	if !errors.As(err, &pgErr) {
+		return errors.Join(err, ErrDatabaseUnkown)
 	}
 
-	return createdTransactions, nil
+	switch database.PgErrorCode(pgErr.Code) {
+	case database.ErrorCodeUniqueViolation:
+		return errors.Join(err, ErrDuplicateTransaction)
+	default:
+		return errors.Join(err, ErrDatabaseUnkown)
+	}
 }

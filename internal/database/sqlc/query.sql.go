@@ -3,7 +3,7 @@
 //   sqlc v1.29.0
 // source: query.sql
 
-package database
+package sqlc
 
 import (
 	"context"
@@ -91,7 +91,7 @@ type CreateTransactionParams struct {
 	BudgetCategoryID *int32             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
 	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
-	TransactionID    *string            `json:"transactionId"`
+	TransactionID    string             `json:"transactionId"`
 	AuthorID         int32              `json:"authorId"`
 	HouseholdID      *int32             `json:"householdId"`
 	Notes            *string            `json:"notes"`

@@ -37,3 +37,12 @@ func DownloadFileBytes(url string) ([]byte, error) {
 	slog.Info("Downloaded file", "bytes", len(out))
 	return out, nil
 }
+
+func MapKeys[K comparable, V any](m map[K]V) []K {
+	out := make([]K, 0, len(m))
+	for key := range m {
+		out = append(out, key)
+	}
+
+	return out
+}

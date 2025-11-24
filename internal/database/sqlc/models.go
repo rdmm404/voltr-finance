@@ -2,7 +2,7 @@
 // versions:
 //   sqlc v1.29.0
 
-package database
+package sqlc
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"
@@ -66,7 +66,7 @@ type Transaction struct {
 	BudgetCategoryID *int32             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
 	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
-	TransactionID    *string            `json:"transactionId"`
+	TransactionID    string             `json:"transactionId"`
 	HouseholdID      *int32             `json:"householdId"`
 	Notes            *string            `json:"notes"`
 	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
