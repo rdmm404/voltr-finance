@@ -20,15 +20,15 @@ RETURNING id
 `
 
 type CreateLlmMessageParams struct {
-	SessionID int32  `json:"sessionId"`
-	UserID    int32  `json:"userId"`
+	SessionID int64  `json:"sessionId"`
+	UserID    int64  `json:"userId"`
 	Role      string `json:"role"`
 	Contents  []byte `json:"contents"`
-	ParentID  *int32 `json:"parentId"`
+	ParentID  *int64 `json:"parentId"`
 }
 
 // Messages
-func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) (int32, error) {
+func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessageParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createLlmMessage,
 		arg.SessionID,
 		arg.UserID,
@@ -36,7 +36,7 @@ func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessagePara
 		arg.Contents,
 		arg.ParentID,
 	)
-	var id int32
+	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
@@ -49,7 +49,7 @@ VALUES
 `
 
 type CreateLlmSessionParams struct {
-	UserID   int32  `json:"userId"`
+	UserID   int64  `json:"userId"`
 	SourceID string `json:"sourceId"`
 }
 
@@ -88,12 +88,12 @@ RETURNING id, amount, author_id, budget_category_id, description, transaction_da
 
 type CreateTransactionParams struct {
 	Amount           float32            `json:"amount"`
-	BudgetCategoryID *int32             `json:"budgetCategoryId"`
+	BudgetCategoryID *int64             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
 	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
 	TransactionID    string             `json:"transactionId"`
-	AuthorID         int32              `json:"authorId"`
-	HouseholdID      *int32             `json:"householdId"`
+	AuthorID         int64              `json:"authorId"`
+	HouseholdID      *int64             `json:"householdId"`
 	Notes            *string            `json:"notes"`
 }
 
@@ -219,7 +219,7 @@ type ListLlmMessagesBySessionIdRow struct {
 	Household  Household  `json:"household"`
 }
 
-func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int32) ([]ListLlmMessagesBySessionIdRow, error) {
+func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int64) ([]ListLlmMessagesBySessionIdRow, error) {
 	rows, err := q.db.Query(ctx, listLlmMessagesBySessionId, sessionID)
 	if err != nil {
 		return nil, err
@@ -265,7 +265,7 @@ WHERE transaction_type=2 AND household_id = $1
 
 // ******************* transaction *******************
 // READS
-func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int32) ([]Transaction, error) {
+func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int64) ([]Transaction, error) {
 	rows, err := q.db.Query(ctx, listTransactionsByHousehold, householdID)
 	if err != nil {
 		return nil, err
@@ -321,20 +321,16 @@ SET
         WHEN $9::bool THEN $10::timestamp
         ELSE transaction_date
     END,
-    transaction_id = CASE
-        WHEN $11::bool THEN $12::text
-        ELSE transaction_id
-    END,
     notes = CASE
-        WHEN $13::bool THEN $14::text
+        WHEN $11::bool THEN $12::text
         ELSE notes
     END,
     household_id = CASE
-        WHEN $15::bool THEN $16::int
+        WHEN $13::bool THEN $14::int
         ELSE household_id
     END
 WHERE
-    id = ANY($17::int[]) RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
+    transaction_id = ANY($15::string[]) RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
 `
 
 type UpdateTransactionByIdParams struct {
@@ -348,13 +344,11 @@ type UpdateTransactionByIdParams struct {
 	Description         *string          `json:"description"`
 	SetTransactionDate  bool             `json:"setTransactionDate"`
 	TransactionDate     pgtype.Timestamp `json:"transactionDate"`
-	SetTransactionID    bool             `json:"setTransactionId"`
-	TransactionID       *string          `json:"transactionId"`
 	SetNotes            bool             `json:"setNotes"`
 	Notes               *string          `json:"notes"`
 	SetHouseholdID      bool             `json:"setHouseholdId"`
 	HouseholdID         *int32           `json:"householdId"`
-	Ids                 []int32          `json:"ids"`
+	Ids                 []string         `json:"ids"`
 }
 
 func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransactionByIdParams) (Transaction, error) {
@@ -369,8 +363,6 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		arg.Description,
 		arg.SetTransactionDate,
 		arg.TransactionDate,
-		arg.SetTransactionID,
-		arg.TransactionID,
 		arg.SetNotes,
 		arg.Notes,
 		arg.SetHouseholdID,

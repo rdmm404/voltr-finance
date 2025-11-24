@@ -12,7 +12,7 @@ import (
 func generateTransactionHash(
 	description string,
 	transactionDate time.Time,
-	authorId, householdId int32,
+	authorId, householdId int64,
 	amount float32,
 ) (string, error) {
 	if authorId == 0 && householdId == 0 {
@@ -38,7 +38,7 @@ func generateHashForTransactionCreate(transaction sqlc.CreateTransactionParams) 
 		description = *transaction.Description
 	}
 
-	var householdId int32
+	var householdId int64
 	if transaction.HouseholdID != nil {
 		householdId = *transaction.HouseholdID
 	}

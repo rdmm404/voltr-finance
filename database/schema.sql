@@ -21,8 +21,8 @@ CREATE TABLE household (
 
 -- TODO add default owed amount
 CREATE TABLE household_user (
-    household_id INT,
-    user_id INT,
+    household_id BIGINT,
+    user_id BIGINT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (household_id, user_id),
@@ -32,8 +32,8 @@ CREATE TABLE household_user (
 
 CREATE TABLE budget (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id INT,
-    household_id INT,
+    user_id BIGINT,
+    household_id BIGINT,
     type VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -43,7 +43,7 @@ CREATE TABLE budget (
 
 CREATE TABLE budget_category (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    budget_id INT,
+    budget_id BIGINT,
     category_name VARCHAR NOT NULL,
     allocation REAL NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -54,12 +54,12 @@ CREATE TABLE budget_category (
 CREATE TABLE transaction (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     amount REAL NOT NULL,
-    author_id INT NOT NULL,
-    budget_category_id INT,
+    author_id BIGINT NOT NULL,
+    budget_category_id BIGINT,
     description VARCHAR,
     transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
     transaction_id VARCHAR UNIQUE NOT NULL, -- hash
-    household_id INT,
+    household_id BIGINT,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -72,7 +72,7 @@ CREATE TABLE transaction (
 -- TODO track token usage
 CREATE TABLE llm_session (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id INT NOT NULL,
+    user_id BIGINT NOT NULL,
     source_id VARCHAR NOT NULL, -- discord channel id, NULL if dm
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -81,11 +81,11 @@ CREATE TABLE llm_session (
 
 CREATE TABLE llm_message (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    session_id INT NOT NULL,
-    parent_id INT,
+    session_id BIGINT NOT NULL,
+    parent_id BIGINT,
     role VARCHAR NOT NULL,
     contents JSONB NOT NULL,
-    user_id INT NOT NULL,
+    user_id BIGINT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES llm_session(id),

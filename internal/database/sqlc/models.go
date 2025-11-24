@@ -9,17 +9,17 @@ import (
 )
 
 type Budget struct {
-	ID          int32              `json:"id"`
-	UserID      *int32             `json:"userId"`
-	HouseholdID *int32             `json:"householdId"`
+	ID          int64              `json:"id"`
+	UserID      *int64             `json:"userId"`
+	HouseholdID *int64             `json:"householdId"`
 	Type        string             `json:"type"`
 	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type BudgetCategory struct {
-	ID           int32              `json:"id"`
-	BudgetID     *int32             `json:"budgetId"`
+	ID           int64              `json:"id"`
+	BudgetID     *int64             `json:"budgetId"`
 	CategoryName string             `json:"categoryName"`
 	Allocation   float32            `json:"allocation"`
 	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
@@ -27,54 +27,54 @@ type BudgetCategory struct {
 }
 
 type Household struct {
-	ID        int32              `json:"id"`
+	ID        int64              `json:"id"`
 	Name      string             `json:"name"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type HouseholdUser struct {
-	HouseholdID int32              `json:"householdId"`
-	UserID      int32              `json:"userId"`
+	HouseholdID int64              `json:"householdId"`
+	UserID      int64              `json:"userId"`
 	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type LlmMessage struct {
-	ID        int32              `json:"id"`
-	SessionID int32              `json:"sessionId"`
-	ParentID  *int32             `json:"parentId"`
+	ID        int64              `json:"id"`
+	SessionID int64              `json:"sessionId"`
+	ParentID  *int64             `json:"parentId"`
 	Role      string             `json:"role"`
 	Contents  []byte             `json:"contents"`
-	UserID    int32              `json:"userId"`
+	UserID    int64              `json:"userId"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type LlmSession struct {
-	ID        int32              `json:"id"`
-	UserID    int32              `json:"userId"`
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"userId"`
 	SourceID  string             `json:"sourceId"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type Transaction struct {
-	ID               int32              `json:"id"`
+	ID               int64              `json:"id"`
 	Amount           float32            `json:"amount"`
-	AuthorID         int32              `json:"authorId"`
-	BudgetCategoryID *int32             `json:"budgetCategoryId"`
+	AuthorID         int64              `json:"authorId"`
+	BudgetCategoryID *int64             `json:"budgetCategoryId"`
 	Description      *string            `json:"description"`
 	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
 	TransactionID    string             `json:"transactionId"`
-	HouseholdID      *int32             `json:"householdId"`
+	HouseholdID      *int64             `json:"householdId"`
 	Notes            *string            `json:"notes"`
 	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type User struct {
-	ID        int32              `json:"id"`
+	ID        int64              `json:"id"`
 	DiscordID string             `json:"discordId"`
 	Name      string             `json:"name"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`

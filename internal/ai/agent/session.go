@@ -28,7 +28,7 @@ func NewSessionManager(db *pgx.Conn, repository *sqlc.Queries) (*SessionManager,
 	}, nil
 }
 
-func (ms *SessionManager) GetOrCreateSession(ctx context.Context, sourceId string, userId int32) (*Session, error) {
+func (ms *SessionManager) GetOrCreateSession(ctx context.Context, sourceId string, userId int64) (*Session, error) {
 	if sourceId == "" {
 		return nil, fmt.Errorf("source id was not provided")
 	}
@@ -81,7 +81,7 @@ type Session struct {
 	SessionData *sqlc.LlmSession
 }
 
-func (s *Session) StoreMessage(ctx context.Context, msg *gai.Message, userId int32, parentId *int32) (int32, error) {
+func (s *Session) StoreMessage(ctx context.Context, msg *gai.Message, userId int64, parentId *int64) (int64, error) {
 	if userId == 0 {
 		return 0, errors.New("userId is required")
 	}

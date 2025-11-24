@@ -44,13 +44,13 @@ type MessageSenderInfo struct {
 }
 
 type MessageUser struct {
-	ID        int32
+	ID        int64
 	Name      string
 	DiscordID string
 }
 
 type MessageHousehold struct {
-	ID   int32
+	ID   int64
 	Name string
 }
 

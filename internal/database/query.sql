@@ -47,10 +47,6 @@ SET
         WHEN sqlc.arg(set_transaction_date)::bool THEN sqlc.narg(transaction_date)::timestamp
         ELSE transaction_date
     END,
-    transaction_id = CASE
-        WHEN sqlc.arg(set_transaction_id)::bool THEN sqlc.narg(transaction_id)::text
-        ELSE transaction_id
-    END,
     notes = CASE
         WHEN sqlc.arg(set_notes)::bool THEN sqlc.narg(notes)::text
         ELSE notes
@@ -60,7 +56,7 @@ SET
         ELSE household_id
     END
 WHERE
-    id = ANY(sqlc.arg(ids)::int[]) RETURNING *;
+    transaction_id = ANY(sqlc.arg(ids)::string[]) RETURNING *;
 -- ******************* users *******************
 -- READS
 
