@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -11,6 +12,8 @@ var (
 	DISCORD_TOKEN              string
 	DISCORD_APP_ID             string
 	DISCORD_MAX_MESSAGE_LENGTH int
+	DISCORD_EVENT_HANDLE_TIMEOUT time.Duration
+
 	DB_USER                    string
 	DB_PASSWORD                string
 	DB_NAME                    string
@@ -30,6 +33,7 @@ func init() {
 	DISCORD_TOKEN = GetEnvString("DISCORD_TOKEN", "")
 	DISCORD_APP_ID = GetEnvString("DISCORD_APP_ID", "")
 	DISCORD_MAX_MESSAGE_LENGTH = GetEnvInt("DISCORD_MAX_MESSAGE_LENGTH", 2000)
+	DISCORD_EVENT_HANDLE_TIMEOUT = time.Duration(GetEnvInt("DISCORD_EVENT_HANDLE_TIMEOUT", 300)) * time.Second
 
 	logLevel := LogLevel(GetEnvString("LOG_LEVEL", "INFO"))
 	LOG_LEVEL = logLevel

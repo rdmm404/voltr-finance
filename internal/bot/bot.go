@@ -63,8 +63,8 @@ func NewBot(a agent.ChatAgent, repository *sqlc.Queries) (*Bot, error) {
 		repository: repository,
 	}
 
-	dg.AddHandler(bot.handlerMessageCreate)
-	dg.AddHandler(bot.handlerInteractionCreate)
+	dg.AddHandler(eventHandler(bot.handlerMessageCreate))
+	dg.AddHandler(eventHandler(bot.handlerInteractionCreate))
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 
@@ -89,6 +89,7 @@ func (b *Bot) Run() error {
 	}
 
 	// TODO handle interrupts in main instead of here
+	// receive ctx and wait for cancel (or done)
 	slog.Info("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
@@ -97,12 +98,11 @@ func (b *Bot) Run() error {
 	return b.session.Close()
 }
 
-func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	ctx := context.Background()
+func (b *Bot) handlerMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate) error {
 	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	// Ignore all messages created by the bot itself
 	if m.Author.ID == s.State.User.ID {
-		return
+		return nil
 	}
 
 	slog.Debug("message received", "message", string(msgJson))
@@ -112,8 +112,7 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	senderInfo, err := b.getSenderInfoFromMessage(ctx, m)
 
 	if err != nil {
-		slog.Error("Bot: Error while getting sender info", "error", err)
-		return
+		return fmt.Errorf("error while getting sender info - %w", err)
 	}
 
 	aiMsg := &agent.Message{Msg: m.Content, SenderInfo: senderInfo}
@@ -125,8 +124,7 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 	ch, err := b.agent.Run(ctx, aiMsg, agent.StreamingModeMessages)
 
 	if err != nil {
-		slog.Error("Bot: Error received from agent", "error", err)
-		return
+		return fmt.Errorf("error received from agent - %w", err)
 	}
 
 	for update := range ch {
@@ -156,6 +154,8 @@ func (b *Bot) handlerMessageCreate(s *discordgo.Session, m *discordgo.MessageCre
 			slog.Error("error sending message", "error", err)
 		}
 	}
+
+	return nil
 }
 
 func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.MessageCreate) (*agent.MessageSenderInfo, error) {
@@ -209,13 +209,12 @@ func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Se
 	return nil
 }
 
-func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	ctx := context.Background()
+func (b *Bot) handlerInteractionCreate(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	jsonEvent, _ := json.MarshalIndent(i, "", "  ")
 	slog.Debug("Interaction event received", "event", string(jsonEvent))
 
 	if i.Type != discordgo.InteractionApplicationCommand {
-		return
+		return nil
 	}
 
 	data := i.ApplicationCommandData()
@@ -239,23 +238,21 @@ func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.Intera
 		user, err := b.repository.GetUserByDiscordId(ctx, discordUser.ID)
 
 		if err != nil {
-			slog.Error("Bot: error getting user details", "error", err)
 			s.InteractionResponseEdit(
 				i.Interaction,
 				&discordgo.WebhookEdit{Content: utils.StringPtr("Something went wrong while creating session :(")},
 			)
-			return
+			return fmt.Errorf("error getting user details: %w", err)
 		}
 
 		params := sqlc.CreateLlmSessionParams{UserID: user.ID, SourceID: i.ChannelID}
 
 		if _, err = b.repository.CreateLlmSession(ctx, params); err != nil {
-			slog.Error("Bot: error creating new session", "error", err)
 			s.InteractionResponseEdit(
 				i.Interaction,
 				&discordgo.WebhookEdit{Content: utils.StringPtr("Something went wrong while creating session :(")},
 			)
-			return
+			return fmt.Errorf("error creating new session: %w", err)
 		}
 
 		s.InteractionResponseEdit(
@@ -264,6 +261,8 @@ func (b *Bot) handlerInteractionCreate(s *discordgo.Session, i *discordgo.Intera
 		)
 
 	default:
-		slog.Debug("Unrecognized command received", "command", data.Name)
+		slog.Warn("Unrecognized command received", "command", data.Name)
 	}
+
+	return nil
 }
