@@ -3,6 +3,7 @@ package transaction
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"rdmm404/voltr-finance/internal/database"
 	"rdmm404/voltr-finance/internal/database/sqlc"
 
@@ -63,4 +64,8 @@ func handleCreateTransactionDbError(err error) error {
 	default:
 		return errors.Join(err, ErrDatabaseUnkown)
 	}
+}
+
+func (ts *TransactionService) UpdateTransactionsById(ctx context.Context, transactions []sqlc.UpdateTransactionByIdParams) {
+	slog.Info("UpdateTransactionsById called", "transactions", transactions)
 }
