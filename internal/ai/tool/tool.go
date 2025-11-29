@@ -65,7 +65,7 @@ func DefineTool[I any, O any](
 		func(ctx *ai.ToolContext, input I) (O, error) {
 			slog.Debug("Tool called", "name", tool.Name(), "input", input)
 			res, err := handler(ctx, input)
-			slog.Debug("Tool response reeived", "tool", tool.Name(), "response", res)
+			slog.Debug("Tool response received", "tool", tool.Name(), "response", res)
 			if err != nil {
 				return res, err
 			}

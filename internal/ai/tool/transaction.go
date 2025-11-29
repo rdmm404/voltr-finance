@@ -103,7 +103,6 @@ func formatResultsForLLM(result transaction.SaveTransactionsResult) string {
 	return sb.String()
 }
 
-
 type updateTransactionsByIdTool struct {
 	deps *ToolDependencies
 }
@@ -113,17 +112,17 @@ type UpdateTransactionsByIdInput struct {
 }
 
 type TransactionUpdateById struct {
-	ID string
+	ID      string
 	Updates TransactionUpdate
 }
 
 type TransactionUpdate struct {
-	Amount          utils.Partial[float32]  `json:"amount,omitempty" jsonschema_description:"The amount of the transaction."`
-	AuthorID        utils.Partial[int64]    `json:"authorId,omitempty" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
-	TransactionDate utils.Partial[DateTime] `json:"transactionDate,omitempty" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DD HH:MM:SS."`
-	HouseholdId utils.Partial[*int64]  `json:"householdId,omitempty" jsonschema_extras:"nullable=true" jsonschema_description:"ID of the household the user belongs to. Only set if the transaction is of type household."`
-	Notes       utils.Partial[*string] `json:"notes,omitempty" jsonschema_extras:"nullable=true" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
-	Description utils.Partial[*string] `json:"description,omitempty" jsonschema_extras:"nullable=true" jsonschema_description:"Description of the transaction."`
+	Amount          utils.Optional[float32]  `json:"amount,omitempty" jsonschema_description:"The amount of the transaction."`
+	AuthorID        utils.Optional[int64]    `json:"authorId,omitempty" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
+	TransactionDate utils.Optional[DateTime] `json:"transactionDate,omitempty" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DD HH:MM:SS."`
+	HouseholdId     utils.Optional[int64]    `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. For personal transactions, it must be provided and set to null."`
+	Notes           utils.Optional[string]   `json:"notes,omitempty" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
+	Description     utils.Optional[string]   `json:"description,omitempty" jsonschema_description:"Description of the transaction."`
 }
 
 func NewUpdateTransactionsByIdTool(deps *ToolDependencies) (Tool, error) {
@@ -147,6 +146,6 @@ func (ut *updateTransactionsByIdTool) Create(g *genkit.Genkit, tp *ToolProvider)
 }
 
 func (ut *updateTransactionsByIdTool) execute(ctx *ai.ToolContext, input UpdateTransactionsByIdInput) (string, error) {
-	slog.Info("update transaction tools called", "input", utils.JsonMarshalIgnore(input))
+	slog.Info("update transaction tools called", "input", input)
 	return "", nil
 }
