@@ -149,6 +149,46 @@ func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID strin
 	return i, err
 }
 
+const getTransactionsByTransactionId = `-- name: GetTransactionsByTransactionId :many
+
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
+WHERE transaction_id = ANY($1::text[])
+`
+
+// ******************* transaction *******************
+// READS
+func (q *Queries) GetTransactionsByTransactionId(ctx context.Context, ids []string) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByTransactionId, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.AuthorID,
+			&i.BudgetCategoryID,
+			&i.Description,
+			&i.TransactionDate,
+			&i.TransactionID,
+			&i.HouseholdID,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserByDiscordId = `-- name: GetUserByDiscordId :one
 SELECT id, discord_id, name, created_at, updated_at FROM users WHERE discord_id = $1
 `
@@ -258,13 +298,10 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int6
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
-
 SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
-// ******************* transaction *******************
-// READS
 func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *int64) ([]Transaction, error) {
 	rows, err := q.db.Query(ctx, listTransactionsByHousehold, householdID)
 	if err != nil {

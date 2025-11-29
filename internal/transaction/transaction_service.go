@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"rdmm404/voltr-finance/internal/database"
@@ -20,7 +21,26 @@ func NewTransactionService(db *pgx.Conn, repository *sqlc.Queries) *TransactionS
 	return &TransactionService{db: db, repository: repository}
 }
 
-func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []sqlc.CreateTransactionParams) (SaveTransactionsResult) {
+func (ts *TransactionService) GetTransactionsByTransactionId(ctx context.Context, ids []string) (map[string]sqlc.Transaction, error) {
+	transactions, err := ts.repository.GetTransactionsByTransactionId(ctx, ids)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]sqlc.Transaction{}, errors.Join(err, ErrTransactionNotFound)
+		}
+
+		return map[string]sqlc.Transaction{}, errors.Join(err, ErrDatabaseUnkown)
+	}
+
+	transactionMap := make(map[string]sqlc.Transaction, len(transactions))
+
+	for _, trans := range transactions {
+		transactionMap[trans.TransactionID] = trans
+	}
+
+	return transactionMap, nil
+}
+
+func (ts *TransactionService) SaveTransactions(ctx context.Context, transactions []sqlc.CreateTransactionParams) SaveTransactionsResult {
 	result := SaveTransactionsResult{}
 	result.Created = make(map[string]*sqlc.Transaction)
 

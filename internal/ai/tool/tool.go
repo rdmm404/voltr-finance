@@ -26,6 +26,7 @@ type ToolDependencies struct {
 
 var toolFactories = []func(deps *ToolDependencies) (Tool, error){
 	NewSaveTransactionsTool,
+	NewGetTransactionTool,
 	NewUpdateTransactionsByIdTool,
 }
 

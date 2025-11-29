@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -28,7 +29,7 @@ type TransactionSave struct {
 	AuthorID        int64    `json:"authorId" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
 	TransactionDate DateTime `json:"transactionDate" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DD HH:MM:SS."`
 	// not required
-	HouseholdId *int64  `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. Only set if the transaction is of type household."`
+	HouseholdId *int64  `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. Set to null if transaction is personal."`
 	Notes       *string `json:"notes,omitempty" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
 	Description *string `json:"description,omitempty" jsonschema_description:"Description of the transaction."`
 }
@@ -113,16 +114,7 @@ type UpdateTransactionsByIdInput struct {
 
 type TransactionUpdateById struct {
 	ID      string
-	Updates TransactionUpdate
-}
-
-type TransactionUpdate struct {
-	Amount          utils.Optional[float32]  `json:"amount,omitempty" jsonschema_description:"The amount of the transaction."`
-	AuthorID        utils.Optional[int64]    `json:"authorId,omitempty" jsonschema_description:"The ID of the user who originated this transaction. Can be indicated by the human, otherwise you can assume that it's the message sender."`
-	TransactionDate utils.Optional[DateTime] `json:"transactionDate,omitempty" jsonschema_description:"The date and time of the transaction. Only set if can be inferred by the data provided. IMPORTANT! You must format this date in the format YYYY-MM-DD HH:MM:SS."`
-	HouseholdId     utils.Optional[int64]    `json:"householdId,omitempty" jsonschema_description:"ID of the household the user belongs to. For personal transactions, it must be provided and set to null."`
-	Notes           utils.Optional[string]   `json:"notes,omitempty" jsonschema_description:"Notes for this transaction. Add here any relevant information shared BY THE HUMAN regarding this transaction."`
-	Description     utils.Optional[string]   `json:"description,omitempty" jsonschema_description:"Description of the transaction."`
+	Updates TransactionSave
 }
 
 func NewUpdateTransactionsByIdTool(deps *ToolDependencies) (Tool, error) {
@@ -138,7 +130,7 @@ func (ut *updateTransactionsByIdTool) Name() string {
 }
 
 func (ut *updateTransactionsByIdTool) Description() string {
-	return "Use this function to set the specified data to the transactions with the provided IDs. IMPORTANT: This is a partial update so you only need to provide the fields you want to update. Do not include any unnecessary fields."
+	return "Use this function to set the specified data to the transactions with the provided IDs. You must provide complete data regarding the transaction, if you don't have it please request it."
 }
 
 func (ut *updateTransactionsByIdTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
@@ -148,4 +140,69 @@ func (ut *updateTransactionsByIdTool) Create(g *genkit.Genkit, tp *ToolProvider)
 func (ut *updateTransactionsByIdTool) execute(ctx *ai.ToolContext, input UpdateTransactionsByIdInput) (string, error) {
 	slog.Info("update transaction tools called", "input", input)
 	return "", nil
+}
+
+type getTransactionTool struct {
+	deps *ToolDependencies
+}
+
+type GetTransactionsInput struct {
+	IDs []string
+}
+
+func NewGetTransactionTool(deps *ToolDependencies) (Tool, error) {
+	if deps.Ts == nil {
+		return nil, fmt.Errorf("transaction service not present in dependencies")
+	}
+
+	return &getTransactionTool{deps: deps}, nil
+}
+
+func (gt *getTransactionTool) Name() string {
+	return "GetTransaction"
+}
+
+func (gt *getTransactionTool) Description() string {
+	return "Get a transaction by its ID."
+}
+
+func (gt *getTransactionTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
+	return DefineTool(tp, g, gt, gt.execute)
+}
+
+func (gt *getTransactionTool) execute(ctx *ai.ToolContext, input GetTransactionsInput) (string, error) {
+	trans, err := gt.deps.Ts.GetTransactionsByTransactionId(ctx, input.IDs)
+
+	if errors.Is(err, transaction.ErrTransactionNotFound) {
+		return fmt.Sprintf("Transactions with ids %q not found", input.IDs), nil
+	}
+
+	if err != nil {
+		slog.Error("GetTransaction: db error", "error", err)
+		return fmt.Sprintf("an error ocurred: %v", err), nil
+	}
+
+	var output strings.Builder
+
+	output.WriteString("The following transactions were found:\n")
+	foundTrans, err := json.Marshal(trans)
+
+	if err != nil {
+		return "", fmt.Errorf("error while marshaling transactions: %w", err)
+	}
+
+	output.Write(foundTrans)
+
+	if len(input.IDs) > len(trans) {
+		output.WriteString("\n No transactions were found for IDs: ")
+		for _, id := range input.IDs {
+			if _, ok := trans[id]; ok {
+				continue
+			}
+
+			output.WriteString(fmt.Sprintf("%q,", id))
+		}
+	}
+
+	return output.String(), nil
 }

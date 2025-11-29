@@ -10,6 +10,7 @@ var (
 	ErrDatabaseUnkown        = errors.New("unknown database error")
 	ErrDuplicateTransaction  = errors.New("transaction already exists")
 	ErrHashCreation          = errors.New("error while creating hash")
+	ErrTransactionNotFound   = errors.New("transaction with provided id not found")
 )
 
 type TransactionError struct {

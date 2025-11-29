@@ -1,6 +1,10 @@
 -- ******************* transaction *******************
 -- READS
 
+-- name: GetTransactionsByTransactionId :many
+SELECT * FROM transaction
+WHERE transaction_id = ANY(sqlc.arg(ids)::text[]);
+
 -- name: ListTransactionsByHousehold :many
 SELECT * FROM transaction
 WHERE transaction_type=2 AND household_id = $1;
