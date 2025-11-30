@@ -9,15 +9,15 @@ import (
 	"rdmm404/voltr-finance/internal/database/sqlc"
 
 	gai "github.com/firebase/genkit/go/ai"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type SessionManager struct {
-	db         *pgx.Conn
+	db         *pgxpool.Pool
 	repository *sqlc.Queries
 }
 
-func NewSessionManager(db *pgx.Conn, repository *sqlc.Queries) (*SessionManager, error) {
+func NewSessionManager(db *pgxpool.Pool, repository *sqlc.Queries) (*SessionManager, error) {
 	if db == nil || repository == nil {
 		return nil, errors.New("db and repository must be set")
 	}
@@ -76,7 +76,7 @@ func (ms *SessionManager) GetOrCreateSession(ctx context.Context, sourceId strin
 }
 
 type Session struct {
-	db          *pgx.Conn
+	db          *pgxpool.Pool
 	repository  *sqlc.Queries
 	SessionData *sqlc.LlmSession
 }

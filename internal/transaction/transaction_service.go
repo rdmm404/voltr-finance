@@ -9,17 +9,17 @@ import (
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/utils"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TransactionService struct {
-	db         *pgx.Conn
+	db         *pgxpool.Pool
 	repository *sqlc.Queries
 }
 
-func NewTransactionService(db *pgx.Conn, repository *sqlc.Queries) *TransactionService {
+func NewTransactionService(db *pgxpool.Pool, repository *sqlc.Queries) *TransactionService {
 	return &TransactionService{db: db, repository: repository}
 }
 

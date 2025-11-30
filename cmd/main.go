@@ -17,8 +17,8 @@ func main() {
 	slog.SetLogLoggerLevel(config.LOG_LEVEL.ToSlog())
 	ctx := context.Background()
 
-	db := database.Init()
-	defer db.Close(ctx)
+	db := database.Init(ctx)
+	defer db.Close()
 
 	repository := sqlc.New(db)
 

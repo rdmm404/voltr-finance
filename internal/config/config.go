@@ -8,18 +8,20 @@ import (
 )
 
 var (
-	DEBUG                      bool
-	DISCORD_TOKEN              string
-	DISCORD_APP_ID             string
-	DISCORD_MAX_MESSAGE_LENGTH int
+	DEBUG     bool
+	LOG_LEVEL LogLevel
+
+	DISCORD_TOKEN                string
+	DISCORD_APP_ID               string
+	DISCORD_MAX_MESSAGE_LENGTH   int
 	DISCORD_EVENT_HANDLE_TIMEOUT time.Duration
 
-	DB_USER                    string
-	DB_PASSWORD                string
-	DB_NAME                    string
-	DB_HOST                    string
-	DB_PORT                    string
-	LOG_LEVEL                  LogLevel
+	DB_USER      string
+	DB_PASSWORD  string
+	DB_NAME      string
+	DB_HOST      string
+	DB_PORT      string
+	DB_POOL_SIZE int
 )
 
 func init() {
@@ -48,4 +50,5 @@ func init() {
 	DB_HOST = GetEnvString("DB_HOST", "")
 	DB_NAME = GetEnvString("DB_NAME", "")
 	DB_PORT = GetEnvString("DB_PORT", "")
+	DB_POOL_SIZE = GetEnvInt("DB_POOL_SIZE", 5)
 }
