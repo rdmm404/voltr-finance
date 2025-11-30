@@ -31,6 +31,19 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql
-      - ./database:/docker-entrypoint-initdb.d
+      # - ./database/data:/docker-entrypoint-initdb.d
+  migrate:
+    image: ghcr.io/amacneil/dbmate
+    entrypoint: ["sh", "/db/init.sh"]
+    volumes:
+      - ./db:/db:rw
+    depends_on:
+      - db
+    environment:
+      - DB_USER=voltr
+      - DB_PASSWORD=voltr
+      - DB_NAME=voltr_finance
+      - DB_HOST=db
+      - DB_PORT=5432
 volumes:
   db_data:

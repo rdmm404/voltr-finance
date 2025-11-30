@@ -1,6 +1,5 @@
-SET search_path = transactions;
-ALTER DATABASE voltr_finance SET search_path TO transactions;
-CREATE SCHEMA transactions;
+-- migrate:up
+CREATE SCHEMA IF NOT EXISTS transactions;
 
 CREATE TABLE users (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -103,3 +102,7 @@ CREATE TABLE llm_message (
 );
 CREATE INDEX idx_llm_message_session_id ON llm_message(session_id);
 CREATE INDEX idx_llm_message_created_at ON llm_message(created_at);
+
+
+-- migrate:down
+DROP SCHEMA transactions CASCADE;

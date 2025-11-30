@@ -11,7 +11,7 @@ import (
 
 func Init(ctx context.Context) *pgxpool.Pool {
 	connString := fmt.Sprintf(
-		"postgres://%v:%v@%v:%v/%v?pool_max_conns=%v",
+		"postgres://%v:%v@%v:%v/%v?pool_max_conns=%v&search_path=transactions",
 		config.DB_USER,
 		config.DB_PASSWORD,
 		config.DB_HOST,
