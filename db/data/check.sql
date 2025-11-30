@@ -1,0 +1,1 @@
+SELECT count(*) > 0 as populated from transactions.household;

@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     volumes:
       - ./cmd:/app/cmd:rw
       - ./internal:/app/internal:rw
@@ -34,7 +35,8 @@ services:
       # - ./database/data:/docker-entrypoint-initdb.d
   migrate:
     image: ghcr.io/amacneil/dbmate
-    entrypoint: ["sh", "/db/init.sh"]
+    entrypoint: ["sh"]
+    command: ["/db/init.sh"]
     volumes:
       - ./db:/db:rw
     depends_on:
