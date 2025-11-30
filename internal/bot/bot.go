@@ -67,7 +67,7 @@ func NewBot(a agent.ChatAgent, repository *sqlc.Queries) (*Bot, error) {
 	dg.AddHandler(eventHandler(bot.handlerMessageCreate))
 	dg.AddHandler(eventHandler(bot.handlerInteractionCreate))
 
-	dg.Identify.Intents = discordgo.IntentsGuildMessages
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages
 
 	return bot, nil
 }
@@ -184,7 +184,7 @@ func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.Message
 			sqlc.GetUserByDiscordAndHouseholdIdParams{DiscordID: m.Author.ID, HouseholdID: household.ID},
 		)
 	} else {
-		user, err = b.repository.GetUserByDiscordId(ctx, user.DiscordID)
+		user, err = b.repository.GetUserByDiscordId(ctx, m.Author.ID)
 	}
 
 	if err != nil {
@@ -194,7 +194,7 @@ func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.Message
 		return nil, fmt.Errorf("error while getting user by discord id %q: %w", m.Author.ID, err)
 	}
 
-	senderInfo.User = &agent.MessageUser{ID: user.ID, Name: user.Name, DiscordID: user.DiscordID}
+	senderInfo.User = agent.MessageUser{ID: user.ID, Name: user.Name, DiscordID: user.DiscordID}
 
 	return senderInfo, nil
 

@@ -34,7 +34,7 @@
 
 - [x] if message comes from server -> household by default, if comes from pm -> personal by default if not otherwise specified
   - [x] Link household to discord channel ID
-  - [ ] fix private messages
+  - [x] fix private messages
 - [ ] tools to get transactions using natural language
 - [ ] improve system prompt
 - [ ] csv report of transactions by date range

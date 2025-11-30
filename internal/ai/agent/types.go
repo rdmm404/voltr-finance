@@ -38,8 +38,8 @@ func (m *Message) ToGenkit() (*gai.Message, error) {
 }
 
 type MessageSenderInfo struct {
-	User      *MessageUser
-	Household *MessageHousehold
+	User      MessageUser       `json:"user"`
+	Household *MessageHousehold `json:"household,omitempty"`
 	ChannelID string
 }
 
