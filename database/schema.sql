@@ -19,6 +19,7 @@ CREATE TABLE household (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_household_guild_id ON household(guild_id);
 
 -- TODO add default owed amount
 CREATE TABLE household_user (

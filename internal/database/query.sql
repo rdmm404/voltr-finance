@@ -83,6 +83,14 @@ WHERE users.discord_id = $1;
 -- name: GetUserByDiscordId :one
 SELECT * FROM users WHERE discord_id = $1;
 
+-- name: GetUserByDiscordAndHouseholdId :one
+SELECT u.* FROM users u
+JOIN household_user hu on hu.user_id = u.id
+WHERE discord_id = $1 and hu.household_id = $2;
+
+-- name: GetHouseholdByGuildId :one
+SELECT * from household where guild_id = $1;
+
 -- ******************* LLM *******************
 -- Session
 -- name: CreateLlmSession :one
@@ -110,13 +118,11 @@ RETURNING id;
 
 -- name: ListLlmMessagesBySessionId :many
 SELECT
-    sqlc.embed(m), sqlc.embed(u), sqlc.embed(h)
+    sqlc.embed(m), sqlc.embed(u)
 FROM
     llm_message m
 JOIN
     users u on u.id = m.user_id
-LEFT JOIN household_user hu on hu.user_id = u.id
-LEFT JOIN household h on h.id = hu.household_id
 WHERE
     m.session_id = $1
 ORDER BY

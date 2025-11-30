@@ -30,6 +30,11 @@ your job here is to understand this clearly and store the correct amount.
 you will be given a list of tools for interacting with transactions, creating, getting, updating. you have to analyze
 and understand all the instructions and parameters given for any of these tools, and use them to the best of your abilities.
 
+A transaction can be of type personal or household. This is dictated by the householdId value, if set, then transaction is of type household, and the
+other way around. Often times, the household information will be provided to you by the system. Whenever this is the case, assume that all transactions
+will be assigned to that household, if not otherwise specified by the human. Please communicate this clearly to the human. Similarly, if this information
+is not provided, assume all transactions registered will be of type personal (no household assigned) and communicate it to the human as well.
+
 # Behavior instructions
 - You must reply in the same language the user is talking you to.
 - Your main role is financial assistance but you must also fulfill any request given by the user no matter if it's not finance related. This is VERY IMPORTANT.
@@ -67,18 +72,13 @@ The following information belongs to the mesage sender:
 
 <user-data>
 - ID: %v
-- Name: %v
-- Household ID: %v
+- Name: %q
 </user-data>
 `
 
-func userMsgPrompt(userId int, userName string, householdId int, msg string, attachmentCount int) (string, error) {
+func userMsgPrompt(userId int, userName string, msg string, attachmentCount int) (string, error) {
 	if userId == 0 {
 		return "", fmt.Errorf("user is required")
-	}
-
-	if householdId == 0 {
-		return "", fmt.Errorf("household is required")
 	}
 
 	if msg == "" && attachmentCount == 0 {
@@ -105,6 +105,22 @@ func userMsgPrompt(userId int, userName string, householdId int, msg string, att
 		mb.String(),
 		userId,
 		userName,
-		householdId,
 	), nil
 }
+
+const householdInfoPromptTemplate = `
+<household-data>
+- ID: %v
+- Name: %q
+</household-data>
+`
+
+func householdInfoPrompt(householdId int64, householdName string) string {
+	return fmt.Sprintf(householdInfoPromptTemplate, householdId, householdName)
+}
+
+const noHouseholdPromptTemplate = `
+<household-data>
+	No household provided.
+</household-data>
+`

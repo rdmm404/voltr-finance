@@ -50,8 +50,9 @@ type MessageUser struct {
 }
 
 type MessageHousehold struct {
-	ID   int64
-	Name string
+	ID      int64
+	Name    string
+	GuildID string
 }
 
 type UsageStats struct {

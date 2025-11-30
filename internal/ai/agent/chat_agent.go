@@ -88,13 +88,21 @@ func (a *chatAgent) chatFlow() chatFlow {
 				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
+			householdInfoMsg := noHouseholdPromptTemplate
+			if household := msg.SenderInfo.Household; household != nil {
+				householdInfoMsg = householdInfoPrompt(household.ID, household.Name)
+			}
+
 			resp, err := genkit.Generate(
 				ctx,
 				a.g,
 				gai.WithTools(a.tp.GetAvailableTools()...),
 				gai.WithSystem(systemPrompt(43)),
 				gai.WithMessages(
-					msgHistory...,
+					append(
+						[]*gai.Message{gai.NewSystemTextMessage(householdInfoMsg)},
+						msgHistory...,
+					)...,
 				),
 				gai.WithStreaming(func(ctx context.Context, chunk *gai.ModelResponseChunk) error {
 					slog.Debug("chunk received", "chunk", utils.JsonMarshalIgnore(chunk))

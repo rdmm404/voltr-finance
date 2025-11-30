@@ -149,6 +149,23 @@ func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID strin
 	return i, err
 }
 
+const getHouseholdByGuildId = `-- name: GetHouseholdByGuildId :one
+SELECT id, name, guild_id, created_at, updated_at from household where guild_id = $1
+`
+
+func (q *Queries) GetHouseholdByGuildId(ctx context.Context, guildID string) (Household, error) {
+	row := q.db.QueryRow(ctx, getHouseholdByGuildId, guildID)
+	var i Household
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.GuildID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getIdByTransactionId = `-- name: GetIdByTransactionId :one
 SELECT id FROM transaction
 WHERE transaction_id = $1
@@ -225,6 +242,30 @@ func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Trans
 	return items, nil
 }
 
+const getUserByDiscordAndHouseholdId = `-- name: GetUserByDiscordAndHouseholdId :one
+SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at FROM users u
+JOIN household_user hu on hu.user_id = u.id
+WHERE discord_id = $1 and hu.household_id = $2
+`
+
+type GetUserByDiscordAndHouseholdIdParams struct {
+	DiscordID   string `json:"discordId"`
+	HouseholdID int64  `json:"householdId"`
+}
+
+func (q *Queries) GetUserByDiscordAndHouseholdId(ctx context.Context, arg GetUserByDiscordAndHouseholdIdParams) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByDiscordAndHouseholdId, arg.DiscordID, arg.HouseholdID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByDiscordId = `-- name: GetUserByDiscordId :one
 SELECT id, discord_id, name, created_at, updated_at FROM users WHERE discord_id = $1
 `
@@ -244,7 +285,7 @@ func (q *Queries) GetUserByDiscordId(ctx context.Context, discordID string) (Use
 
 const getUserDetailsByDiscordId = `-- name: GetUserDetailsByDiscordId :one
 
-SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, household.id, household.name, household.created_at, household.updated_at FROM users
+SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, household.id, household.name, household.guild_id, household.created_at, household.updated_at FROM users
 JOIN household_user on users.id = household_user.user_id
 JOIN household on household_user.household_id = household.id
 WHERE users.discord_id = $1
@@ -268,6 +309,7 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID strin
 		&i.User.UpdatedAt,
 		&i.Household.ID,
 		&i.Household.Name,
+		&i.Household.GuildID,
 		&i.Household.CreatedAt,
 		&i.Household.UpdatedAt,
 	)
@@ -276,13 +318,11 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID strin
 
 const listLlmMessagesBySessionId = `-- name: ListLlmMessagesBySessionId :many
 SELECT
-    m.id, m.session_id, m.parent_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at, h.id, h.name, h.created_at, h.updated_at
+    m.id, m.session_id, m.parent_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at
 FROM
     llm_message m
 JOIN
     users u on u.id = m.user_id
-LEFT JOIN household_user hu on hu.user_id = u.id
-LEFT JOIN household h on h.id = hu.household_id
 WHERE
     m.session_id = $1
 ORDER BY
@@ -292,7 +332,6 @@ ORDER BY
 type ListLlmMessagesBySessionIdRow struct {
 	LlmMessage LlmMessage `json:"llmMessage"`
 	User       User       `json:"user"`
-	Household  Household  `json:"household"`
 }
 
 func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int64) ([]ListLlmMessagesBySessionIdRow, error) {
@@ -318,10 +357,6 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int6
 			&i.User.Name,
 			&i.User.CreatedAt,
 			&i.User.UpdatedAt,
-			&i.Household.ID,
-			&i.Household.Name,
-			&i.Household.CreatedAt,
-			&i.Household.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

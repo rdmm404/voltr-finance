@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -162,24 +163,41 @@ func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.Message
 		return nil, fmt.Errorf("message received does not have an author")
 	}
 
-	result, err := b.repository.GetUserDetailsByDiscordId(ctx, m.Author.ID)
+	senderInfo := &agent.MessageSenderInfo{ChannelID: m.ChannelID}
 
-	if err != nil {
-		return nil, err
+	var user sqlc.User
+	var err error
+
+	if m.GuildID != "" {
+		var household sqlc.Household
+		household, err = b.repository.GetHouseholdByGuildId(ctx, m.GuildID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("household with guild id %q not found", m.GuildID)
+			}
+			return nil, fmt.Errorf("error while getting household by guild id %q: %w", m.GuildID, err)
+		}
+
+		senderInfo.Household = &agent.MessageHousehold{ID: household.ID, Name: household.Name, GuildID: household.GuildID}
+
+		user, err = b.repository.GetUserByDiscordAndHouseholdId(ctx,
+			sqlc.GetUserByDiscordAndHouseholdIdParams{DiscordID: m.Author.ID, HouseholdID: household.ID},
+		)
+	} else {
+		user, err = b.repository.GetUserByDiscordId(ctx, user.DiscordID)
 	}
 
-	return &agent.MessageSenderInfo{
-		User: &agent.MessageUser{
-			ID:        result.User.ID,
-			Name:      result.User.Name,
-			DiscordID: result.User.DiscordID,
-		},
-		Household: &agent.MessageHousehold{
-			ID:   result.Household.ID,
-			Name: result.Household.Name,
-		},
-		ChannelID: m.ChannelID,
-	}, nil
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("user with discord id %q not found", user.DiscordID)
+		}
+		return nil, fmt.Errorf("error while getting user by discord id %q: %w", m.Author.ID, err)
+	}
+
+	senderInfo.User = &agent.MessageUser{ID: user.ID, Name: user.Name, DiscordID: user.DiscordID}
+
+	return senderInfo, nil
+
 }
 
 func (b *Bot) sendMessageInChunks(msg string, chunkSizePtr *int, s *discordgo.Session, m *discordgo.MessageCreate) error {

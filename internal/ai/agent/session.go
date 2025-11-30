@@ -110,7 +110,7 @@ func (s *Session) GetMessageHistory(ctx context.Context) ([]*gai.Message, error)
 	var messages []*gai.Message
 	var errs []error
 	for _, msg := range dbMsgs {
-		aiMsg, err := dbMessageToGenkit(&msg.LlmMessage, &msg.User, &msg.Household)
+		aiMsg, err := dbMessageToGenkit(&msg.LlmMessage, &msg.User)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -125,7 +125,7 @@ func (s *Session) GetMessageHistory(ctx context.Context) ([]*gai.Message, error)
 	return messages, nil
 }
 
-func dbMessageToGenkit(msg *sqlc.LlmMessage, user *sqlc.User, household *sqlc.Household) (*gai.Message, error) {
+func dbMessageToGenkit(msg *sqlc.LlmMessage, user *sqlc.User) (*gai.Message, error) {
 	content := []*gai.Part{}
 
 	if err := json.Unmarshal(msg.Contents, &content); err != nil {
@@ -145,7 +145,7 @@ func dbMessageToGenkit(msg *sqlc.LlmMessage, user *sqlc.User, household *sqlc.Ho
 			msgParts = append(msgParts, part)
 		}
 
-		msgText, err := userMsgPrompt(int(msg.UserID), user.Name, int(household.ID), aiMsg.Text(), len(msgParts))
+		msgText, err := userMsgPrompt(int(msg.UserID), user.Name, aiMsg.Text(), len(msgParts))
 		if err != nil {
 			return nil, fmt.Errorf("invalid database message %q: %w", msg.ID, err)
 		}

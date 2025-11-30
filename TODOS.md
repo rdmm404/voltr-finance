@@ -32,8 +32,9 @@
 - [x] Add user and message in single message
 - [x] Add more context from the incoming message, like message time
 
-- [ ] if message comes from server -> household by default, if comes from pm -> personal by default if not otherwise specified
-  - [ ] Link household to discord channel ID
+- [x] if message comes from server -> household by default, if comes from pm -> personal by default if not otherwise specified
+  - [x] Link household to discord channel ID
+  - [ ] fix private messages
 - [ ] tools to get transactions using natural language
 - [ ] improve system prompt
 - [ ] csv report of transactions by date range
@@ -78,6 +79,10 @@
   - [ ] make users only be in a single household
   - [ ] add user default owed amount into household_user
   - [ ] add discord server id into households table to link server to household
+
+- [ ] command to "sign up"
+  - [ ] Register household name and guild id
+  - [ ] Register members of the server as users and assign to household
 
 MAYBE
 

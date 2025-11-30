@@ -29,6 +29,7 @@ type BudgetCategory struct {
 type Household struct {
 	ID        int64              `json:"id"`
 	Name      string             `json:"name"`
+	GuildID   string             `json:"guildId"`
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
