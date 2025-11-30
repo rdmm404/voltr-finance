@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"rdmm404/voltr-finance/internal/transaction"
+	"rdmm404/voltr-finance/internal/utils"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -26,7 +27,7 @@ type ToolDependencies struct {
 
 var toolFactories = []func(deps *ToolDependencies) (Tool, error){
 	NewSaveTransactionsTool,
-	NewGetTransactionTool,
+	NewGetTransactionsTool,
 	NewUpdateTransactionsByIdTool,
 }
 
@@ -64,7 +65,7 @@ func DefineTool[I any, O any](
 		tool.Name(),
 		tool.Description(),
 		func(ctx *ai.ToolContext, input I) (O, error) {
-			slog.Debug("Tool called", "name", tool.Name(), "input", input)
+			slog.Debug("Tool called", "name", tool.Name(), "input", utils.JsonMarshalIgnore(input))
 			res, err := handler(ctx, input)
 			slog.Debug("Tool response received", "tool", tool.Name(), "response", res)
 			if err != nil {

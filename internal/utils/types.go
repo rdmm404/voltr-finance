@@ -2,7 +2,6 @@ package utils
 
 import (
 	"encoding/json"
-	"log/slog"
 )
 
 type Optional[T any] struct {
@@ -19,17 +18,11 @@ func (n Optional[T]) MarshalJSON() ([]byte, error) {
 }
 
 func (n *Optional[T]) UnmarshalJSON(data []byte) error {
-	slog.Info("unmarshal called", "data", string(data))
 	n.Set = true
 	return json.Unmarshal(data, &n.Value)
 }
 
-func (n Optional[T]) JSONSchemaAlias() any {
-	var v T
-	return v
-}
-
-func NewPartial[T any](value T) Optional[T] {
+func NewOptional[T any](value T) Optional[T] {
 	return Optional[T]{
 		Set:   true,
 		Value: value,

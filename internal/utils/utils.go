@@ -17,6 +17,14 @@ func StringPtr(s string) *string {
 	return &s
 }
 
+func ValueOrZero[T any](ptr *T) T {
+	var v T
+	if ptr != nil {
+		v = *ptr
+	}
+	return v
+}
+
 var ErrDownload = errors.New("error downloading the file")
 
 func DownloadFileBytes(url string) ([]byte, error) {

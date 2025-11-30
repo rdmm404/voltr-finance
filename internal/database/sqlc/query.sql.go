@@ -149,16 +149,52 @@ func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID strin
 	return i, err
 }
 
-const getTransactionsByTransactionId = `-- name: GetTransactionsByTransactionId :many
+const getIdByTransactionId = `-- name: GetIdByTransactionId :one
+SELECT id FROM transaction
+WHERE transaction_id = $1
+`
+
+func (q *Queries) GetIdByTransactionId(ctx context.Context, transactionID string) (int64, error) {
+	row := q.db.QueryRow(ctx, getIdByTransactionId, transactionID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getTransactionById = `-- name: GetTransactionById :one
 
 SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
-WHERE transaction_id = ANY($1::text[])
+WHERE id = $1
 `
 
 // ******************* transaction *******************
 // READS
-func (q *Queries) GetTransactionsByTransactionId(ctx context.Context, ids []string) ([]Transaction, error) {
-	rows, err := q.db.Query(ctx, getTransactionsByTransactionId, ids)
+func (q *Queries) GetTransactionById(ctx context.Context, id int64) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionById, id)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.AuthorID,
+		&i.BudgetCategoryID,
+		&i.Description,
+		&i.TransactionDate,
+		&i.TransactionID,
+		&i.HouseholdID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTransactionsById = `-- name: GetTransactionsById :many
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
+WHERE id = ANY($1::BIGINT[])
+`
+
+func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, getTransactionsById, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -339,44 +375,47 @@ UPDATE
     transaction
 SET
     amount = CASE
-        WHEN $1::bool THEN $2::real
+        WHEN $3::bool THEN $4::real
         ELSE amount
     END,
     author_id = CASE
-        WHEN $3::bool THEN $4::int
+        WHEN $5::bool THEN $6::BIGINT
         ELSE author_id
     END,
     budget_category_id = CASE
-        WHEN $5::bool THEN $6::int
+        WHEN $7::bool THEN $8::BIGINT
         ELSE budget_category_id
     END,
     description = CASE
-        WHEN $7::bool THEN $8::text
+        WHEN $9::bool THEN $10::text
         ELSE description
     END,
     transaction_date = CASE
-        WHEN $9::bool THEN $10::timestamp
+        WHEN $11::bool THEN $12::timestamp
         ELSE transaction_date
     END,
     notes = CASE
-        WHEN $11::bool THEN $12::text
+        WHEN $13::bool THEN $14::text
         ELSE notes
     END,
     household_id = CASE
-        WHEN $13::bool THEN $14::int
+        WHEN $15::bool THEN $16::BIGINT
         ELSE household_id
-    END
+    END,
+    transaction_id = $2
 WHERE
-    transaction_id = ANY($15::string[]) RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
+    id = $1 RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
 `
 
 type UpdateTransactionByIdParams struct {
+	ID                  int64            `json:"id"`
+	TransactionID       string           `json:"transactionId"`
 	SetAmount           bool             `json:"setAmount"`
 	Amount              float32          `json:"amount"`
 	SetAuthorID         bool             `json:"setAuthorId"`
-	AuthorID            int32            `json:"authorId"`
+	AuthorID            int64            `json:"authorId"`
 	SetBudgetCategoryID bool             `json:"setBudgetCategoryId"`
-	BudgetCategoryID    *int32           `json:"budgetCategoryId"`
+	BudgetCategoryID    *int64           `json:"budgetCategoryId"`
 	SetDescription      bool             `json:"setDescription"`
 	Description         *string          `json:"description"`
 	SetTransactionDate  bool             `json:"setTransactionDate"`
@@ -384,12 +423,13 @@ type UpdateTransactionByIdParams struct {
 	SetNotes            bool             `json:"setNotes"`
 	Notes               *string          `json:"notes"`
 	SetHouseholdID      bool             `json:"setHouseholdId"`
-	HouseholdID         *int32           `json:"householdId"`
-	Ids                 []string         `json:"ids"`
+	HouseholdID         *int64           `json:"householdId"`
 }
 
 func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransactionByIdParams) (Transaction, error) {
 	row := q.db.QueryRow(ctx, updateTransactionById,
+		arg.ID,
+		arg.TransactionID,
 		arg.SetAmount,
 		arg.Amount,
 		arg.SetAuthorID,
@@ -404,7 +444,6 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		arg.Notes,
 		arg.SetHouseholdID,
 		arg.HouseholdID,
-		arg.Ids,
 	)
 	var i Transaction
 	err := row.Scan(
