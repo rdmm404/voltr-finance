@@ -99,13 +99,12 @@ func (b *Bot) Run() error {
 }
 
 func (b *Bot) handlerMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate) error {
-	msgJson, _ := json.MarshalIndent(m, "", "  ")
 	// Ignore all messages created by the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return nil
 	}
 
-	slog.Debug("message received", "message", string(msgJson))
+	slog.Debug("message received", "message", utils.JsonMarshalIgnore(m))
 
 	s.ChannelTyping(m.ChannelID)
 

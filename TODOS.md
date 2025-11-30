@@ -26,7 +26,7 @@
 
   - [x] return created transaction ids from db
   - [x] refactor mapstructure logic with hooks and WeaklyTyped parameter
-  - [] add update transactions tool (or rewrite create to be upsert)
+  - [x] add update transactions tool (or rewrite create to be upsert)
   - [x] add instructions to system prompt
 
 - [x] Add user and message in single message
