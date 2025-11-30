@@ -33,9 +33,38 @@
 - [x] Add more context from the incoming message, like message time
 
 - [x] if message comes from server -> household by default, if comes from pm -> personal by default if not otherwise specified
+
   - [x] Link household to discord channel ID
   - [x] fix private messages
+
+- [ ] **RELEASE!!!!**
+
+  - [ ] Deploy to server
+  - [ ] Set up CI/CD
+  - [ ] maybe use docker swarm / k8s
+  - [ ] Set up Mathesar for db access in the meantime
+
 - [ ] tools to get transactions using natural language
+
+  - [ ] sub agent with READ only sql access
+
+- [ ] Budget tracking
+
+  - [ ] DB to store budget allocation per user (or percentage split) (maybe automatic based on income?) (or maybe assign categories to people)
+  - [ ] Add some default budget categories
+  - [ ] Allocate budget using natural language
+  - [ ] Automatically get category from similar transactions
+
+- [ ] implement paid/owed functionality
+
+  - [ ] Add other household members to message context
+  - [ ] make users only be in a single household // why?
+  - [ ] add user default owed amount into household_user
+  - [ ] add discord server id into households table to link server to household
+
+  - [ ] implement transaction breakdown
+    - [ ] like if there is a picture of a receipt add each item to the breakdown
+
 - [ ] improve system prompt
 - [ ] csv report of transactions by date range
 - [ ] INVESTIGATE: extract timestamp from picture metadata
@@ -48,12 +77,6 @@
   - [ ] Handle message mentions correctly
   - [ ] Consider only triggering bot if mentioned
 
-- [ ] **RELEASE!!!!**
-
-  - [ ] Deploy to server
-  - [ ] Set up CI/CD
-  - [ ] maybe use docker swarm / k8s
-
 - [ ] Improve logging and monitoring
 
   - [ ] Use structured logging https://go.dev/blog/slog
@@ -65,20 +88,6 @@
 - [ ] improve context management
 
   - [ ] reset or compact session automatically when a context threshold is reached
-
-- [ ] Budget tracking
-
-  - [ ] DB to store budget allocation per user (or percentage split) (maybe automatic based on income?) (or maybe assign categories to people)
-  - [ ] Add some default budget categories
-  - [ ] Allocate budget using natural language
-  - [ ] Automatically get category from similar transactions
-
-- [ ] implement paid/owed functionality
-
-  - [ ] Add other household members to message context
-  - [ ] make users only be in a single household
-  - [ ] add user default owed amount into household_user
-  - [ ] add discord server id into households table to link server to household
 
 - [ ] command to "sign up"
   - [ ] Register household name and guild id
