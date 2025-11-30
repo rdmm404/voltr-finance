@@ -1,6 +1,19 @@
 -- ******************* transaction *******************
 -- READS
 
+-- name: GetTransactionById :one
+SELECT * FROM transaction
+WHERE id = $1;
+
+-- name: GetTransactionsById :many
+SELECT * FROM transaction
+WHERE id = ANY(sqlc.arg(ids)::BIGINT[]);
+
+-- name: GetIdByTransactionId :one
+SELECT id FROM transaction
+WHERE transaction_id = $1;
+
+
 -- name: ListTransactionsByHousehold :many
 SELECT * FROM transaction
 WHERE transaction_type=2 AND household_id = $1;
@@ -32,11 +45,11 @@ SET
         ELSE amount
     END,
     author_id = CASE
-        WHEN sqlc.arg(set_author_id)::bool THEN sqlc.arg(author_id)::int
+        WHEN sqlc.arg(set_author_id)::bool THEN sqlc.arg(author_id)::BIGINT
         ELSE author_id
     END,
     budget_category_id = CASE
-        WHEN sqlc.arg(set_budget_category_id)::bool THEN sqlc.narg(budget_category_id)::int
+        WHEN sqlc.arg(set_budget_category_id)::bool THEN sqlc.narg(budget_category_id)::BIGINT
         ELSE budget_category_id
     END,
     description = CASE
@@ -52,11 +65,12 @@ SET
         ELSE notes
     END,
     household_id = CASE
-        WHEN sqlc.arg(set_household_id)::bool THEN sqlc.narg(household_id)::int
+        WHEN sqlc.arg(set_household_id)::bool THEN sqlc.narg(household_id)::BIGINT
         ELSE household_id
-    END
+    END,
+    transaction_id = $2
 WHERE
-    transaction_id = ANY(sqlc.arg(ids)::string[]) RETURNING *;
+    id = $1 RETURNING *;
 -- ******************* users *******************
 -- READS
 

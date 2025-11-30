@@ -70,7 +70,6 @@ CREATE TABLE transaction (
     FOREIGN KEY (household_id) REFERENCES household(id)
 );
 CREATE INDEX idx_transaction_household_id ON transaction(household_id);
-CREATE INDEX idx_transaction_id_hash ON transaction(transaction_id);
 CREATE INDEX idx_transaction_author_id ON transaction(author_id);
 CREATE INDEX idx_transaction_budget_category_id ON transaction(budget_category_id);
 
