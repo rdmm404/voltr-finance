@@ -14,15 +14,11 @@ services:
       - postgres-network
   migrate:
     image: ghcr.io/amacneil/dbmate
-    entrypoint: ["sh"]
-    command: ["/db/init.sh"]
+    command: ["up"]
     volumes:
       - ./db:/db:rw
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
     env_file:
-      - .env
+      - .env.dbmate
     networks:
       - postgres-network
     profiles:
