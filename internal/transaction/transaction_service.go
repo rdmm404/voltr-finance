@@ -105,7 +105,7 @@ func (ts *TransactionService) UpdateTransactionsById(ctx context.Context, transa
 			continue
 		}
 
-		if existing, err := ts.repository.GetIdByTransactionId(ctx, transHash); err == nil {
+		if existing, err := ts.repository.GetIdByTransactionId(ctx, transHash); err == nil && existing != trans.ID {
 			result.Errors = append(result.Errors, TransactionError{Index: i, ID: existing, Err: ErrDuplicateTransaction})
 			continue
 		}
