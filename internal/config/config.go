@@ -15,6 +15,7 @@ var (
 	DISCORD_APP_ID               string
 	DISCORD_MAX_MESSAGE_LENGTH   int
 	DISCORD_EVENT_HANDLE_TIMEOUT time.Duration
+	DISCORD_CREATE_COMMANDS      bool
 
 	DB_USER      string
 	DB_PASSWORD  string
@@ -22,6 +23,8 @@ var (
 	DB_HOST      string
 	DB_PORT      string
 	DB_POOL_SIZE int
+
+	AGENT_MAX_TURNS int
 )
 
 func init() {
@@ -36,6 +39,7 @@ func init() {
 	DISCORD_APP_ID = GetEnvString("DISCORD_APP_ID", "")
 	DISCORD_MAX_MESSAGE_LENGTH = GetEnvInt("DISCORD_MAX_MESSAGE_LENGTH", 2000)
 	DISCORD_EVENT_HANDLE_TIMEOUT = time.Duration(GetEnvInt("DISCORD_EVENT_HANDLE_TIMEOUT", 300)) * time.Second
+	DISCORD_CREATE_COMMANDS = GetEnvBool("DISCORD_CREATE_COMMANDS", true)
 
 	logLevel := LogLevel(GetEnvString("LOG_LEVEL", "INFO"))
 	LOG_LEVEL = logLevel
@@ -51,4 +55,7 @@ func init() {
 	DB_NAME = GetEnvString("DB_NAME", "")
 	DB_PORT = GetEnvString("DB_PORT", "")
 	DB_POOL_SIZE = GetEnvInt("DB_POOL_SIZE", 5)
+
+	// agent
+	AGENT_MAX_TURNS = GetEnvInt("AGENT_MAX_TURNS", 10)
 }

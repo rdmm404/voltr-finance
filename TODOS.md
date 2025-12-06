@@ -37,16 +37,12 @@
   - [x] Link household to discord channel ID
   - [x] fix private messages
 
-- [ ] **RELEASE!!!!**
+- [x] **RELEASE!!!!**
 
-  - [ ] Deploy to server
-  - [ ] Set up CI/CD
-  - [ ] maybe use docker swarm / k8s
-  - [ ] Set up Mathesar for db access in the meantime
+  - [x] Deploy to server
+  - [x] Set up Mathesar for db access in the meantime
 
-- [ ] tools to get transactions using natural language
-
-  - [ ] sub agent with READ only sql access
+- [ ] Fix old discord image urls not working
 
 - [ ] Budget tracking
 
@@ -66,16 +62,24 @@
     - [ ] like if there is a picture of a receipt add each item to the breakdown
 
 - [ ] improve system prompt
-- [ ] csv report of transactions by date range
-- [ ] INVESTIGATE: extract timestamp from picture metadata
 
 - [ ] improve discord interactions
 
-  - [ ] Handle private messages correctly
+  - [x] Handle private messages correctly
   - [ ] TODO for errors as spoilers
   - [ ] Add tool calls with args and results in a non-intrusive way
   - [ ] Handle message mentions correctly
   - [ ] Consider only triggering bot if mentioned
+
+- [ ] Set up CI/CD
+- [ ] maybe use docker swarm / k8s
+
+- [ ] tools to get transactions using natural language
+
+  - [ ] sub agent with READ only sql access
+
+- [ ] csv report of transactions by date range
+- [ ] INVESTIGATE: extract timestamp from picture metadata
 
 - [ ] Improve logging and monitoring
 

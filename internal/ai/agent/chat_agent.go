@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"rdmm404/voltr-finance/internal/ai/tool"
+	"rdmm404/voltr-finance/internal/config"
 	"rdmm404/voltr-finance/internal/utils"
 	"strings"
 
@@ -93,7 +94,7 @@ func (a *chatAgent) chatFlow() chatFlow {
 				householdInfoMsg = householdInfoPrompt(household.ID, household.Name)
 			}
 
-			resp, err := genkit.Generate(
+			resp, genErr := genkit.Generate(
 				ctx,
 				a.g,
 				gai.WithTools(a.tp.GetAvailableTools()...),
@@ -134,29 +135,44 @@ func (a *chatAgent) chatFlow() chatFlow {
 					}
 					return nil
 				}),
-				gai.WithMaxTurns(3),
+				gai.WithMaxTurns(config.AGENT_MAX_TURNS),
 			)
-
-			if err != nil {
-				return "", fmt.Errorf("error while calling LLM %w", err)
-			}
 
 			a.trackUsage(resp)
 
-			for i := len(msgHistory) + 1; i < len(resp.Request.Messages); i++ {
-				msg := resp.Request.Messages[i]
-				if msg.Role == "" {
-					msg.Role = gai.RoleModel
-				}
-				switch msg.Role {
-				case gai.RoleModel, gai.RoleTool:
-					_, err = session.StoreMessage(ctx, msg, userID, nil)
-					if err != nil {
-						return "", errors.Join(ErrMessagePersistance, err)
+			// TODO find a better way to store intermediate messages
+			// right now on any error, resp will be nil so nothing will be saved
+			if resp != nil {
+				for i := len(msgHistory) + 1; i < len(resp.Request.Messages); i++ {
+					msg := resp.Request.Messages[i]
+					if msg.Role == "" {
+						msg.Role = gai.RoleModel
 					}
-				default:
-					slog.Warn("unexpected role received", "role", msg.Role)
+					switch msg.Role {
+					case gai.RoleModel, gai.RoleTool:
+						_, err = session.StoreMessage(ctx, msg, userID, nil)
+						if err != nil {
+							return "", errors.Join(ErrMessagePersistance, err)
+						}
+					default:
+						slog.Warn("unexpected role received", "role", msg.Role)
+					}
 				}
+			}
+
+			if genErr != nil {
+				var genkitErr *core.GenkitError
+				if !errors.As(genErr, &genkitErr) {
+					return "", fmt.Errorf("error while calling LLM: %w", genErr)
+				}
+
+				slog.Error("error while calling llm", "error", genkitErr)
+
+				if genkitErr.Status == core.ABORTED {
+					return "", fmt.Errorf("max iterations exceeded: %w", genErr)
+				}
+
+				return "", fmt.Errorf("error while calling LLM: %w", genErr)
 			}
 
 			// the model's message has an empty Role
@@ -179,6 +195,13 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 
 	go func() {
 		defer close(ch)
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("ChatAgent: recovered from panic", "error", r)
+				ch <- &AgentUpdate{Err: fmt.Errorf("panic in chat agent: %v", r)}
+			}
+		}()
+
 		var mb strings.Builder
 
 		a.flows.chat.Stream(ctx, input)(

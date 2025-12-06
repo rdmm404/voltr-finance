@@ -15,6 +15,7 @@ services:
       - DB_NAME=voltr_finance
       - DB_HOST=db
       - DB_PORT=5432
+      - DISCORD_CREATE_COMMANDS=false
     env_file:
       - .env
     depends_on:
