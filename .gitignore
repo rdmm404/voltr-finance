@@ -2,4 +2,4 @@
 .env.dbmate
 tmp
 .genkit
-*.key.*
+.secrets/*

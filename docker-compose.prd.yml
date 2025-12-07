@@ -8,6 +8,7 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
+      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/service_account
     env_file:
       - .env
     networks:
@@ -28,3 +29,6 @@ volumes:
 networks:
   postgres-network:
     external: true
+secrets:
+  service_account:
+    file: ./.secrets/service-account.key.json
