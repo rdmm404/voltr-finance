@@ -116,6 +116,10 @@ VALUES
     ($1, $2, $3, $4, $5)
 RETURNING id;
 
+-- name: UpdateMessageContents :exec
+UPDATE llm_message SET contents = $2 WHERE id = $1;
+
+
 -- name: ListLlmMessagesBySessionId :many
 SELECT
     sqlc.embed(m), sqlc.embed(u)

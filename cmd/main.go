@@ -11,6 +11,8 @@ import (
 	"rdmm404/voltr-finance/internal/database"
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/transaction"
+
+	"cloud.google.com/go/storage"
 )
 
 func main() {
@@ -26,7 +28,14 @@ func main() {
 
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 
-	sm, err := agent.NewSessionManager(db, repository)
+	client, err := storage.NewClient(ctx)
+	defer client.Close()
+	if err != nil {
+		slog.Error("Failed to initialize bucket client", "error", err)
+		panic(err)
+	}
+
+	sm, err := agent.NewSessionManager(db, repository, client)
 
 	if err != nil {
 		slog.Error("Failed to initialize session manager", "error", err)

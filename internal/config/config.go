@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	DEBUG     bool
-	LOG_LEVEL LogLevel
+	DEBUG       bool
+	LOG_LEVEL   LogLevel
+	ENVIRONMENT string
 
 	DISCORD_TOKEN                string
 	DISCORD_APP_ID               string
@@ -24,7 +25,8 @@ var (
 	DB_PORT      string
 	DB_POOL_SIZE int
 
-	AGENT_MAX_TURNS int
+	AGENT_MAX_TURNS         int
+	AGENT_MEDIA_BUCKET_NAME string
 )
 
 func init() {
@@ -33,6 +35,7 @@ func init() {
 	}
 	// general
 	DEBUG = GetEnvBool("DEBUG", true)
+	ENVIRONMENT = GetEnvString("ENVIRONMENT", "dev")
 
 	//discord
 	DISCORD_TOKEN = GetEnvString("DISCORD_TOKEN", "")
@@ -58,4 +61,5 @@ func init() {
 
 	// agent
 	AGENT_MAX_TURNS = GetEnvInt("AGENT_MAX_TURNS", 10)
+	AGENT_MEDIA_BUCKET_NAME = GetEnvString("AGENT_MEDIA_BUCKET_NAME", "")
 }

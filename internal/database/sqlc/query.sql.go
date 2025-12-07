@@ -405,6 +405,20 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 	return items, nil
 }
 
+const updateMessageContents = `-- name: UpdateMessageContents :exec
+UPDATE llm_message SET contents = $2 WHERE id = $1
+`
+
+type UpdateMessageContentsParams struct {
+	ID       int64  `json:"id"`
+	Contents []byte `json:"contents"`
+}
+
+func (q *Queries) UpdateMessageContents(ctx context.Context, arg UpdateMessageContentsParams) error {
+	_, err := q.db.Exec(ctx, updateMessageContents, arg.ID, arg.Contents)
+	return err
+}
+
 const updateTransactionById = `-- name: UpdateTransactionById :one
 UPDATE
     transaction
