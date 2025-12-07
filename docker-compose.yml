@@ -16,6 +16,7 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - DISCORD_CREATE_COMMANDS=false
+      - GOOGLE_CLOUD_LOCATION=us-central1
     env_file:
       - .env
     depends_on:

@@ -34,8 +34,8 @@ type chatAgent struct {
 func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager) (ChatAgent, error) {
 	g := genkit.Init(
 		ctx,
-		genkit.WithPlugins(&googlegenai.GoogleAI{}),
-		genkit.WithDefaultModel("googleai/gemini-2.5-flash"),
+		genkit.WithPlugins(&googlegenai.VertexAI{}),
+		genkit.WithDefaultModel("vertexai/gemini-2.5-flash"),
 	)
 
 	tp.Init(g)
