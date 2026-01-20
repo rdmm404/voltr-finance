@@ -3,6 +3,7 @@ package tool
 import (
 	"fmt"
 	"log/slog"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/transaction"
 	"rdmm404/voltr-finance/internal/utils"
 
@@ -23,6 +24,7 @@ type ToolProvider struct {
 
 type ToolDependencies struct {
 	Ts *transaction.TransactionService
+	ReadOnlyDB sqlc.DBTX
 }
 
 var toolFactories = []func(deps *ToolDependencies) (Tool, error){

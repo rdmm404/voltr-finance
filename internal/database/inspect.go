@@ -26,6 +26,7 @@ type Table struct {
 	Columns     []Column
 }
 
+// TODO add in-memory caching
 func InspectTables(ctx context.Context, queries *sqlc.Queries, tableNames []string) ([]*Table, error) {
 	if len(tableNames) == 0 {
 		return nil, fmt.Errorf("at least one table must be specified")

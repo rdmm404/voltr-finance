@@ -20,6 +20,8 @@ var (
 
 	DB_USER      string
 	DB_PASSWORD  string
+	DB_RO_USER      string
+	DB_RO_PASSWORD  string
 	DB_NAME      string
 	DB_HOST      string
 	DB_PORT      string
@@ -54,6 +56,8 @@ func init() {
 	// database
 	DB_USER = GetEnvString("DB_USER", "")
 	DB_PASSWORD = GetEnvString("DB_PASSWORD", "")
+	DB_RO_USER = GetEnvString("DB_RO_USER", "")
+	DB_RO_PASSWORD = GetEnvString("DB_RO_PASSWORD", "")
 	DB_HOST = GetEnvString("DB_HOST", "")
 	DB_NAME = GetEnvString("DB_NAME", "")
 	DB_PORT = GetEnvString("DB_PORT", "")

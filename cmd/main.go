@@ -24,11 +24,14 @@ func main() {
 	db := database.Init(ctx)
 	defer db.Close()
 
+	readOnlyDB := database.InitReadOnly(ctx)
+	defer readOnlyDB.Close()
+
 	repository := sqlc.New(db)
 
 	ts := transaction.NewTransactionService(db, repository)
 
-	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
+	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts, ReadOnlyDB: readOnlyDB})
 
 	client, err := storage.NewClient(ctx)
 	defer func() {

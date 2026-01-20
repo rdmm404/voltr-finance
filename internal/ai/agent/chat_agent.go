@@ -14,7 +14,6 @@ import (
 	gai "github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/core"
 	"github.com/firebase/genkit/go/genkit"
-	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
 type chatFlow = *core.Flow[*Message, string, *AgentUpdate]
@@ -33,15 +32,7 @@ type chatAgent struct {
 	db *sqlc.Queries
 }
 
-func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager, db *sqlc.Queries) (ChatAgent, error) {
-	g := genkit.Init(
-		ctx,
-		genkit.WithPlugins(&googlegenai.VertexAI{Location: "global"}),
-		genkit.WithDefaultModel("vertexai/gemini-2.5-flash"),
-	)
-
-	tp.Init(g)
-
+func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager, db *sqlc.Queries, g *genkit.Genkit) (ChatAgent, error) {
 	a := &chatAgent{
 		g:  g,
 		tp: tp,
