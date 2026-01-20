@@ -42,7 +42,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	a, err := agent.NewChatAgent(ctx, tp, sm)
+	a, err := agent.NewChatAgent(ctx, tp, sm, repository)
 
 	if err != nil {
 		slog.Error("Failed to initialize agent", "error", err)

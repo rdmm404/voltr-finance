@@ -42,7 +42,9 @@
   - [x] Deploy to server
   - [x] Set up Mathesar for db access in the meantime
 
-- [ ] Fix old discord image urls not working
+- [x] Fix old discord image urls not working
+
+- [x] Add household users to the household information
 
 - [ ] Budget tracking
 
@@ -96,6 +98,9 @@
 - [ ] command to "sign up"
   - [ ] Register household name and guild id
   - [ ] Register members of the server as users and assign to household
+
+REFACTOR
+- [ ] Create a service for querying user and household data that chat agent and bot call
 
 MAYBE
 

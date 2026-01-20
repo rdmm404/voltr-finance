@@ -166,6 +166,38 @@ func (q *Queries) GetHouseholdByGuildId(ctx context.Context, guildID string) (Ho
 	return i, err
 }
 
+const getHouseholdUsers = `-- name: GetHouseholdUsers :many
+SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at FROM users u
+JOIN household_user hu on hu.user_id = u.id
+WHERE hu.household_id = $1
+`
+
+func (q *Queries) GetHouseholdUsers(ctx context.Context, householdID int64) ([]User, error) {
+	rows, err := q.db.Query(ctx, getHouseholdUsers, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.DiscordID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIdByTransactionId = `-- name: GetIdByTransactionId :one
 SELECT id FROM transaction
 WHERE transaction_id = $1

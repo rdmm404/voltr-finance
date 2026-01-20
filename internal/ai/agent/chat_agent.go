@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"rdmm404/voltr-finance/internal/ai/tool"
 	"rdmm404/voltr-finance/internal/config"
+	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/utils"
 	"strings"
 
@@ -29,12 +30,13 @@ type chatAgent struct {
 	tp    *tool.ToolProvider
 	sm    *SessionManager
 	flows *flows
+	db *sqlc.Queries
 }
 
-func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager) (ChatAgent, error) {
+func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager, db *sqlc.Queries) (ChatAgent, error) {
 	g := genkit.Init(
 		ctx,
-		genkit.WithPlugins(&googlegenai.VertexAI{}),
+		genkit.WithPlugins(&googlegenai.VertexAI{Location: "global"}),
 		genkit.WithDefaultModel("vertexai/gemini-2.5-flash"),
 	)
 
@@ -44,6 +46,7 @@ func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager
 		g:  g,
 		tp: tp,
 		sm: sm,
+		db: db,
 	}
 
 	// TODO: Find a better way to do this
@@ -91,7 +94,16 @@ func (a *chatAgent) chatFlow() chatFlow {
 
 			householdInfoMsg := noHouseholdPromptTemplate
 			if household := msg.SenderInfo.Household; household != nil {
-				householdInfoMsg = householdInfoPrompt(household.ID, household.Name)
+				users, err := a.db.GetHouseholdUsers(ctx, household.ID)
+				if err != nil {
+					slog.Error("ChatAgent: error while getting users for household", "error", err)
+				}
+
+				usersForPrompt := make([]userDataForPrompt, 0, len(users))
+				for _, user := range users {
+					usersForPrompt = append(usersForPrompt, userDataForPrompt{userId: int(user.ID), userName: user.Name})
+				}
+				householdInfoMsg, err = householdInfoPrompt(household.ID, household.Name, usersForPrompt)
 			}
 
 			resp, genErr := genkit.Generate(

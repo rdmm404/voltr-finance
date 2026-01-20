@@ -244,7 +244,7 @@ func dbMessageToGenkit(msg *sqlc.LlmMessage, user *sqlc.User) (*gai.Message, err
 			msgParts = append(msgParts, part)
 		}
 
-		msgText, err := userMsgPrompt(int(msg.UserID), user.Name, aiMsg.Text(), len(msgParts))
+		msgText, err := userMsgPrompt(userDataForPrompt{userId: int(msg.UserID), userName: user.Name}, aiMsg.Text(), len(msgParts))
 		if err != nil {
 			return nil, fmt.Errorf("invalid database message %q: %w", msg.ID, err)
 		}

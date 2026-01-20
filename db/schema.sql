@@ -1,3 +1,8 @@
+\restrict dbmate
+
+-- Dumped from database version 18.1 (Debian 18.1-1.pgdg13+2)
+-- Dumped by pg_dump version 18.1
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -522,6 +527,8 @@ ALTER TABLE ONLY transactions.transaction
 --
 -- PostgreSQL database dump complete
 --
+
+\unrestrict dbmate
 
 
 --

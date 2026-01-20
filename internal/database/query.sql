@@ -91,6 +91,11 @@ WHERE discord_id = $1 and hu.household_id = $2;
 -- name: GetHouseholdByGuildId :one
 SELECT * from household where guild_id = $1;
 
+-- name: GetHouseholdUsers :many
+SELECT u.* FROM users u
+JOIN household_user hu on hu.user_id = u.id
+WHERE hu.household_id = $1;
+
 -- ******************* LLM *******************
 -- Session
 -- name: CreateLlmSession :one

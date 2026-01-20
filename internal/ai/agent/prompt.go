@@ -61,6 +61,29 @@ func systemPrompt(defaultPercentage float32) (string, error) {
 	), nil
 }
 
+type userDataForPrompt struct {
+	userId int
+	userName string
+}
+
+const userDataPromptTemplate = `
+<user-data>
+- ID: %v
+- Name: %q
+</user-data>
+`
+
+func userDataPrompt(user userDataForPrompt) (string, error) {
+	if user.userId == 0 {
+		return "", fmt.Errorf("user is required")
+	}
+	if user.userName == "" {
+		return "", fmt.Errorf("name is required")
+	}
+
+	return fmt.Sprintf(userDataPromptTemplate, user.userId, user.userName), nil
+}
+
 const userMsgPromptTemplate = `
 This is a message sent by the human:
 
@@ -69,18 +92,10 @@ This is a message sent by the human:
 </message>
 
 The following information belongs to the mesage sender:
-
-<user-data>
-- ID: %v
-- Name: %q
-</user-data>
+%s
 `
 
-func userMsgPrompt(userId int, userName string, msg string, attachmentCount int) (string, error) {
-	if userId == 0 {
-		return "", fmt.Errorf("user is required")
-	}
-
+func userMsgPrompt(user userDataForPrompt, msg string, attachmentCount int) (string, error) {
 	if msg == "" && attachmentCount == 0 {
 		return "", fmt.Errorf("either msg or attachments must be set")
 	}
@@ -100,11 +115,15 @@ func userMsgPrompt(userId int, userName string, msg string, attachmentCount int)
 		mb.WriteString("</attachments>\n")
 	}
 
+	userData, err := userDataPrompt(user)
+	if err != nil {
+		return "", fmt.Errorf("error formatting user data: %w", err)
+	}
+
 	return fmt.Sprintf(
 		userMsgPromptTemplate,
 		mb.String(),
-		userId,
-		userName,
+		userData,
 	), nil
 }
 
@@ -113,10 +132,25 @@ const householdInfoPromptTemplate = `
 - ID: %v
 - Name: %q
 </household-data>
+<household-members>
+%s
+</household-members>
 `
+func householdInfoPrompt(householdId int64, householdName string, householdUsers []userDataForPrompt) (string, error) {
+	var sb strings.Builder
+	for _, user := range householdUsers {
+		userPrompt, err := userDataPrompt(user)
+		if err != nil {
+			return "", fmt.Errorf("error formatting user data: %w", err)
+		}
+		sb.WriteString(userPrompt)
+		sb.WriteString("\n")
+	}
 
-func householdInfoPrompt(householdId int64, householdName string) string {
-	return fmt.Sprintf(householdInfoPromptTemplate, householdId, householdName)
+	if sb.Len() == 0 {
+		sb.WriteString("No member in household.")
+	}
+	return fmt.Sprintf(householdInfoPromptTemplate, householdId, householdName, sb.String()), nil
 }
 
 const noHouseholdPromptTemplate = `
