@@ -136,3 +136,66 @@ WHERE
     m.session_id = $1
 ORDER BY
     m.created_at ASC;
+
+
+-- ******************* sql metadata *******************
+
+-- name: GetTableAndColumnMetadata :many
+SELECT
+  t.table_schema::text AS schema_name,
+  t.table_name::text AS table_name,
+  COALESCE(obj_description(pgc.oid, 'pg_class'), '')::text AS table_description,
+  c.column_name::text AS column_name,
+  c.data_type::text AS data_type,
+  COALESCE(col_description(pgc.oid, c.ordinal_position), '')::text AS column_description,
+  (c.is_nullable = 'YES')::boolean AS is_nullable,
+  -- Check if part of any index
+  EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index i
+    WHERE i.indrelid = pgc.oid
+      AND c.ordinal_position = ANY(i.indkey)
+  )::boolean AS is_indexed,
+  -- Check if part of a unique index
+  EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index i
+    WHERE i.indrelid = pgc.oid
+      AND i.indisunique = true
+      AND c.ordinal_position = ANY(i.indkey)
+  )::boolean AS is_unique,
+  -- 1. Foreign Key in format table.column
+  COALESCE(
+    (
+      SELECT ta.relname || '.' || fa.attname
+      FROM pg_catalog.pg_constraint con
+      JOIN pg_catalog.pg_class ta ON con.confrelid = ta.oid
+      JOIN pg_catalog.pg_attribute fa ON fa.attrelid = con.confrelid AND fa.attnum = ANY(con.confkey)
+      WHERE con.conrelid = pgc.oid
+        AND con.contype = 'f'
+        AND c.ordinal_position = ANY(con.conkey)
+      LIMIT 1
+    ),
+    ''
+  )::text AS foreign_key_target,
+  -- 3. Primary Key Identity
+  EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint con
+    WHERE con.conrelid = pgc.oid
+      AND con.contype = 'p'
+      AND c.ordinal_position = ANY(con.conkey)
+  )::boolean AS is_primary_key
+FROM
+  information_schema.tables t
+  JOIN pg_catalog.pg_class pgc ON t.table_name = pgc.relname
+  JOIN pg_catalog.pg_namespace pgn ON pgc.relnamespace = pgn.oid
+  AND t.table_schema = pgn.nspname
+  JOIN information_schema.columns c ON t.table_name = c.table_name
+  AND t.table_schema = c.table_schema
+WHERE
+  t.table_schema = 'transactions'
+  AND t.table_name = ANY(sqlc.arg(table_names)::TEXT[])
+ORDER BY
+  t.table_name,
+  c.ordinal_position;

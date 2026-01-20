@@ -13,6 +13,8 @@ import (
 	"rdmm404/voltr-finance/internal/transaction"
 
 	"cloud.google.com/go/storage"
+	"github.com/firebase/genkit/go/genkit"
+	"github.com/firebase/genkit/go/plugins/googlegenai"
 )
 
 func main() {
@@ -29,7 +31,12 @@ func main() {
 	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts})
 
 	client, err := storage.NewClient(ctx)
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			slog.Error("Failed to close storage client", "error", err)
+		}
+	}()
+
 	if err != nil {
 		slog.Error("Failed to initialize bucket client", "error", err)
 		panic(err)
@@ -42,7 +49,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	a, err := agent.NewChatAgent(ctx, tp, sm, repository)
+	g := genkit.Init(
+		ctx,
+		genkit.WithPlugins(&googlegenai.VertexAI{Location: "global"}),
+		genkit.WithDefaultModel("vertexai/gemini-2.5-flash"),
+	)
+
+	tp.Init(g)
+
+	a, err := agent.NewChatAgent(ctx, tp, sm, repository, g)
 
 	if err != nil {
 		slog.Error("Failed to initialize agent", "error", err)

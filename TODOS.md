@@ -45,10 +45,12 @@
 - [x] Fix old discord image urls not working
 
 - [x] Add household users to the household information
+- [ ] tools to get transactions using natural language
 
 - [ ] Budget tracking
 
   - [ ] DB to store budget allocation per user (or percentage split) (maybe automatic based on income?) (or maybe assign categories to people)
+  - [ ] Figure out (or remove) "type" column
   - [ ] Add some default budget categories
   - [ ] Allocate budget using natural language
   - [ ] Automatically get category from similar transactions
@@ -75,8 +77,6 @@
 
 - [ ] Set up CI/CD
 - [ ] maybe use docker swarm / k8s
-
-- [ ] tools to get transactions using natural language
 
   - [ ] sub agent with READ only sql access
 

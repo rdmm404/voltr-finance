@@ -8,37 +8,57 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// Defines a financial plan, which can be assigned to either an individual or a household.
 type Budget struct {
-	ID          int64              `json:"id"`
-	UserID      *int64             `json:"userId"`
+	// Internal unique identifier for the budget.
+	ID int64 `json:"id"`
+	// Optional reference to a specific user for personal budgets.
+	UserID *int64 `json:"userId"`
+	// Optional reference to a household for shared group budgets.
 	HouseholdID *int64             `json:"householdId"`
 	Type        string             `json:"type"`
 	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
 	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
 }
 
+// Breaks down a budget into specific spending areas with allocated funds.
 type BudgetCategory struct {
-	ID           int64              `json:"id"`
-	BudgetID     *int64             `json:"budgetId"`
-	CategoryName string             `json:"categoryName"`
-	Allocation   float32            `json:"allocation"`
-	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
-	UpdatedAt    pgtype.Timestamptz `json:"updatedAt"`
+	// Internal unique identifier for the budget category.
+	ID int64 `json:"id"`
+	// Reference to the parent budget.
+	BudgetID *int64 `json:"budgetId"`
+	// The label for the spending category (e.g., Groceries, Rent).
+	CategoryName string `json:"categoryName"`
+	// The total amount of currency allocated to this category.
+	Allocation float32            `json:"allocation"`
+	CreatedAt  pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt  pgtype.Timestamptz `json:"updatedAt"`
 }
 
+// Groups users together into a shared financial unit, linked to a Discord server.
 type Household struct {
-	ID        int64              `json:"id"`
-	Name      string             `json:"name"`
-	GuildID   string             `json:"guildId"`
+	// Internal unique identifier for the household.
+	ID int64 `json:"id"`
+	// A unique human-readable name for the household group.
+	Name string `json:"name"`
+	// The Discord Guild (server) ID associated with this household.
+	GuildID string `json:"guildId"`
+	// Timestamp when the household was established.
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	// Timestamp of the last update to household metadata.
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
+// A join table representing the many-to-many relationship between users and households.
 type HouseholdUser struct {
-	HouseholdID int64              `json:"householdId"`
-	UserID      int64              `json:"userId"`
-	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
-	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
+	// Reference to the household.
+	HouseholdID int64 `json:"householdId"`
+	// Reference to the user.
+	UserID int64 `json:"userId"`
+	// Timestamp when the user joined the household.
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	// Timestamp of the last change to this membership record.
+	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
 type LlmMessage struct {
@@ -60,24 +80,40 @@ type LlmSession struct {
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
+// Records individual financial movements including amount, author, and categorization.
 type Transaction struct {
-	ID               int64              `json:"id"`
-	Amount           float32            `json:"amount"`
-	AuthorID         int64              `json:"authorId"`
-	BudgetCategoryID *int64             `json:"budgetCategoryId"`
-	Description      *string            `json:"description"`
-	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
-	TransactionID    string             `json:"transactionId"`
-	HouseholdID      *int64             `json:"householdId"`
-	Notes            *string            `json:"notes"`
-	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
-	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
+	// Internal unique identifier for the transaction.
+	ID int64 `json:"id"`
+	// The numerical value of the transaction. If positive, it indicates an expense; if negative, income.
+	Amount float32 `json:"amount"`
+	// The user who created or is responsible for the transaction.
+	AuthorID int64 `json:"authorId"`
+	// Optional reference to link the transaction to a budget category.
+	BudgetCategoryID *int64 `json:"budgetCategoryId"`
+	// A short summary of the transaction purpose.
+	Description *string `json:"description"`
+	// The actual date and time the financial event occurred.
+	TransactionDate pgtype.Timestamptz `json:"transactionDate"`
+	// A unique hash or external identifier to prevent duplicate entries.
+	TransactionID string `json:"transactionId"`
+	// The household context in which this transaction took place.
+	HouseholdID *int64 `json:"householdId"`
+	// Extended details or commentary regarding the transaction.
+	Notes     *string            `json:"notes"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }
 
+// Stores identity information for individuals linked to Discord accounts.
 type User struct {
-	ID        int64              `json:"id"`
-	DiscordID string             `json:"discordId"`
-	Name      string             `json:"name"`
+	// Internal unique identifier for the user.
+	ID int64 `json:"id"`
+	// The unique ID provided by the Discord API.
+	DiscordID string `json:"discordId"`
+	// The display name or username of the Discord user.
+	Name string `json:"name"`
+	// Timestamp when the user record was first created.
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
+	// Timestamp of the most recent modification to the user record.
 	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
 }

@@ -210,6 +210,115 @@ func (q *Queries) GetIdByTransactionId(ctx context.Context, transactionID string
 	return id, err
 }
 
+const getTableAndColumnMetadata = `-- name: GetTableAndColumnMetadata :many
+
+SELECT
+  t.table_schema::text AS schema_name,
+  t.table_name::text AS table_name,
+  COALESCE(obj_description(pgc.oid, 'pg_class'), '')::text AS table_description,
+  c.column_name::text AS column_name,
+  c.data_type::text AS data_type,
+  COALESCE(col_description(pgc.oid, c.ordinal_position), '')::text AS column_description,
+  (c.is_nullable = 'YES')::boolean AS is_nullable,
+  -- Check if part of any index
+  EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index i
+    WHERE i.indrelid = pgc.oid
+      AND c.ordinal_position = ANY(i.indkey)
+  )::boolean AS is_indexed,
+  -- Check if part of a unique index
+  EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index i
+    WHERE i.indrelid = pgc.oid
+      AND i.indisunique = true
+      AND c.ordinal_position = ANY(i.indkey)
+  )::boolean AS is_unique,
+  -- 1. Foreign Key in format table.column
+  COALESCE(
+    (
+      SELECT ta.relname || '.' || fa.attname
+      FROM pg_catalog.pg_constraint con
+      JOIN pg_catalog.pg_class ta ON con.confrelid = ta.oid
+      JOIN pg_catalog.pg_attribute fa ON fa.attrelid = con.confrelid AND fa.attnum = ANY(con.confkey)
+      WHERE con.conrelid = pgc.oid
+        AND con.contype = 'f'
+        AND c.ordinal_position = ANY(con.conkey)
+      LIMIT 1
+    ),
+    ''
+  )::text AS foreign_key_target,
+  -- 3. Primary Key Identity
+  EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint con
+    WHERE con.conrelid = pgc.oid
+      AND con.contype = 'p'
+      AND c.ordinal_position = ANY(con.conkey)
+  )::boolean AS is_primary_key
+FROM
+  information_schema.tables t
+  JOIN pg_catalog.pg_class pgc ON t.table_name = pgc.relname
+  JOIN pg_catalog.pg_namespace pgn ON pgc.relnamespace = pgn.oid
+  AND t.table_schema = pgn.nspname
+  JOIN information_schema.columns c ON t.table_name = c.table_name
+  AND t.table_schema = c.table_schema
+WHERE
+  t.table_schema = 'transactions'
+  AND t.table_name = ANY($1::TEXT[])
+ORDER BY
+  t.table_name,
+  c.ordinal_position
+`
+
+type GetTableAndColumnMetadataRow struct {
+	SchemaName        string `json:"schemaName"`
+	TableName         string `json:"tableName"`
+	TableDescription  string `json:"tableDescription"`
+	ColumnName        string `json:"columnName"`
+	DataType          string `json:"dataType"`
+	ColumnDescription string `json:"columnDescription"`
+	IsNullable        bool   `json:"isNullable"`
+	IsIndexed         bool   `json:"isIndexed"`
+	IsUnique          bool   `json:"isUnique"`
+	ForeignKeyTarget  string `json:"foreignKeyTarget"`
+	IsPrimaryKey      bool   `json:"isPrimaryKey"`
+}
+
+// ******************* sql metadata *******************
+func (q *Queries) GetTableAndColumnMetadata(ctx context.Context, tableNames []string) ([]GetTableAndColumnMetadataRow, error) {
+	rows, err := q.db.Query(ctx, getTableAndColumnMetadata, tableNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTableAndColumnMetadataRow
+	for rows.Next() {
+		var i GetTableAndColumnMetadataRow
+		if err := rows.Scan(
+			&i.SchemaName,
+			&i.TableName,
+			&i.TableDescription,
+			&i.ColumnName,
+			&i.DataType,
+			&i.ColumnDescription,
+			&i.IsNullable,
+			&i.IsIndexed,
+			&i.IsUnique,
+			&i.ForeignKeyTarget,
+			&i.IsPrimaryKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTransactionById = `-- name: GetTransactionById :one
 
 SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
