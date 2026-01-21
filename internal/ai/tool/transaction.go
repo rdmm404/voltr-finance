@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/firebase/genkit/go/ai"
-	"github.com/firebase/genkit/go/genkit"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -50,8 +49,8 @@ func (st *saveTransactionsTool) Description() string {
 	return "This function will store the specified transactions in database."
 }
 
-func (st *saveTransactionsTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
-	return DefineTool(tp, g, st, st.execute)
+func (st *saveTransactionsTool) Create(tp *ToolProvider) ai.Tool {
+	return DefineTool(tp, st, st.execute)
 }
 
 func (st *saveTransactionsTool) execute(ctx *ai.ToolContext, input *SaveTransactionsInput) (string, error) {
@@ -105,8 +104,8 @@ func (ut *updateTransactionsByIdTool) Description() string {
 	return "Use this function to set the specified data to the transactions with the provided IDs. You must provide complete data regarding the transaction, if you don't have it please use the GetTransactions tool to get it."
 }
 
-func (ut *updateTransactionsByIdTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
-	return DefineTool(tp, g, ut, ut.execute)
+func (ut *updateTransactionsByIdTool) Create(tp *ToolProvider) ai.Tool {
+	return DefineTool(tp, ut, ut.execute)
 }
 
 func (ut *updateTransactionsByIdTool) execute(ctx *ai.ToolContext, input UpdateTransactionsByIdInput) (string, error) {
@@ -155,8 +154,8 @@ func (gt *getTransactionsTool) Description() string {
 	return "Get the details for the transactions with the provided IDs. If you have multiple transactions you want to get the details for, call this tool ONCE with a list of IDs."
 }
 
-func (gt *getTransactionsTool) Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool {
-	return DefineTool(tp, g, gt, gt.execute)
+func (gt *getTransactionsTool) Create(tp *ToolProvider) ai.Tool {
+	return DefineTool(tp, gt, gt.execute)
 }
 
 func (gt *getTransactionsTool) execute(ctx *ai.ToolContext, input GetTransactionsInput) (string, error) {

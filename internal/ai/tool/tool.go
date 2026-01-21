@@ -14,7 +14,7 @@ import (
 type Tool interface {
 	Name() string
 	Description() string
-	Create(g *genkit.Genkit, tp *ToolProvider) ai.Tool
+	Create(tp *ToolProvider) ai.Tool
 }
 
 type ToolProvider struct {
@@ -25,25 +25,27 @@ type ToolProvider struct {
 type ToolDependencies struct {
 	Ts *transaction.TransactionService
 	ReadOnlyDB sqlc.DBTX
+	Genkit *genkit.Genkit
 }
 
 var toolFactories = []func(deps *ToolDependencies) (Tool, error){
 	NewSaveTransactionsTool,
 	NewGetTransactionsTool,
 	NewUpdateTransactionsByIdTool,
+	NewQueryTool,
 }
 
 func NewToolProvider(deps *ToolDependencies) *ToolProvider {
 	return &ToolProvider{deps: deps}
 }
 
-func (tp *ToolProvider) Init(g *genkit.Genkit) error {
+func (tp *ToolProvider) Init() error {
 	for _, toolFactory := range toolFactories {
 		tool, err := toolFactory(tp.deps)
 		if err != nil {
 			return fmt.Errorf("error while creating tool - %w", err)
 		}
-		tp.allTools = append(tp.allTools, tool.Create(g, tp))
+		tp.allTools = append(tp.allTools, tool.Create(tp))
 	}
 	return nil
 }
@@ -58,12 +60,11 @@ func (tp *ToolProvider) GetAvailableTools() []ai.ToolRef {
 
 func DefineTool[I any, O any](
 	tp *ToolProvider,
-	g *genkit.Genkit,
 	tool Tool,
 	handler ai.ToolFunc[I, O],
 ) ai.Tool {
 	return genkit.DefineTool(
-		g,
+		tp.deps.Genkit,
 		tool.Name(),
 		tool.Description(),
 		func(ctx *ai.ToolContext, input I) (O, error) {

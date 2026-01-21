@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/storage v1.56.0
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/cespare/xxhash v1.1.0
-	github.com/firebase/genkit/go v1.2.0
+	github.com/firebase/genkit/go v1.4.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
@@ -72,7 +72,7 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/api v0.247.0 // indirect
-	google.golang.org/genai v1.30.0 // indirect
+	google.golang.org/genai v1.41.0 // indirect
 	google.golang.org/genproto v0.0.0-20250721164621-a45f3dfb1074 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250721164621-a45f3dfb1074 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250818200422-3122310a409c // indirect

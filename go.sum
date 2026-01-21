@@ -57,6 +57,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/firebase/genkit/go v1.2.0 h1:C31p32vdMZhhSSQQvXouH/kkcleTH4jlgFmpqlJtBS4=
 github.com/firebase/genkit/go v1.2.0/go.mod h1:ru1cIuxG1s3HeUjhnadVveDJ1yhinj+j+uUh0f0pyxE=
+github.com/firebase/genkit/go v1.4.0 h1:CP1hNWk7z0hosyY53zMH6MFKFO1fMLtj58jGPllQo6I=
+github.com/firebase/genkit/go v1.4.0/go.mod h1:HX6m7QOaGc3MDNr/DrpQZrzPLzxeuLxrkTvfFtCYlGw=
 github.com/go-jose/go-jose/v4 v4.1.0 h1:cYSYxd3pw5zd2FSXk2vGdn9igQU2PS8MuxrCOCl0FdY=
 github.com/go-jose/go-jose/v4 v4.1.0/go.mod h1:GG/vqmYm3Von2nYiB2vGTXzdoNKE5tix5tuc6iAd+sw=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
@@ -182,6 +184,8 @@ google.golang.org/api v0.247.0 h1:tSd/e0QrUlLsrwMKmkbQhYVa109qIintOls2Wh6bngc=
 google.golang.org/api v0.247.0/go.mod h1:r1qZOPmxXffXg6xS5uhx16Fa/UFY8QU/K4bfKrnvovM=
 google.golang.org/genai v1.30.0 h1:7021aneIvl24nEBLbtQFEWleHsMbjzpcQvkT4WcJ1dc=
 google.golang.org/genai v1.30.0/go.mod h1:7pAilaICJlQBonjKKJNhftDFv3SREhZcTe9F6nRcjbg=
+google.golang.org/genai v1.41.0 h1:ayXl75LjTmqTu0y94yr96d17gIb4zF8gWVzX2TgioEY=
+google.golang.org/genai v1.41.0/go.mod h1:A3kkl0nyBjyFlNjgxIwKq70julKbIxpSxqKO5gw/gmk=
 google.golang.org/genproto v0.0.0-20250721164621-a45f3dfb1074 h1:OC4JjCnGdf5dQ5lMsq3KOGmd0xFXTeeo4h8QFoiLQhA=
 google.golang.org/genproto v0.0.0-20250721164621-a45f3dfb1074/go.mod h1:ZIjaIRmV0lzMh6VMUdtRvj3TTfpe0uA3cHt3skrCdSQ=
 google.golang.org/genproto/googleapis/api v0.0.0-20250721164621-a45f3dfb1074 h1:mVXdvnmR3S3BQOqHECm9NGMjYiRtEvDYcqAqedTXY6s=

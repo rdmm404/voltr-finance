@@ -31,8 +31,6 @@ func main() {
 
 	ts := transaction.NewTransactionService(db, repository)
 
-	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts, ReadOnlyDB: readOnlyDB})
-
 	client, err := storage.NewClient(ctx)
 	defer func() {
 		if err := client.Close(); err != nil {
@@ -58,7 +56,8 @@ func main() {
 		genkit.WithDefaultModel("vertexai/gemini-2.5-flash"),
 	)
 
-	tp.Init(g)
+	tp := tool.NewToolProvider(&tool.ToolDependencies{Ts: ts, ReadOnlyDB: readOnlyDB, Genkit: g})
+	tp.Init()
 
 	a, err := agent.NewChatAgent(ctx, tp, sm, repository, g)
 

@@ -108,7 +108,7 @@ func (b *Bot) handlerMessageCreate(ctx context.Context, s *discordgo.Session, m 
 		return nil
 	}
 
-	slog.Debug("message received", "message", utils.JsonMarshalIgnore(m))
+	slog.Info("message received", "message", utils.JsonMarshalIgnore(m))
 
 	s.ChannelTyping(m.ChannelID)
 
