@@ -121,6 +121,7 @@ func (qt *QueryTool) execute(ctx *ai.ToolContext, input QueryInput) (string, err
 	}
 
 	if resp.FinishReason != ai.FinishReasonInterrupted {
+		slog.Error("QueryTool: unexpected interruption received", "response", utils.JsonMarshalIgnore(resp))
 		return fmt.Sprintf("unexpected response received while calling agent: %v", resp), nil
 	}
 
