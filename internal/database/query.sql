@@ -113,6 +113,17 @@ WHERE
     source_id = $1
 ORDER BY created_at DESC;
 
+-- name: GetAndLockActiveSessionBySourceId :one
+SELECT FOR UPDATE
+    *
+FROM
+    llm_session
+WHERE
+    source_id = $1
+ORDER BY created_at DESC
+LIMIT 1;
+
+
 -- Messages
 -- name: CreateLlmMessage :one
 INSERT INTO

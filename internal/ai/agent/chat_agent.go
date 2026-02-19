@@ -196,6 +196,13 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 
 	ch := make(chan *AgentUpdate)
 
+	// get session with SELECT FOR UPDATE (lock row)
+	// check replying_to field
+	// if not set, set it to the user's message
+	// if set:
+	// to same user as this message -> cancel previous reply, use this run to reply to both messages
+	// to different user -> wait until done replying (how)
+
 	go func() {
 		defer close(ch)
 		defer func() {
