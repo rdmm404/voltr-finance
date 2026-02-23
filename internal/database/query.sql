@@ -100,9 +100,12 @@ WHERE hu.household_id = $1;
 -- Session
 -- name: CreateLlmSession :one
 INSERT INTO
-    llm_session (user_id, source_id)
+    llm_session (user_id, source_id, replying_to_user_id)
 VALUES
-    ($1, $2) RETURNING *;
+    ($1, $2, $3) RETURNING *;
+
+-- name: UpdateSessionReplyingTo :exec
+UPDATE llm_session SET replying_to_user_id = $2 WHERE id = $1;
 
 -- name: GetActiveSessionBySourceId :one
 SELECT
@@ -114,14 +117,15 @@ WHERE
 ORDER BY created_at DESC;
 
 -- name: GetAndLockActiveSessionBySourceId :one
-SELECT FOR UPDATE
+SELECT
     *
 FROM
     llm_session
 WHERE
     source_id = $1
 ORDER BY created_at DESC
-LIMIT 1;
+LIMIT 1
+FOR UPDATE;
 
 
 -- Messages

@@ -43,20 +43,21 @@ func (q *Queries) CreateLlmMessage(ctx context.Context, arg CreateLlmMessagePara
 
 const createLlmSession = `-- name: CreateLlmSession :one
 INSERT INTO
-    llm_session (user_id, source_id)
+    llm_session (user_id, source_id, replying_to_user_id)
 VALUES
-    ($1, $2) RETURNING id, user_id, source_id, created_at, updated_at
+    ($1, $2, $3) RETURNING id, user_id, source_id, created_at, updated_at, replying_to_user_id
 `
 
 type CreateLlmSessionParams struct {
-	UserID   int64  `json:"userId"`
-	SourceID string `json:"sourceId"`
+	UserID           int64  `json:"userId"`
+	SourceID         string `json:"sourceId"`
+	ReplyingToUserID *int64 `json:"replyingToUserId"`
 }
 
 // ******************* LLM *******************
 // Session
 func (q *Queries) CreateLlmSession(ctx context.Context, arg CreateLlmSessionParams) (LlmSession, error) {
-	row := q.db.QueryRow(ctx, createLlmSession, arg.UserID, arg.SourceID)
+	row := q.db.QueryRow(ctx, createLlmSession, arg.UserID, arg.SourceID, arg.ReplyingToUserID)
 	var i LlmSession
 	err := row.Scan(
 		&i.ID,
@@ -64,6 +65,7 @@ func (q *Queries) CreateLlmSession(ctx context.Context, arg CreateLlmSessionPara
 		&i.SourceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReplyingToUserID,
 	)
 	return i, err
 }
@@ -128,7 +130,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 
 const getActiveSessionBySourceId = `-- name: GetActiveSessionBySourceId :one
 SELECT
-    id, user_id, source_id, created_at, updated_at
+    id, user_id, source_id, created_at, updated_at, replying_to_user_id
 FROM
     llm_session
 WHERE
@@ -145,6 +147,33 @@ func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID strin
 		&i.SourceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReplyingToUserID,
+	)
+	return i, err
+}
+
+const getAndLockActiveSessionBySourceId = `-- name: GetAndLockActiveSessionBySourceId :one
+SELECT
+    id, user_id, source_id, created_at, updated_at, replying_to_user_id
+FROM
+    llm_session
+WHERE
+    source_id = $1
+ORDER BY created_at DESC
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) GetAndLockActiveSessionBySourceId(ctx context.Context, sourceID string) (LlmSession, error) {
+	row := q.db.QueryRow(ctx, getAndLockActiveSessionBySourceId, sourceID)
+	var i LlmSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.SourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReplyingToUserID,
 	)
 	return i, err
 }
@@ -557,6 +586,20 @@ type UpdateMessageContentsParams struct {
 
 func (q *Queries) UpdateMessageContents(ctx context.Context, arg UpdateMessageContentsParams) error {
 	_, err := q.db.Exec(ctx, updateMessageContents, arg.ID, arg.Contents)
+	return err
+}
+
+const updateSessionReplyingTo = `-- name: UpdateSessionReplyingTo :exec
+UPDATE llm_session SET replying_to_user_id = $2 WHERE id = $1
+`
+
+type UpdateSessionReplyingToParams struct {
+	ID               int64  `json:"id"`
+	ReplyingToUserID *int64 `json:"replyingToUserId"`
+}
+
+func (q *Queries) UpdateSessionReplyingTo(ctx context.Context, arg UpdateSessionReplyingToParams) error {
+	_, err := q.db.Exec(ctx, updateSessionReplyingTo, arg.ID, arg.ReplyingToUserID)
 	return err
 }
 

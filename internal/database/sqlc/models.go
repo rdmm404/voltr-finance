@@ -73,11 +73,12 @@ type LlmMessage struct {
 }
 
 type LlmSession struct {
-	ID        int64              `json:"id"`
-	UserID    int64              `json:"userId"`
-	SourceID  string             `json:"sourceId"`
-	CreatedAt pgtype.Timestamptz `json:"createdAt"`
-	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
+	ID               int64              `json:"id"`
+	UserID           int64              `json:"userId"`
+	SourceID         string             `json:"sourceId"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
+	ReplyingToUserID *int64             `json:"replyingToUserId"`
 }
 
 // Records individual financial movements including amount, author, and categorization.

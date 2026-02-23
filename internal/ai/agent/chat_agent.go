@@ -16,7 +16,13 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 )
 
-type chatFlow = *core.Flow[*Message, string, *AgentUpdate]
+type chatFlowInput struct {
+	msg *Message
+	session *Session
+}
+
+type chatFlow = *core.Flow[chatFlowInput, string, *AgentUpdate]
+
 
 type flows struct {
 	chat chatFlow
@@ -50,31 +56,17 @@ func NewChatAgent(ctx context.Context, tp *tool.ToolProvider, sm *SessionManager
 
 func (a *chatAgent) chatFlow() chatFlow {
 	return genkit.DefineStreamingFlow(a.g, "chat",
-		func(ctx context.Context, msg *Message, callback core.StreamCallback[*AgentUpdate]) (string, error) {
+		func(ctx context.Context, input chatFlowInput, callback core.StreamCallback[*AgentUpdate]) (string, error) {
+			msg := input.msg
+			session := input.session
+			userID := msg.SenderInfo.User.ID
+
 			if msg == nil {
 				return "", errors.New("message is required")
 			}
 
 			if (len(msg.Attachments) == 0) && msg.Msg == "" {
 				return "", errors.New("at least one of (img, msg) must be set")
-			}
-
-			userID := msg.SenderInfo.User.ID
-
-			session, err := a.sm.GetOrCreateSession(ctx, msg.SenderInfo.ChannelID, userID)
-
-			if err != nil {
-				return "", errors.Join(ErrMessagePersistance, err)
-			}
-
-			genkitMsg, err := msg.ToGenkit()
-
-			if err != nil {
-				return "", fmt.Errorf("invalid message provided %w", err)
-			}
-
-			if _, err = session.StoreMessage(ctx, genkitMsg, userID, nil); err != nil {
-				return "", errors.Join(ErrMessagePersistance, err)
 			}
 
 			msgHistory, err := session.GetMessageHistory(ctx)
@@ -189,19 +181,29 @@ func (a *chatAgent) chatFlow() chatFlow {
 	)
 }
 
-func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
+func (a *chatAgent) Run(ctx context.Context, msg *Message, mode StreamingMode) (<-chan *AgentUpdate, error) {
 	if !mode.Valid() {
 		return nil, fmt.Errorf("invalid streaming mode received %v", mode)
 	}
 
 	ch := make(chan *AgentUpdate)
 
-	// get session with SELECT FOR UPDATE (lock row)
-	// check replying_to field
-	// if not set, set it to the user's message
-	// if set:
-	// to same user as this message -> cancel previous reply, use this run to reply to both messages
-	// to different user -> wait until done replying (how)
+	session, err := a.sm.GetOrCreateSession(ctx, msg.SenderInfo.ChannelID, msg.SenderInfo.User.ID)
+	if err != nil {
+		return nil, errors.Join(ErrMessagePersistance, err)
+	}
+
+	genkitMsg, err := msg.ToGenkit()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing message into genkit format: %w", err)
+	}
+
+	_, err = session.StoreMessage(ctx, genkitMsg, msg.SenderInfo.User.ID, nil)
+	if err != nil {
+		return nil, errors.Join(ErrMessagePersistance, err)
+	}
+
+	sessionCtx, err := a.sm.AcquireSession(ctx, session.SessionData.ID)
 
 	go func() {
 		defer close(ch)
@@ -211,10 +213,11 @@ func (a *chatAgent) Run(ctx context.Context, input *Message, mode StreamingMode)
 				ch <- &AgentUpdate{Err: fmt.Errorf("panic in chat agent: %v", r)}
 			}
 		}()
+		defer a.sm.ReleaseSession(session.SessionData.ID)
 
 		var mb strings.Builder
 
-		a.flows.chat.Stream(ctx, input)(
+		a.flows.chat.Stream(sessionCtx, chatFlowInput{msg: msg, session: session})(
 			func(resp *core.StreamingFlowValue[string, *AgentUpdate], err error) bool {
 				if err != nil {
 					slog.Error("Error while streaming response", "error", err)

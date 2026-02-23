@@ -12,6 +12,7 @@ import (
 	"rdmm404/voltr-finance/internal/config"
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -19,10 +20,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+
+
 type SessionManager struct {
 	db         *pgxpool.Pool
 	repository *sqlc.Queries
 	bucket     *storage.BucketHandle
+	currentSessions map[int64]CurrentSessionData
+	sessionMutex *sync.RWMutex
 }
 
 func NewSessionManager(db *pgxpool.Pool, repository *sqlc.Queries, storageClient *storage.Client) (*SessionManager, error) {
@@ -38,7 +43,38 @@ func NewSessionManager(db *pgxpool.Pool, repository *sqlc.Queries, storageClient
 		db:         db,
 		repository: repository,
 		bucket:     storageClient.Bucket(config.AGENT_MEDIA_BUCKET_NAME),
+		sessionMutex: &sync.RWMutex{},
 	}, nil
+}
+
+func (sm *SessionManager) AcquireSession(ctx context.Context, sessionId int64) (context.Context, error) {
+	if sessionId == 0 {
+		return nil, fmt.Errorf("session id was not provided")
+	}
+
+	sm.sessionMutex.Lock()
+	defer sm.sessionMutex.Unlock()
+
+	sm.cancelSessionIfExists(sessionId)
+
+	cancelCtx, cancelFunc := context.WithCancel(ctx)
+	sm.currentSessions[sessionId] = CurrentSessionData{cancelFunc: cancelFunc}
+
+	return cancelCtx, nil
+}
+
+func (sm *SessionManager) ReleaseSession(sessionId int64) {
+	sm.cancelSessionIfExists(sessionId)
+	sm.sessionMutex.Lock()
+
+	defer sm.sessionMutex.Unlock()
+	delete(sm.currentSessions, sessionId)
+}
+
+func (sm *SessionManager) cancelSessionIfExists(sessionId int64) {
+	if currentSession, ok := sm.currentSessions[sessionId]; ok {
+		currentSession.cancelFunc()
+	}
 }
 
 func (sm *SessionManager) GetOrCreateSession(ctx context.Context, sourceId string, userId int64) (*Session, error) {
@@ -84,8 +120,6 @@ func (sm *SessionManager) GetOrCreateSession(ctx context.Context, sourceId strin
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("error committing transaction: %w", err)
 	}
-
-	fmt.Printf("bucket %+v\n", sm.bucket)
 
 	return &Session{db: sm.db, repository: sm.repository, SessionData: &session, bucket: sm.bucket}, nil
 }
