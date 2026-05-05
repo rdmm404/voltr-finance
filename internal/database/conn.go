@@ -48,3 +48,7 @@ func InitReadOnly(ctx context.Context) *pgxpool.Pool {
 
 	return conn
 }
+
+func NewPool(ctx context.Context, connString string) (*pgxpool.Pool, error) {
+	return pgxpool.New(ctx, connString)
+}
