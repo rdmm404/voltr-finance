@@ -3,3 +3,4 @@
 tmp
 .genkit
 .secrets/*
+.worktrees/
