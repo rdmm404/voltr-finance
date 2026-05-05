@@ -184,20 +184,20 @@ func (b *Bot) getSenderInfoFromMessage(ctx context.Context, m *discordgo.Message
 		senderInfo.Household = &agent.MessageHousehold{ID: household.ID, Name: household.Name, GuildID: household.GuildID}
 
 		user, err = b.repository.GetUserByDiscordAndHouseholdId(ctx,
-			sqlc.GetUserByDiscordAndHouseholdIdParams{DiscordID: m.Author.ID, HouseholdID: household.ID},
+			sqlc.GetUserByDiscordAndHouseholdIdParams{DiscordID: utils.StringPtr(m.Author.ID), HouseholdID: household.ID},
 		)
 	} else {
-		user, err = b.repository.GetUserByDiscordId(ctx, m.Author.ID)
+		user, err = b.repository.GetUserByDiscordId(ctx, utils.StringPtr(m.Author.ID))
 	}
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("user with discord id %q not found", user.DiscordID)
+			return nil, fmt.Errorf("user with discord id %q not found", m.Author.ID)
 		}
 		return nil, fmt.Errorf("error while getting user by discord id %q: %w", m.Author.ID, err)
 	}
 
-	senderInfo.User = agent.MessageUser{ID: user.ID, Name: user.Name, DiscordID: user.DiscordID}
+	senderInfo.User = agent.MessageUser{ID: user.ID, Name: user.Name, DiscordID: utils.ValueOrZero(user.DiscordID)}
 
 	return senderInfo, nil
 
@@ -255,7 +255,7 @@ func (b *Bot) handlerInteractionCreate(ctx context.Context, s *discordgo.Session
 			},
 		})
 
-		user, err := b.repository.GetUserByDiscordId(ctx, discordUser.ID)
+		user, err := b.repository.GetUserByDiscordId(ctx, utils.StringPtr(discordUser.ID))
 
 		if err != nil {
 			s.InteractionResponseEdit(
