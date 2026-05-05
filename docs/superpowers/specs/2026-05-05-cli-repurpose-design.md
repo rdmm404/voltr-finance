@@ -50,18 +50,35 @@ voltr-finance
 The normal config path is:
 
 ```text
-$HOME/.config/voltr-finance/config.toml
+$HOME/.config/voltr-finance/config.json
 ```
 
 Config lookup order:
 
 ```text
-1. --config /path/to/config.toml
-2. VOLTR_CONFIG=/path/to/config.toml
-3. $HOME/.config/voltr-finance/config.toml
+1. --config /path/to/config.json
+2. VOLTR_CONFIG=/path/to/config.json
+3. $HOME/.config/voltr-finance/config.json
 ```
 
 The binary must not embed database credentials. Runtime config contains the DB host, port, database name, and limited DB credentials.
+
+The config file is JSON and must decode into a typed config model, not an unstructured map. Unknown top-level or database fields should fail validation so typos do not silently change runtime behavior. Required database fields are `host`, `port`, `name`, `user`, and `password`; `poolSize` is optional and defaults to `5`.
+
+Example:
+
+```json
+{
+  "database": {
+    "host": "localhost",
+    "port": "5432",
+    "name": "voltr_finance",
+    "user": "voltr_cli_rw",
+    "password": "change-me",
+    "poolSize": 5
+  }
+}
+```
 
 The Docker image can still be used to build/package the binary. Later, CI can publish Linux release binaries to GitHub releases.
 
@@ -403,7 +420,7 @@ Add focused tests around:
 - CSV rendering for `transactions list`.
 - CLI command parsing for representative commands.
 
-Database behavior should be covered with integration tests where practical because identity resolution, unique indexes, and soft-delete filtering depend on SQL behavior.
+Automated database integration tests are not required in v1. Before calling the implementation complete, manually verify the CLI against a running Postgres database: apply migrations, create/update/list/delete/restore records through the CLI, and query the database directly to confirm identity lookup, unique indexes, list filtering/order, and soft-delete state behave correctly.
 
 ## Open Decisions Deferred
 
