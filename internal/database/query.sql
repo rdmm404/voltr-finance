@@ -9,6 +9,15 @@ WHERE id = $1;
 SELECT * FROM transaction
 WHERE id = ANY(sqlc.arg(ids)::BIGINT[]);
 
+-- name: GetTransactionByIdActive :one
+SELECT * FROM transaction
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: GetTransactionsByIdActive :many
+SELECT * FROM transaction
+WHERE id = ANY(sqlc.arg(ids)::BIGINT[])
+  AND deleted_at IS NULL;
+
 -- name: GetIdByTransactionId :one
 SELECT id FROM transaction
 WHERE transaction_id = $1;
@@ -17,6 +26,42 @@ WHERE transaction_id = $1;
 -- name: ListTransactionsByHousehold :many
 SELECT * FROM transaction
 WHERE transaction_type=2 AND household_id = $1;
+
+-- name: ListTransactions :many
+SELECT
+    sqlc.embed(t),
+    u.id AS author_id,
+    u.name AS author_name,
+    h.id AS household_id,
+    h.name AS household_name
+FROM transaction t
+JOIN users u ON u.id = t.author_id
+LEFT JOIN household h ON h.id = t.household_id
+WHERE
+    (NOT sqlc.arg(only_deleted)::bool OR t.deleted_at IS NOT NULL)
+    AND (sqlc.arg(include_deleted)::bool OR sqlc.arg(only_deleted)::bool OR t.deleted_at IS NULL)
+    AND (sqlc.narg(author_id)::BIGINT IS NULL OR t.author_id = sqlc.narg(author_id)::BIGINT)
+    AND (sqlc.narg(household_id)::BIGINT IS NULL OR t.household_id = sqlc.narg(household_id)::BIGINT)
+    AND (sqlc.narg(from_date)::TIMESTAMPTZ IS NULL OR t.transaction_date >= sqlc.narg(from_date)::TIMESTAMPTZ)
+    AND (sqlc.narg(to_date)::TIMESTAMPTZ IS NULL OR t.transaction_date <= sqlc.narg(to_date)::TIMESTAMPTZ)
+    AND (
+        sqlc.narg(search)::TEXT IS NULL
+        OR t.description ILIKE '%' || sqlc.narg(search)::TEXT || '%'
+        OR t.notes ILIKE '%' || sqlc.narg(search)::TEXT || '%'
+    )
+ORDER BY
+    CASE WHEN sqlc.arg(sort)::TEXT = 'transaction_date' AND sqlc.arg(sort_order)::TEXT = 'asc' THEN t.transaction_date END ASC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'transaction_date' AND sqlc.arg(sort_order)::TEXT = 'desc' THEN t.transaction_date END DESC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'created_at' AND sqlc.arg(sort_order)::TEXT = 'asc' THEN t.created_at END ASC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'created_at' AND sqlc.arg(sort_order)::TEXT = 'desc' THEN t.created_at END DESC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'amount' AND sqlc.arg(sort_order)::TEXT = 'asc' THEN t.amount END ASC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'amount' AND sqlc.arg(sort_order)::TEXT = 'desc' THEN t.amount END DESC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'id' AND sqlc.arg(sort_order)::TEXT = 'asc' THEN t.id END ASC,
+    CASE WHEN sqlc.arg(sort)::TEXT = 'id' AND sqlc.arg(sort_order)::TEXT = 'desc' THEN t.id END DESC,
+    t.transaction_date DESC,
+    t.id DESC
+LIMIT sqlc.arg(result_limit)::INT
+OFFSET sqlc.arg(result_offset)::INT;
 
 -- WRITES
 
@@ -71,6 +116,29 @@ SET
     transaction_id = $2
 WHERE
     id = $1 RETURNING *;
+
+-- name: SoftDeleteTransactionsById :many
+UPDATE transaction
+SET
+    deleted_at = CURRENT_TIMESTAMP,
+    deleted_by_user_id = sqlc.arg(deleted_by_user_id)::BIGINT,
+    delete_reason = sqlc.narg(delete_reason)::TEXT,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ANY(sqlc.arg(ids)::BIGINT[])
+  AND deleted_at IS NULL
+RETURNING *;
+
+-- name: RestoreTransactionsById :many
+UPDATE transaction
+SET
+    deleted_at = NULL,
+    deleted_by_user_id = NULL,
+    delete_reason = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ANY(sqlc.arg(ids)::BIGINT[])
+  AND deleted_at IS NOT NULL
+RETURNING *;
+
 -- ******************* users *******************
 -- READS
 
@@ -83,13 +151,71 @@ WHERE users.discord_id = $1;
 -- name: GetUserByDiscordId :one
 SELECT * FROM users WHERE discord_id = $1;
 
+-- name: GetUserById :one
+SELECT * FROM users WHERE id = $1;
+
+-- name: GetUserByTelegramId :one
+SELECT * FROM users WHERE telegram_id = $1;
+
+-- name: GetUserByPhoneNumber :one
+SELECT * FROM users WHERE phone_number = $1;
+
+-- name: GetUserByWhatsappId :one
+SELECT * FROM users WHERE whatsapp_id = $1;
+
+-- name: ListUsers :many
+SELECT * FROM users
+ORDER BY name ASC, id ASC;
+
+-- name: CreateUser :one
+INSERT INTO users (discord_id, telegram_id, phone_number, whatsapp_id, name)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: UpdateUser :one
+UPDATE users
+SET
+    discord_id = CASE
+        WHEN sqlc.arg(set_discord_id)::bool THEN sqlc.narg(discord_id)::VARCHAR
+        ELSE discord_id
+    END,
+    telegram_id = CASE
+        WHEN sqlc.arg(set_telegram_id)::bool THEN sqlc.narg(telegram_id)::VARCHAR
+        ELSE telegram_id
+    END,
+    phone_number = CASE
+        WHEN sqlc.arg(set_phone_number)::bool THEN sqlc.narg(phone_number)::VARCHAR
+        ELSE phone_number
+    END,
+    whatsapp_id = CASE
+        WHEN sqlc.arg(set_whatsapp_id)::bool THEN sqlc.narg(whatsapp_id)::VARCHAR
+        ELSE whatsapp_id
+    END,
+    name = CASE
+        WHEN sqlc.arg(set_name)::bool THEN sqlc.arg(name)::VARCHAR
+        ELSE name
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id)::BIGINT
+RETURNING *;
+
 -- name: GetUserByDiscordAndHouseholdId :one
 SELECT u.* FROM users u
 JOIN household_user hu on hu.user_id = u.id
 WHERE discord_id = $1 and hu.household_id = $2;
 
+-- name: GetHouseholdById :one
+SELECT * FROM household WHERE id = $1;
+
 -- name: GetHouseholdByGuildId :one
 SELECT * from household where guild_id = $1;
+
+-- name: GetHouseholdByName :one
+SELECT * FROM household WHERE name = $1;
+
+-- name: ListHouseholds :many
+SELECT * FROM household
+ORDER BY name ASC, id ASC;
 
 -- name: GetHouseholdUsers :many
 SELECT u.* FROM users u

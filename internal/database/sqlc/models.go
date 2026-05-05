@@ -99,9 +99,12 @@ type Transaction struct {
 	// The household context in which this transaction took place.
 	HouseholdID *int64 `json:"householdId"`
 	// Extended details or commentary regarding the transaction.
-	Notes     *string            `json:"notes"`
-	CreatedAt pgtype.Timestamptz `json:"createdAt"`
-	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
+	Notes           *string            `json:"notes"`
+	CreatedAt       pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt       pgtype.Timestamptz `json:"updatedAt"`
+	DeletedAt       pgtype.Timestamptz `json:"deletedAt"`
+	DeletedByUserID *int64             `json:"deletedByUserId"`
+	DeleteReason    *string            `json:"deleteReason"`
 }
 
 // Stores identity information for individuals linked to Discord accounts.
@@ -109,11 +112,14 @@ type User struct {
 	// Internal unique identifier for the user.
 	ID int64 `json:"id"`
 	// The unique ID provided by the Discord API.
-	DiscordID string `json:"discordId"`
+	DiscordID *string `json:"discordId"`
 	// The display name or username of the Discord user.
 	Name string `json:"name"`
 	// Timestamp when the user record was first created.
 	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 	// Timestamp of the most recent modification to the user record.
-	UpdatedAt pgtype.Timestamptz `json:"updatedAt"`
+	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
+	TelegramID  *string            `json:"telegramId"`
+	PhoneNumber *string            `json:"phoneNumber"`
+	WhatsappID  *string            `json:"whatsappId"`
 }
