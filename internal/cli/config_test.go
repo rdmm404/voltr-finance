@@ -89,6 +89,26 @@ func TestLoadConfigRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsTrailingTokens(t *testing.T) {
+	path := writeConfig(t, `{
+		"database": {
+			"host": "localhost",
+			"port": "5432",
+			"name": "voltr_finance",
+			"user": "voltr",
+			"password": "secret"
+		}
+	} {}`)
+
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("LoadConfig returned nil error")
+	}
+	if !strings.Contains(err.Error(), "trailing") {
+		t.Fatalf("error = %q, want trailing token validation", err)
+	}
+}
+
 func TestLoadConfigRequiresDatabaseFields(t *testing.T) {
 	required := map[string]string{
 		"host":     `"port":"5432","name":"voltr_finance","user":"voltr","password":"secret"`,

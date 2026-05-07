@@ -63,6 +63,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 	kctx, err := parser.Parse(args)
 	if err != nil {
+		if isHelpArgs(args) {
+			return 0
+		}
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
@@ -463,4 +466,13 @@ func parseIDs(raw string) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func isHelpArgs(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			return true
+		}
+	}
+	return false
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -50,6 +51,13 @@ func LoadConfig(path string) (Config, error) {
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return Config{}, errors.New("parse config: unexpected trailing JSON")
+		}
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 	if err := cfg.Validate(); err != nil {
