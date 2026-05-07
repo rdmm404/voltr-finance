@@ -22,6 +22,7 @@ type fakeRepo struct {
 	lastUpdateUser       sqlc.UpdateUserParams
 	lastTelegramID       *string
 	lastListTransactions sqlc.ListTransactionsParams
+	transactionDetails   []sqlc.GetTransactionsByIdWithDetailsRow
 }
 
 func (f *fakeRepo) CreateUser(_ context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
@@ -88,6 +89,10 @@ func (f *fakeRepo) ListHouseholds(context.Context) ([]sqlc.Household, error) {
 
 func (f *fakeRepo) GetHouseholdUsers(context.Context, int64) ([]sqlc.User, error) {
 	return nil, nil
+}
+
+func (f *fakeRepo) GetTransactionsByIdWithDetails(context.Context, sqlc.GetTransactionsByIdWithDetailsParams) ([]sqlc.GetTransactionsByIdWithDetailsRow, error) {
+	return f.transactionDetails, nil
 }
 
 func (f *fakeRepo) ListTransactions(_ context.Context, arg sqlc.ListTransactionsParams) ([]sqlc.ListTransactionsRow, error) {

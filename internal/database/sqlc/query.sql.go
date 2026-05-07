@@ -533,6 +533,73 @@ func (q *Queries) GetTransactionsByIdActive(ctx context.Context, ids []int64) ([
 	return items, nil
 }
 
+const getTransactionsByIdWithDetails = `-- name: GetTransactionsByIdWithDetails :many
+SELECT
+    t.id, t.amount, t.author_id, t.budget_category_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason,
+    u.id AS author_id,
+    u.name AS author_name,
+    h.id AS household_id,
+    h.name AS household_name
+FROM transaction t
+JOIN users u ON u.id = t.author_id
+LEFT JOIN household h ON h.id = t.household_id
+WHERE t.id = ANY($1::BIGINT[])
+  AND ($2::bool OR t.deleted_at IS NULL)
+ORDER BY array_position($1::BIGINT[], t.id)
+`
+
+type GetTransactionsByIdWithDetailsParams struct {
+	Ids            []int64 `json:"ids"`
+	IncludeDeleted bool    `json:"includeDeleted"`
+}
+
+type GetTransactionsByIdWithDetailsRow struct {
+	Transaction   Transaction `json:"transaction"`
+	AuthorID      int64       `json:"authorId"`
+	AuthorName    string      `json:"authorName"`
+	HouseholdID   *int64      `json:"householdId"`
+	HouseholdName *string     `json:"householdName"`
+}
+
+func (q *Queries) GetTransactionsByIdWithDetails(ctx context.Context, arg GetTransactionsByIdWithDetailsParams) ([]GetTransactionsByIdWithDetailsRow, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByIdWithDetails, arg.Ids, arg.IncludeDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTransactionsByIdWithDetailsRow
+	for rows.Next() {
+		var i GetTransactionsByIdWithDetailsRow
+		if err := rows.Scan(
+			&i.Transaction.ID,
+			&i.Transaction.Amount,
+			&i.Transaction.AuthorID,
+			&i.Transaction.BudgetCategoryID,
+			&i.Transaction.Description,
+			&i.Transaction.TransactionDate,
+			&i.Transaction.TransactionID,
+			&i.Transaction.HouseholdID,
+			&i.Transaction.Notes,
+			&i.Transaction.CreatedAt,
+			&i.Transaction.UpdatedAt,
+			&i.Transaction.DeletedAt,
+			&i.Transaction.DeletedByUserID,
+			&i.Transaction.DeleteReason,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.HouseholdID,
+			&i.HouseholdName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserByDiscordAndHouseholdId = `-- name: GetUserByDiscordAndHouseholdId :one
 SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at, u.telegram_id, u.phone_number, u.whatsapp_id FROM users u
 JOIN household_user hu on hu.user_id = u.id

@@ -82,6 +82,30 @@ func TestListTransactionsDefaultsToDateDesc(t *testing.T) {
 	}
 }
 
+func TestGetTransactionsIncludesAuthorAndHouseholdNames(t *testing.T) {
+	householdID := int64(1)
+	householdName := "Voltr"
+	repo := &fakeRepo{
+		transactionDetails: []sqlc.GetTransactionsByIdWithDetailsRow{
+			{
+				Transaction:   sqlc.Transaction{ID: 101, AuthorID: 9, HouseholdID: &householdID},
+				AuthorName:    "CLI Tester",
+				HouseholdID:   &householdID,
+				HouseholdName: &householdName,
+			},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	txs, err := svc.GetTransactions(context.Background(), []int64{101}, false)
+	if err != nil {
+		t.Fatalf("GetTransactions returned error: %v", err)
+	}
+	if len(txs) != 1 || txs[0].AuthorName != "CLI Tester" || txs[0].HouseholdName == nil || *txs[0].HouseholdName != "Voltr" {
+		t.Fatalf("transactions = %+v, want author and household names", txs)
+	}
+}
+
 func TestDeleteTransactionsReturnsDeletedIDs(t *testing.T) {
 	txSvc := &fakeTransactionService{deleteResult: transaction.TransactionResult{Success: map[int64]*sqlc.Transaction{101: {ID: 101}}}}
 	svc := NewService(&fakeRepo{}, txSvc)

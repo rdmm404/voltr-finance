@@ -160,20 +160,16 @@ func (s *Service) GetTransactions(ctx context.Context, ids []int64, includeDelet
 	if len(ids) == 0 {
 		return nil, NewError(CodeValidationError, "at least one transaction id is required", nil)
 	}
-	transactions, err := s.transactions.GetTransactionsById(ctx, ids)
+	rows, err := s.repo.GetTransactionsByIdWithDetails(ctx, sqlc.GetTransactionsByIdWithDetailsParams{
+		Ids:            ids,
+		IncludeDeleted: includeDeleted,
+	})
 	if err != nil {
 		return nil, mapTransactionError(err)
 	}
-	dtos := make([]TransactionDTO, 0, len(transactions))
-	for _, id := range ids {
-		tx, ok := transactions[id]
-		if !ok {
-			continue
-		}
-		if !includeDeleted && tx.DeletedAt.Valid {
-			continue
-		}
-		dtos = append(dtos, transactionDTO(tx, "", nil))
+	dtos := make([]TransactionDTO, 0, len(rows))
+	for _, row := range rows {
+		dtos = append(dtos, transactionDTO(row.Transaction, row.AuthorName, row.HouseholdName))
 	}
 	return dtos, nil
 }

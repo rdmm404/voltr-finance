@@ -34,6 +34,7 @@ type HouseholdRepository interface {
 }
 
 type TransactionRepository interface {
+	GetTransactionsByIdWithDetails(context.Context, sqlc.GetTransactionsByIdWithDetailsParams) ([]sqlc.GetTransactionsByIdWithDetailsRow, error)
 	ListTransactions(context.Context, sqlc.ListTransactionsParams) ([]sqlc.ListTransactionsRow, error)
 }
 

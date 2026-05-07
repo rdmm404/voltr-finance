@@ -18,6 +18,20 @@ SELECT * FROM transaction
 WHERE id = ANY(sqlc.arg(ids)::BIGINT[])
   AND deleted_at IS NULL;
 
+-- name: GetTransactionsByIdWithDetails :many
+SELECT
+    sqlc.embed(t),
+    u.id AS author_id,
+    u.name AS author_name,
+    h.id AS household_id,
+    h.name AS household_name
+FROM transaction t
+JOIN users u ON u.id = t.author_id
+LEFT JOIN household h ON h.id = t.household_id
+WHERE t.id = ANY(sqlc.arg(ids)::BIGINT[])
+  AND (sqlc.arg(include_deleted)::bool OR t.deleted_at IS NULL)
+ORDER BY array_position(sqlc.arg(ids)::BIGINT[], t.id);
+
 -- name: GetIdByTransactionId :one
 SELECT id FROM transaction
 WHERE transaction_id = $1;
