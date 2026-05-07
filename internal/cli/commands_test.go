@@ -50,6 +50,22 @@ func TestKongTransactionsListCSV(t *testing.T) {
 	}
 }
 
+func TestKongTransactionsDeleteUsesIdsFlag(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"transactions", "delete",
+		"--ids", "101,102",
+		"--deleted-by-user-id", "7",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if len(svc.deleteTransactions.IDs) != 2 || svc.deleteTransactions.IDs[0] != 101 || svc.deleteTransactions.IDs[1] != 102 {
+		t.Fatalf("ids = %v, want [101 102]", svc.deleteTransactions.IDs)
+	}
+}
+
 func TestKongUsersResolveTelegram(t *testing.T) {
 	svc := &fakeAppService{}
 	code := Run(context.Background(), []string{
@@ -81,10 +97,11 @@ func TestKongHouseholdsGetByName(t *testing.T) {
 }
 
 type fakeAppService struct {
-	createTransaction app.CreateTransactionRequest
-	listTransactions  app.ListTransactionsRequest
-	resolveUser       app.IdentitySelector
-	getHousehold      app.GetHouseholdRequest
+	createTransaction  app.CreateTransactionRequest
+	listTransactions   app.ListTransactionsRequest
+	deleteTransactions app.DeleteTransactionsRequest
+	resolveUser        app.IdentitySelector
+	getHousehold       app.GetHouseholdRequest
 }
 
 func (f *fakeAppService) CreateTransaction(_ context.Context, req app.CreateTransactionRequest) app.WriteResult {
@@ -113,7 +130,8 @@ func (f *fakeAppService) ListTransactions(_ context.Context, req app.ListTransac
 	return []app.TransactionDTO{}, nil
 }
 
-func (f *fakeAppService) DeleteTransactions(context.Context, app.DeleteTransactionsRequest) app.WriteResult {
+func (f *fakeAppService) DeleteTransactions(_ context.Context, req app.DeleteTransactionsRequest) app.WriteResult {
+	f.deleteTransactions = req
 	return app.WriteResult{}
 }
 

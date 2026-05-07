@@ -179,7 +179,7 @@ func (c *TransactionUpdateBulkCmd) Run(ctx *runContext) error {
 }
 
 type TransactionGetCmd struct {
-	IDs            string `required:"" help:"Comma-separated transaction IDs."`
+	IDs            string `name:"ids" required:"" help:"Comma-separated transaction IDs."`
 	IncludeDeleted bool
 	Format         string `default:"json" enum:"json,compact"`
 }
@@ -238,7 +238,7 @@ func (c *TransactionListCmd) Run(ctx *runContext) error {
 }
 
 type TransactionDeleteCmd struct {
-	IDs             string `required:"" help:"Comma-separated transaction IDs."`
+	IDs             string `name:"ids" required:"" help:"Comma-separated transaction IDs."`
 	Reason          *string
 	DeletedByUserID int64 `required:""`
 }
@@ -256,7 +256,7 @@ func (c *TransactionDeleteCmd) Run(ctx *runContext) error {
 }
 
 type TransactionRestoreCmd struct {
-	IDs              string `required:"" help:"Comma-separated transaction IDs."`
+	IDs              string `name:"ids" required:"" help:"Comma-separated transaction IDs."`
 	RestoredByUserID int64  `required:""`
 }
 
