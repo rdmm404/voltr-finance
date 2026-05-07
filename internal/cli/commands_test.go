@@ -96,6 +96,21 @@ func TestKongHouseholdsGetByName(t *testing.T) {
 	}
 }
 
+func TestKongSubcommandHelpDoesNotPanicWithoutService(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run(context.Background(), []string{
+		"transactions", "list", "--help",
+	}, nil, &stdout, &stderr, nil)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr.String())
+	}
+	if got := stdout.String(); got == "" {
+		t.Fatalf("stdout was empty, want help output")
+	}
+}
+
 type fakeAppService struct {
 	createTransaction  app.CreateTransactionRequest
 	listTransactions   app.ListTransactionsRequest

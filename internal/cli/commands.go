@@ -69,6 +69,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	if isHelpArgs(args) {
+		return 0
+	}
 	if err := kctx.Run(&runContext{Context: ctx, stdin: stdin, stdout: stdout, stderr: stderr, svc: svc}); err != nil {
 		fmt.Fprintln(stderr, err)
 		if isExpectedError(err) {
