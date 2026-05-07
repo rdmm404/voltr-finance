@@ -30,3 +30,16 @@ FROM alpine:3.22 AS final
 
 COPY --from=build /app/main .
 ENTRYPOINT [ "./main" ]
+
+
+FROM base AS cli-build
+
+COPY cmd ./cmd
+COPY internal ./internal
+RUN go build -o voltr-finance ./cmd/cli
+
+
+FROM alpine:3.22 AS cli
+
+COPY --from=cli-build /app/voltr-finance /usr/local/bin/voltr-finance
+ENTRYPOINT [ "voltr-finance" ]
