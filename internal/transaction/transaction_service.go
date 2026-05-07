@@ -143,6 +143,39 @@ func (ts *TransactionService) UpdateTransactionsById(ctx context.Context, transa
 	return result
 }
 
+func (ts *TransactionService) SoftDeleteTransactionsById(ctx context.Context, ids []int64, deletedByUserID int64, reason *string) TransactionResult {
+	result := TransactionResult{Success: make(map[int64]*sqlc.Transaction)}
+	transactions, err := ts.repository.SoftDeleteTransactionsById(ctx, sqlc.SoftDeleteTransactionsByIdParams{
+		DeletedByUserID: deletedByUserID,
+		DeleteReason:    reason,
+		Ids:             ids,
+	})
+	if err != nil {
+		result.Errors = append(result.Errors, TransactionError{Err: handleTransactionDbError(err)})
+		return result
+	}
+	for i := range transactions {
+		trans := transactions[i]
+		result.Success[trans.ID] = &trans
+	}
+	return result
+}
+
+func (ts *TransactionService) RestoreTransactionsById(ctx context.Context, ids []int64, restoredByUserID int64) TransactionResult {
+	_ = restoredByUserID
+	result := TransactionResult{Success: make(map[int64]*sqlc.Transaction)}
+	transactions, err := ts.repository.RestoreTransactionsById(ctx, ids)
+	if err != nil {
+		result.Errors = append(result.Errors, TransactionError{Err: handleTransactionDbError(err)})
+		return result
+	}
+	for i := range transactions {
+		trans := transactions[i]
+		result.Success[trans.ID] = &trans
+	}
+	return result
+}
+
 func handleTransactionDbError(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errors.Join(err, ErrTransactionNotFound)

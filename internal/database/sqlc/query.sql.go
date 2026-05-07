@@ -83,7 +83,7 @@ INSERT INTO transaction
 )
 VALUES
 ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
+RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
 `
 
 type CreateTransactionParams struct {
@@ -122,6 +122,45 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DeletedByUserID,
+		&i.DeleteReason,
+	)
+	return i, err
+}
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (discord_id, telegram_id, phone_number, whatsapp_id, name)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id
+`
+
+type CreateUserParams struct {
+	DiscordID   *string `json:"discordId"`
+	TelegramID  *string `json:"telegramId"`
+	PhoneNumber *string `json:"phoneNumber"`
+	WhatsappID  *string `json:"whatsappId"`
+	Name        string  `json:"name"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.DiscordID,
+		arg.TelegramID,
+		arg.PhoneNumber,
+		arg.WhatsappID,
+		arg.Name,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
 	)
 	return i, err
 }
@@ -166,8 +205,42 @@ func (q *Queries) GetHouseholdByGuildId(ctx context.Context, guildID string) (Ho
 	return i, err
 }
 
+const getHouseholdById = `-- name: GetHouseholdById :one
+SELECT id, name, guild_id, created_at, updated_at FROM household WHERE id = $1
+`
+
+func (q *Queries) GetHouseholdById(ctx context.Context, id int64) (Household, error) {
+	row := q.db.QueryRow(ctx, getHouseholdById, id)
+	var i Household
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.GuildID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getHouseholdByName = `-- name: GetHouseholdByName :one
+SELECT id, name, guild_id, created_at, updated_at FROM household WHERE name = $1
+`
+
+func (q *Queries) GetHouseholdByName(ctx context.Context, name string) (Household, error) {
+	row := q.db.QueryRow(ctx, getHouseholdByName, name)
+	var i Household
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.GuildID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getHouseholdUsers = `-- name: GetHouseholdUsers :many
-SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at, u.telegram_id, u.phone_number, u.whatsapp_id FROM users u
 JOIN household_user hu on hu.user_id = u.id
 WHERE hu.household_id = $1
 `
@@ -187,6 +260,9 @@ func (q *Queries) GetHouseholdUsers(ctx context.Context, householdID int64) ([]U
 			&i.Name,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TelegramID,
+			&i.PhoneNumber,
+			&i.WhatsappID,
 		); err != nil {
 			return nil, err
 		}
@@ -321,7 +397,7 @@ func (q *Queries) GetTableAndColumnMetadata(ctx context.Context, tableNames []st
 
 const getTransactionById = `-- name: GetTransactionById :one
 
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
 WHERE id = $1
 `
 
@@ -342,12 +418,42 @@ func (q *Queries) GetTransactionById(ctx context.Context, id int64) (Transaction
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DeletedByUserID,
+		&i.DeleteReason,
+	)
+	return i, err
+}
+
+const getTransactionByIdActive = `-- name: GetTransactionByIdActive :one
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetTransactionByIdActive(ctx context.Context, id int64) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionByIdActive, id)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.AuthorID,
+		&i.BudgetCategoryID,
+		&i.Description,
+		&i.TransactionDate,
+		&i.TransactionID,
+		&i.HouseholdID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DeletedByUserID,
+		&i.DeleteReason,
 	)
 	return i, err
 }
 
 const getTransactionsById = `-- name: GetTransactionsById :many
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
 WHERE id = ANY($1::BIGINT[])
 `
 
@@ -372,6 +478,117 @@ func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Trans
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeletedByUserID,
+			&i.DeleteReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTransactionsByIdActive = `-- name: GetTransactionsByIdActive :many
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+WHERE id = ANY($1::BIGINT[])
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) GetTransactionsByIdActive(ctx context.Context, ids []int64) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByIdActive, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.AuthorID,
+			&i.BudgetCategoryID,
+			&i.Description,
+			&i.TransactionDate,
+			&i.TransactionID,
+			&i.HouseholdID,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeletedByUserID,
+			&i.DeleteReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTransactionsByIdWithDetails = `-- name: GetTransactionsByIdWithDetails :many
+SELECT
+    t.id, t.amount, t.author_id, t.budget_category_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason,
+    u.id AS author_id,
+    u.name AS author_name,
+    h.id AS household_id,
+    h.name AS household_name
+FROM transaction t
+JOIN users u ON u.id = t.author_id
+LEFT JOIN household h ON h.id = t.household_id
+WHERE t.id = ANY($1::BIGINT[])
+  AND ($2::bool OR t.deleted_at IS NULL)
+ORDER BY array_position($1::BIGINT[], t.id)
+`
+
+type GetTransactionsByIdWithDetailsParams struct {
+	Ids            []int64 `json:"ids"`
+	IncludeDeleted bool    `json:"includeDeleted"`
+}
+
+type GetTransactionsByIdWithDetailsRow struct {
+	Transaction   Transaction `json:"transaction"`
+	AuthorID      int64       `json:"authorId"`
+	AuthorName    string      `json:"authorName"`
+	HouseholdID   *int64      `json:"householdId"`
+	HouseholdName *string     `json:"householdName"`
+}
+
+func (q *Queries) GetTransactionsByIdWithDetails(ctx context.Context, arg GetTransactionsByIdWithDetailsParams) ([]GetTransactionsByIdWithDetailsRow, error) {
+	rows, err := q.db.Query(ctx, getTransactionsByIdWithDetails, arg.Ids, arg.IncludeDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTransactionsByIdWithDetailsRow
+	for rows.Next() {
+		var i GetTransactionsByIdWithDetailsRow
+		if err := rows.Scan(
+			&i.Transaction.ID,
+			&i.Transaction.Amount,
+			&i.Transaction.AuthorID,
+			&i.Transaction.BudgetCategoryID,
+			&i.Transaction.Description,
+			&i.Transaction.TransactionDate,
+			&i.Transaction.TransactionID,
+			&i.Transaction.HouseholdID,
+			&i.Transaction.Notes,
+			&i.Transaction.CreatedAt,
+			&i.Transaction.UpdatedAt,
+			&i.Transaction.DeletedAt,
+			&i.Transaction.DeletedByUserID,
+			&i.Transaction.DeleteReason,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.HouseholdID,
+			&i.HouseholdName,
 		); err != nil {
 			return nil, err
 		}
@@ -384,14 +601,14 @@ func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Trans
 }
 
 const getUserByDiscordAndHouseholdId = `-- name: GetUserByDiscordAndHouseholdId :one
-SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at, u.telegram_id, u.phone_number, u.whatsapp_id FROM users u
 JOIN household_user hu on hu.user_id = u.id
 WHERE discord_id = $1 and hu.household_id = $2
 `
 
 type GetUserByDiscordAndHouseholdIdParams struct {
-	DiscordID   string `json:"discordId"`
-	HouseholdID int64  `json:"householdId"`
+	DiscordID   *string `json:"discordId"`
+	HouseholdID int64   `json:"householdId"`
 }
 
 func (q *Queries) GetUserByDiscordAndHouseholdId(ctx context.Context, arg GetUserByDiscordAndHouseholdIdParams) (User, error) {
@@ -403,15 +620,18 @@ func (q *Queries) GetUserByDiscordAndHouseholdId(ctx context.Context, arg GetUse
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
 	)
 	return i, err
 }
 
 const getUserByDiscordId = `-- name: GetUserByDiscordId :one
-SELECT id, discord_id, name, created_at, updated_at FROM users WHERE discord_id = $1
+SELECT id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id FROM users WHERE discord_id = $1
 `
 
-func (q *Queries) GetUserByDiscordId(ctx context.Context, discordID string) (User, error) {
+func (q *Queries) GetUserByDiscordId(ctx context.Context, discordID *string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByDiscordId, discordID)
 	var i User
 	err := row.Scan(
@@ -420,13 +640,96 @@ func (q *Queries) GetUserByDiscordId(ctx context.Context, discordID string) (Use
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
+	)
+	return i, err
+}
+
+const getUserById = `-- name: GetUserById :one
+SELECT id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserById(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRow(ctx, getUserById, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
+	)
+	return i, err
+}
+
+const getUserByPhoneNumber = `-- name: GetUserByPhoneNumber :one
+SELECT id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id FROM users WHERE phone_number = $1
+`
+
+func (q *Queries) GetUserByPhoneNumber(ctx context.Context, phoneNumber *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByPhoneNumber, phoneNumber)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
+	)
+	return i, err
+}
+
+const getUserByTelegramId = `-- name: GetUserByTelegramId :one
+SELECT id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id FROM users WHERE telegram_id = $1
+`
+
+func (q *Queries) GetUserByTelegramId(ctx context.Context, telegramID *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByTelegramId, telegramID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
+	)
+	return i, err
+}
+
+const getUserByWhatsappId = `-- name: GetUserByWhatsappId :one
+SELECT id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id FROM users WHERE whatsapp_id = $1
+`
+
+func (q *Queries) GetUserByWhatsappId(ctx context.Context, whatsappID *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByWhatsappId, whatsappID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
 	)
 	return i, err
 }
 
 const getUserDetailsByDiscordId = `-- name: GetUserDetailsByDiscordId :one
 
-SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, household.id, household.name, household.guild_id, household.created_at, household.updated_at FROM users
+SELECT users.id, users.discord_id, users.name, users.created_at, users.updated_at, users.telegram_id, users.phone_number, users.whatsapp_id, household.id, household.name, household.guild_id, household.created_at, household.updated_at FROM users
 JOIN household_user on users.id = household_user.user_id
 JOIN household on household_user.household_id = household.id
 WHERE users.discord_id = $1
@@ -439,7 +742,7 @@ type GetUserDetailsByDiscordIdRow struct {
 
 // ******************* users *******************
 // READS
-func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID string) (GetUserDetailsByDiscordIdRow, error) {
+func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *string) (GetUserDetailsByDiscordIdRow, error) {
 	row := q.db.QueryRow(ctx, getUserDetailsByDiscordId, discordID)
 	var i GetUserDetailsByDiscordIdRow
 	err := row.Scan(
@@ -448,6 +751,9 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID strin
 		&i.User.Name,
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
+		&i.User.TelegramID,
+		&i.User.PhoneNumber,
+		&i.User.WhatsappID,
 		&i.Household.ID,
 		&i.Household.Name,
 		&i.Household.GuildID,
@@ -457,9 +763,40 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID strin
 	return i, err
 }
 
+const listHouseholds = `-- name: ListHouseholds :many
+SELECT id, name, guild_id, created_at, updated_at FROM household
+ORDER BY name ASC, id ASC
+`
+
+func (q *Queries) ListHouseholds(ctx context.Context) ([]Household, error) {
+	rows, err := q.db.Query(ctx, listHouseholds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Household
+	for rows.Next() {
+		var i Household
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.GuildID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLlmMessagesBySessionId = `-- name: ListLlmMessagesBySessionId :many
 SELECT
-    m.id, m.session_id, m.parent_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at
+    m.id, m.session_id, m.parent_id, m.role, m.contents, m.user_id, m.created_at, m.updated_at, u.id, u.discord_id, u.name, u.created_at, u.updated_at, u.telegram_id, u.phone_number, u.whatsapp_id
 FROM
     llm_message m
 JOIN
@@ -498,6 +835,119 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int6
 			&i.User.Name,
 			&i.User.CreatedAt,
 			&i.User.UpdatedAt,
+			&i.User.TelegramID,
+			&i.User.PhoneNumber,
+			&i.User.WhatsappID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTransactions = `-- name: ListTransactions :many
+SELECT
+    t.id, t.amount, t.author_id, t.budget_category_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason,
+    u.id AS author_id,
+    u.name AS author_name,
+    h.id AS household_id,
+    h.name AS household_name
+FROM transaction t
+JOIN users u ON u.id = t.author_id
+LEFT JOIN household h ON h.id = t.household_id
+WHERE
+    (NOT $1::bool OR t.deleted_at IS NOT NULL)
+    AND ($2::bool OR $1::bool OR t.deleted_at IS NULL)
+    AND ($3::BIGINT IS NULL OR t.author_id = $3::BIGINT)
+    AND ($4::BIGINT IS NULL OR t.household_id = $4::BIGINT)
+    AND ($5::TIMESTAMPTZ IS NULL OR t.transaction_date >= $5::TIMESTAMPTZ)
+    AND ($6::TIMESTAMPTZ IS NULL OR t.transaction_date <= $6::TIMESTAMPTZ)
+    AND (
+        $7::TEXT IS NULL
+        OR t.description ILIKE '%' || $7::TEXT || '%'
+        OR t.notes ILIKE '%' || $7::TEXT || '%'
+    )
+ORDER BY
+    CASE WHEN $8::TEXT = 'transaction_date' AND $9::TEXT = 'asc' THEN t.transaction_date END ASC,
+    CASE WHEN $8::TEXT = 'transaction_date' AND $9::TEXT = 'desc' THEN t.transaction_date END DESC,
+    CASE WHEN $8::TEXT = 'created_at' AND $9::TEXT = 'asc' THEN t.created_at END ASC,
+    CASE WHEN $8::TEXT = 'created_at' AND $9::TEXT = 'desc' THEN t.created_at END DESC,
+    CASE WHEN $8::TEXT = 'amount' AND $9::TEXT = 'asc' THEN t.amount END ASC,
+    CASE WHEN $8::TEXT = 'amount' AND $9::TEXT = 'desc' THEN t.amount END DESC,
+    CASE WHEN $8::TEXT = 'id' AND $9::TEXT = 'asc' THEN t.id END ASC,
+    CASE WHEN $8::TEXT = 'id' AND $9::TEXT = 'desc' THEN t.id END DESC,
+    t.transaction_date DESC,
+    t.id DESC
+LIMIT $11::INT
+OFFSET $10::INT
+`
+
+type ListTransactionsParams struct {
+	OnlyDeleted    bool               `json:"onlyDeleted"`
+	IncludeDeleted bool               `json:"includeDeleted"`
+	AuthorID       *int64             `json:"authorId"`
+	HouseholdID    *int64             `json:"householdId"`
+	FromDate       pgtype.Timestamptz `json:"fromDate"`
+	ToDate         pgtype.Timestamptz `json:"toDate"`
+	Search         *string            `json:"search"`
+	Sort           string             `json:"sort"`
+	SortOrder      string             `json:"sortOrder"`
+	ResultOffset   int32              `json:"resultOffset"`
+	ResultLimit    int32              `json:"resultLimit"`
+}
+
+type ListTransactionsRow struct {
+	Transaction   Transaction `json:"transaction"`
+	AuthorID      int64       `json:"authorId"`
+	AuthorName    string      `json:"authorName"`
+	HouseholdID   *int64      `json:"householdId"`
+	HouseholdName *string     `json:"householdName"`
+}
+
+func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, listTransactions,
+		arg.OnlyDeleted,
+		arg.IncludeDeleted,
+		arg.AuthorID,
+		arg.HouseholdID,
+		arg.FromDate,
+		arg.ToDate,
+		arg.Search,
+		arg.Sort,
+		arg.SortOrder,
+		arg.ResultOffset,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTransactionsRow
+	for rows.Next() {
+		var i ListTransactionsRow
+		if err := rows.Scan(
+			&i.Transaction.ID,
+			&i.Transaction.Amount,
+			&i.Transaction.AuthorID,
+			&i.Transaction.BudgetCategoryID,
+			&i.Transaction.Description,
+			&i.Transaction.TransactionDate,
+			&i.Transaction.TransactionID,
+			&i.Transaction.HouseholdID,
+			&i.Transaction.Notes,
+			&i.Transaction.CreatedAt,
+			&i.Transaction.UpdatedAt,
+			&i.Transaction.DeletedAt,
+			&i.Transaction.DeletedByUserID,
+			&i.Transaction.DeleteReason,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.HouseholdID,
+			&i.HouseholdName,
 		); err != nil {
 			return nil, err
 		}
@@ -510,7 +960,7 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int6
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at FROM transaction
+SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
@@ -535,6 +985,143 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeletedByUserID,
+			&i.DeleteReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id FROM users
+ORDER BY name ASC, id ASC
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.DiscordID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TelegramID,
+			&i.PhoneNumber,
+			&i.WhatsappID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const restoreTransactionsById = `-- name: RestoreTransactionsById :many
+UPDATE transaction
+SET
+    deleted_at = NULL,
+    deleted_by_user_id = NULL,
+    delete_reason = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ANY($1::BIGINT[])
+  AND deleted_at IS NOT NULL
+RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
+`
+
+func (q *Queries) RestoreTransactionsById(ctx context.Context, ids []int64) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, restoreTransactionsById, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.AuthorID,
+			&i.BudgetCategoryID,
+			&i.Description,
+			&i.TransactionDate,
+			&i.TransactionID,
+			&i.HouseholdID,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeletedByUserID,
+			&i.DeleteReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteTransactionsById = `-- name: SoftDeleteTransactionsById :many
+UPDATE transaction
+SET
+    deleted_at = CURRENT_TIMESTAMP,
+    deleted_by_user_id = $1::BIGINT,
+    delete_reason = $2::TEXT,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ANY($3::BIGINT[])
+  AND deleted_at IS NULL
+RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
+`
+
+type SoftDeleteTransactionsByIdParams struct {
+	DeletedByUserID int64   `json:"deletedByUserId"`
+	DeleteReason    *string `json:"deleteReason"`
+	Ids             []int64 `json:"ids"`
+}
+
+func (q *Queries) SoftDeleteTransactionsById(ctx context.Context, arg SoftDeleteTransactionsByIdParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, softDeleteTransactionsById, arg.DeletedByUserID, arg.DeleteReason, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Amount,
+			&i.AuthorID,
+			&i.BudgetCategoryID,
+			&i.Description,
+			&i.TransactionDate,
+			&i.TransactionID,
+			&i.HouseholdID,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeletedByUserID,
+			&i.DeleteReason,
 		); err != nil {
 			return nil, err
 		}
@@ -594,7 +1181,7 @@ SET
     END,
     transaction_id = $2
 WHERE
-    id = $1 RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at
+    id = $1 RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
 `
 
 type UpdateTransactionByIdParams struct {
@@ -648,6 +1235,79 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DeletedByUserID,
+		&i.DeleteReason,
+	)
+	return i, err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET
+    discord_id = CASE
+        WHEN $1::bool THEN $2::VARCHAR
+        ELSE discord_id
+    END,
+    telegram_id = CASE
+        WHEN $3::bool THEN $4::VARCHAR
+        ELSE telegram_id
+    END,
+    phone_number = CASE
+        WHEN $5::bool THEN $6::VARCHAR
+        ELSE phone_number
+    END,
+    whatsapp_id = CASE
+        WHEN $7::bool THEN $8::VARCHAR
+        ELSE whatsapp_id
+    END,
+    name = CASE
+        WHEN $9::bool THEN $10::VARCHAR
+        ELSE name
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $11::BIGINT
+RETURNING id, discord_id, name, created_at, updated_at, telegram_id, phone_number, whatsapp_id
+`
+
+type UpdateUserParams struct {
+	SetDiscordID   bool    `json:"setDiscordId"`
+	DiscordID      *string `json:"discordId"`
+	SetTelegramID  bool    `json:"setTelegramId"`
+	TelegramID     *string `json:"telegramId"`
+	SetPhoneNumber bool    `json:"setPhoneNumber"`
+	PhoneNumber    *string `json:"phoneNumber"`
+	SetWhatsappID  bool    `json:"setWhatsappId"`
+	WhatsappID     *string `json:"whatsappId"`
+	SetName        bool    `json:"setName"`
+	Name           string  `json:"name"`
+	ID             int64   `json:"id"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.SetDiscordID,
+		arg.DiscordID,
+		arg.SetTelegramID,
+		arg.TelegramID,
+		arg.SetPhoneNumber,
+		arg.PhoneNumber,
+		arg.SetWhatsappID,
+		arg.WhatsappID,
+		arg.SetName,
+		arg.Name,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.DiscordID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TelegramID,
+		&i.PhoneNumber,
+		&i.WhatsappID,
 	)
 	return i, err
 }
