@@ -73,38 +73,39 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		return 0
 	}
 	if err := kctx.Run(&runContext{Context: ctx, stdin: stdin, stdout: stdout, stderr: stderr, svc: svc}); err != nil {
-		fmt.Fprintln(stderr, err)
 		if isExpectedError(err) {
+			fmt.Fprintln(stderr, expectedErrorMessage(err))
 			return 2
 		}
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return 0
 }
 
 type TransactionsCmd struct {
-	Create     TransactionCreateCmd     `cmd:"" help:"Create a transaction."`
-	CreateBulk TransactionCreateBulkCmd `cmd:"create-bulk" help:"Create transactions from JSON."`
-	Update     TransactionUpdateCmd     `cmd:"" help:"Update a transaction."`
-	UpdateBulk TransactionUpdateBulkCmd `cmd:"update-bulk" help:"Update transactions from JSON."`
-	Get        TransactionGetCmd        `cmd:"" help:"Get transactions."`
-	List       TransactionListCmd       `cmd:"" help:"List transactions."`
-	Delete     TransactionDeleteCmd     `cmd:"" help:"Soft-delete transactions."`
-	Restore    TransactionRestoreCmd    `cmd:"" help:"Restore transactions."`
+	Create     TransactionCreateCmd     `cmd:"" help:"Create one transaction."`
+	CreateBulk TransactionCreateBulkCmd `cmd:"create-bulk" help:"Create multiple transactions from JSON."`
+	Update     TransactionUpdateCmd     `cmd:"" help:"Update one transaction by internal ID."`
+	UpdateBulk TransactionUpdateBulkCmd `cmd:"update-bulk" help:"Update multiple transactions from JSON."`
+	Get        TransactionGetCmd        `cmd:"" help:"Get transactions by internal ID."`
+	List       TransactionListCmd       `cmd:"" help:"List transactions with filters, sorting, and pagination."`
+	Delete     TransactionDeleteCmd     `cmd:"" help:"Soft-delete transactions by internal ID."`
+	Restore    TransactionRestoreCmd    `cmd:"" help:"Restore soft-deleted transactions by internal ID."`
 }
 
 type TransactionCreateCmd struct {
-	Amount            float32   `required:"" help:"Transaction amount."`
-	TransactionDate   time.Time `required:"" help:"Transaction date/time."`
-	Description       *string
-	Notes             *string
-	BudgetCategoryID  *int64
-	HouseholdID       *int64 `required:""`
-	AuthorID          *int64
-	AuthorDiscordID   *string
-	AuthorTelegramID  *string
-	AuthorPhoneNumber *string
-	AuthorWhatsappID  *string
+	Amount            float32   `required:"" help:"Transaction amount, in dollars."`
+	TransactionDate   time.Time `required:"" placeholder:"RFC3339" help:"Transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00."`
+	Description       *string   `help:"Short transaction description."`
+	Notes             *string   `help:"Longer transaction notes."`
+	BudgetCategoryID  *int64    `placeholder:"INT-64" help:"Internal budget category ID."`
+	HouseholdID       *int64    `required:"" placeholder:"INT-64" help:"Internal household ID."`
+	AuthorID          *int64    `placeholder:"INT-64" help:"Internal author user ID. Exactly one author selector may be provided."`
+	AuthorDiscordID   *string   `help:"Author Discord user ID. Exactly one author selector may be provided."`
+	AuthorTelegramID  *string   `help:"Author Telegram user ID. Exactly one author selector may be provided."`
+	AuthorPhoneNumber *string   `help:"Author phone number. Exactly one author selector may be provided."`
+	AuthorWhatsappID  *string   `help:"Author WhatsApp ID. Exactly one author selector may be provided."`
 }
 
 func (c *TransactionCreateCmd) Run(ctx *runContext) error {
@@ -121,7 +122,7 @@ func (c *TransactionCreateCmd) Run(ctx *runContext) error {
 }
 
 type TransactionCreateBulkCmd struct {
-	Input *string `help:"JSON input file. Defaults to stdin."`
+	Input *string `help:"Path to a JSON file containing a bulk create request. Reads stdin when omitted. Expected shape: {\"transactions\":[...]}."`
 }
 
 func (c *TransactionCreateBulkCmd) Run(ctx *runContext) error {
@@ -133,22 +134,22 @@ func (c *TransactionCreateBulkCmd) Run(ctx *runContext) error {
 }
 
 type TransactionUpdateCmd struct {
-	ID                    int64 `required:""`
-	Amount                *float32
-	TransactionDate       *time.Time
-	Description           *string
-	Notes                 *string
-	BudgetCategoryID      *int64
-	HouseholdID           *int64
-	AuthorID              *int64
-	AuthorDiscordID       *string
-	AuthorTelegramID      *string
-	AuthorPhoneNumber     *string
-	AuthorWhatsappID      *string
-	ClearDescription      bool
-	ClearNotes            bool
-	ClearBudgetCategoryID bool
-	ClearHouseholdID      bool
+	ID                    int64      `required:"" help:"Internal transaction ID."`
+	Amount                *float32   `placeholder:"FLOAT-32" help:"Replacement transaction amount, in dollars."`
+	TransactionDate       *time.Time `placeholder:"RFC3339" help:"Replacement transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00."`
+	Description           *string    `help:"Replacement short transaction description."`
+	Notes                 *string    `help:"Replacement longer transaction notes."`
+	BudgetCategoryID      *int64     `placeholder:"INT-64" help:"Replacement internal budget category ID."`
+	HouseholdID           *int64     `placeholder:"INT-64" help:"Replacement internal household ID."`
+	AuthorID              *int64     `placeholder:"INT-64" help:"Replacement internal author user ID. Exactly one author selector may be provided."`
+	AuthorDiscordID       *string    `help:"Replacement author Discord user ID. Exactly one author selector may be provided."`
+	AuthorTelegramID      *string    `help:"Replacement author Telegram user ID. Exactly one author selector may be provided."`
+	AuthorPhoneNumber     *string    `help:"Replacement author phone number. Exactly one author selector may be provided."`
+	AuthorWhatsappID      *string    `help:"Replacement author WhatsApp ID. Exactly one author selector may be provided."`
+	ClearDescription      bool       `help:"Clear the transaction description."`
+	ClearNotes            bool       `help:"Clear the transaction notes."`
+	ClearBudgetCategoryID bool       `help:"Clear the budget category ID."`
+	ClearHouseholdID      bool       `help:"Clear the household ID."`
 }
 
 func (c *TransactionUpdateCmd) Run(ctx *runContext) error {
@@ -173,7 +174,7 @@ func (c *TransactionUpdateCmd) Run(ctx *runContext) error {
 }
 
 type TransactionUpdateBulkCmd struct {
-	Input *string `help:"JSON input file. Defaults to stdin."`
+	Input *string `help:"Path to a JSON file containing a bulk update request. Reads stdin when omitted. Expected shape: {\"transactions\":[...]}."`
 }
 
 func (c *TransactionUpdateBulkCmd) Run(ctx *runContext) error {
@@ -185,9 +186,9 @@ func (c *TransactionUpdateBulkCmd) Run(ctx *runContext) error {
 }
 
 type TransactionGetCmd struct {
-	IDs            string `name:"ids" required:"" help:"Comma-separated transaction IDs."`
-	IncludeDeleted bool
-	Format         string `default:"json" enum:"json,compact"`
+	IDs            string `name:"ids" required:"" help:"Comma-separated internal transaction IDs, for example 101,102,103."`
+	IncludeDeleted bool   `help:"Include soft-deleted transactions in the lookup."`
+	Format         string `default:"json" enum:"json,compact" help:"Output format: json or compact. Compact is only used for a single transaction."`
 }
 
 func (c *TransactionGetCmd) Run(ctx *runContext) error {
@@ -206,18 +207,18 @@ func (c *TransactionGetCmd) Run(ctx *runContext) error {
 }
 
 type TransactionListCmd struct {
-	Format         string `default:"json" enum:"json,csv"`
-	AuthorID       *int64
-	HouseholdID    *int64
-	FromDate       *time.Time
-	ToDate         *time.Time
-	Search         *string
-	Sort           string
-	Order          string `name:"order"`
-	Limit          int32  `default:"100"`
-	Offset         int32
-	IncludeDeleted bool
-	OnlyDeleted    bool
+	Format         string     `default:"json" enum:"json,csv" help:"Output format: json or csv."`
+	AuthorID       *int64     `placeholder:"INT-64" help:"Filter by internal author user ID."`
+	HouseholdID    *int64     `placeholder:"INT-64" help:"Filter by internal household ID."`
+	FromDate       *time.Time `placeholder:"RFC3339" help:"Include transactions on or after this RFC3339 timestamp."`
+	ToDate         *time.Time `placeholder:"RFC3339" help:"Include transactions on or before this RFC3339 timestamp."`
+	Search         *string    `help:"Case-insensitive search across description and notes."`
+	Sort           string     `help:"Sort field: transaction_date, created_at, amount, or id. Defaults to transaction_date."`
+	Order          string     `name:"order" help:"Sort order: asc or desc. Defaults to desc."`
+	Limit          int32      `default:"100" help:"Maximum number of transactions to return."`
+	Offset         int32      `help:"Number of matching transactions to skip before returning results."`
+	IncludeDeleted bool       `help:"Include soft-deleted transactions."`
+	OnlyDeleted    bool       `help:"Return only soft-deleted transactions."`
 }
 
 func (c *TransactionListCmd) Run(ctx *runContext) error {
@@ -244,9 +245,9 @@ func (c *TransactionListCmd) Run(ctx *runContext) error {
 }
 
 type TransactionDeleteCmd struct {
-	IDs             string `name:"ids" required:"" help:"Comma-separated transaction IDs."`
-	Reason          *string
-	DeletedByUserID int64 `required:""`
+	IDs             string  `name:"ids" required:"" help:"Comma-separated internal transaction IDs, for example 101,102,103."`
+	Reason          *string `help:"Optional reason stored with the soft delete."`
+	DeletedByUserID int64   `required:"" help:"Internal user ID of the person performing the delete."`
 }
 
 func (c *TransactionDeleteCmd) Run(ctx *runContext) error {
@@ -262,8 +263,8 @@ func (c *TransactionDeleteCmd) Run(ctx *runContext) error {
 }
 
 type TransactionRestoreCmd struct {
-	IDs              string `name:"ids" required:"" help:"Comma-separated transaction IDs."`
-	RestoredByUserID int64  `required:""`
+	IDs              string `name:"ids" required:"" help:"Comma-separated internal transaction IDs, for example 101,102,103."`
+	RestoredByUserID int64  `required:"" help:"Internal user ID of the person performing the restore."`
 }
 
 func (c *TransactionRestoreCmd) Run(ctx *runContext) error {
@@ -278,19 +279,19 @@ func (c *TransactionRestoreCmd) Run(ctx *runContext) error {
 }
 
 type UsersCmd struct {
-	Create  UserCreateCmd  `cmd:"" help:"Create a user."`
-	Update  UserUpdateCmd  `cmd:"" help:"Update a user."`
-	Get     UserGetCmd     `cmd:"" help:"Get a user."`
-	Resolve UserResolveCmd `cmd:"" help:"Resolve a user identity."`
-	List    UserListCmd    `cmd:"" help:"List users."`
+	Create  UserCreateCmd  `cmd:"" help:"Create a user with optional external identities."`
+	Update  UserUpdateCmd  `cmd:"" help:"Update a user and optional external identities."`
+	Get     UserGetCmd     `cmd:"" help:"Get a user by internal ID."`
+	Resolve UserResolveCmd `cmd:"" help:"Resolve a user from exactly one identity selector."`
+	List    UserListCmd    `cmd:"" help:"List all users."`
 }
 
 type UserCreateCmd struct {
-	Name        string `required:""`
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsappID  *string
+	Name        string  `required:"" help:"Display name for the user."`
+	DiscordID   *string `help:"Discord user ID."`
+	TelegramID  *string `help:"Telegram user ID."`
+	PhoneNumber *string `help:"Phone number."`
+	WhatsappID  *string `help:"WhatsApp ID."`
 }
 
 func (c *UserCreateCmd) Run(ctx *runContext) error {
@@ -302,16 +303,16 @@ func (c *UserCreateCmd) Run(ctx *runContext) error {
 }
 
 type UserUpdateCmd struct {
-	ID               int64 `required:""`
-	Name             *string
-	DiscordID        *string
-	TelegramID       *string
-	PhoneNumber      *string
-	WhatsappID       *string
-	ClearDiscordID   bool
-	ClearTelegramID  bool
-	ClearPhoneNumber bool
-	ClearWhatsappID  bool
+	ID               int64   `required:"" help:"Internal user ID."`
+	Name             *string `help:"Replacement display name."`
+	DiscordID        *string `help:"Replacement Discord user ID."`
+	TelegramID       *string `help:"Replacement Telegram user ID."`
+	PhoneNumber      *string `help:"Replacement phone number."`
+	WhatsappID       *string `help:"Replacement WhatsApp ID."`
+	ClearDiscordID   bool    `help:"Clear the Discord ID."`
+	ClearTelegramID  bool    `help:"Clear the Telegram ID."`
+	ClearPhoneNumber bool    `help:"Clear the phone number."`
+	ClearWhatsappID  bool    `help:"Clear the WhatsApp ID."`
 }
 
 func (c *UserUpdateCmd) Run(ctx *runContext) error {
@@ -334,7 +335,7 @@ func (c *UserUpdateCmd) Run(ctx *runContext) error {
 }
 
 type UserGetCmd struct {
-	ID int64 `required:""`
+	ID int64 `required:"" help:"Internal user ID."`
 }
 
 func (c *UserGetCmd) Run(ctx *runContext) error {
@@ -346,11 +347,11 @@ func (c *UserGetCmd) Run(ctx *runContext) error {
 }
 
 type UserResolveCmd struct {
-	AuthorID    *int64
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsappID  *string
+	AuthorID    *int64  `placeholder:"INT-64" help:"Internal user ID. Exactly one identity selector is required."`
+	DiscordID   *string `help:"Discord user ID. Exactly one identity selector is required."`
+	TelegramID  *string `help:"Telegram user ID. Exactly one identity selector is required."`
+	PhoneNumber *string `help:"Phone number. Exactly one identity selector is required."`
+	WhatsappID  *string `help:"WhatsApp ID. Exactly one identity selector is required."`
 }
 
 func (c *UserResolveCmd) Run(ctx *runContext) error {
@@ -372,15 +373,15 @@ func (c *UserListCmd) Run(ctx *runContext) error {
 }
 
 type HouseholdsCmd struct {
-	Get   HouseholdGetCmd   `cmd:"" help:"Get a household."`
-	List  HouseholdListCmd  `cmd:"" help:"List households."`
-	Users HouseholdUsersCmd `cmd:"" help:"List household users."`
+	Get   HouseholdGetCmd   `cmd:"" help:"Get a household from exactly one selector."`
+	List  HouseholdListCmd  `cmd:"" help:"List all households."`
+	Users HouseholdUsersCmd `cmd:"" help:"List users in a household."`
 }
 
 type HouseholdGetCmd struct {
-	ID      *int64
-	GuildID *string
-	Name    *string
+	ID      *int64  `placeholder:"INT-64" help:"Internal household ID. Exactly one household selector is required."`
+	GuildID *string `help:"Discord guild/server ID. Exactly one household selector is required."`
+	Name    *string `help:"Household name. Exactly one household selector is required."`
 }
 
 func (c *HouseholdGetCmd) Run(ctx *runContext) error {
@@ -402,7 +403,7 @@ func (c *HouseholdListCmd) Run(ctx *runContext) error {
 }
 
 type HouseholdUsersCmd struct {
-	HouseholdID int64 `required:""`
+	HouseholdID int64 `required:"" help:"Internal household ID."`
 }
 
 func (c *HouseholdUsersCmd) Run(ctx *runContext) error {
@@ -443,6 +444,17 @@ func isExpectedError(err error) bool {
 	var appErr *app.AppError
 	var cliErr CLIError
 	return errors.As(err, &appErr) || errors.As(err, &cliErr)
+}
+
+func expectedErrorMessage(err error) string {
+	var appErr *app.AppError
+	if errors.As(err, &appErr) {
+		if cause := appErr.Unwrap(); cause != nil {
+			return fmt.Sprintf("%s: %v", appErr.Message, cause)
+		}
+		return appErr.Message
+	}
+	return err.Error()
 }
 
 func decodeJSONInput(stdin io.Reader, input *string, value any) error {

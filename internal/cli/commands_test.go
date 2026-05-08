@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"rdmm404/voltr-finance/internal/app"
@@ -111,12 +113,109 @@ func TestKongSubcommandHelpDoesNotPanicWithoutService(t *testing.T) {
 	}
 }
 
+func TestKongExpectedErrorIncludesCause(t *testing.T) {
+	svc := &fakeAppService{
+		listTransactionsErr: app.NewError(app.CodeDatabaseError, "transaction list failed", errors.New("relation transactions.transactions does not exist")),
+	}
+	var stderr bytes.Buffer
+
+	code := Run(context.Background(), []string{
+		"transactions", "list",
+	}, nil, &bytes.Buffer{}, &stderr, svc)
+
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if got := stderr.String(); got != "transaction list failed: relation transactions.transactions does not exist\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestKongHelpDocumentsFlagSemantics(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "transaction create",
+			args: []string{"transactions", "create", "--help"},
+			want: []string{
+				"Transaction amount, in dollars.",
+				"Transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00.",
+				"Exactly one author selector may be provided.",
+				"Internal household ID.",
+			},
+		},
+		{
+			name: "transaction list",
+			args: []string{"transactions", "list", "--help"},
+			want: []string{
+				`--format="json"`,
+				"Output format: json or csv.",
+				"Sort field: transaction_date, created_at, amount, or id.",
+				"Sort order: asc or desc.",
+				"Include soft-deleted transactions.",
+			},
+		},
+		{
+			name: "transaction bulk",
+			args: []string{"transactions", "create-bulk", "--help"},
+			want: []string{
+				"Path to a JSON file containing a bulk create request. Reads stdin when omitted.",
+				"Expected shape: {\"transactions\":[...]}",
+			},
+		},
+		{
+			name: "user update",
+			args: []string{"users", "update", "--help"},
+			want: []string{
+				"Internal user ID.",
+				"Clear the Discord ID.",
+				"Telegram user ID.",
+			},
+		},
+		{
+			name: "household get",
+			args: []string{"households", "get", "--help"},
+			want: []string{
+				"Exactly one household selector is required.",
+				"Internal household ID.",
+				"Discord guild/server ID.",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+
+			code := Run(context.Background(), tt.args, nil, &stdout, &stderr, nil)
+
+			if code != 0 {
+				t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr.String())
+			}
+			got := normalizeHelp(stdout.String())
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("help output missing %q\noutput:\n%s", want, stdout.String())
+				}
+			}
+		})
+	}
+}
+
+func normalizeHelp(help string) string {
+	return strings.Join(strings.Fields(help), " ")
+}
+
 type fakeAppService struct {
-	createTransaction  app.CreateTransactionRequest
-	listTransactions   app.ListTransactionsRequest
-	deleteTransactions app.DeleteTransactionsRequest
-	resolveUser        app.IdentitySelector
-	getHousehold       app.GetHouseholdRequest
+	createTransaction   app.CreateTransactionRequest
+	listTransactions    app.ListTransactionsRequest
+	listTransactionsErr error
+	deleteTransactions  app.DeleteTransactionsRequest
+	resolveUser         app.IdentitySelector
+	getHousehold        app.GetHouseholdRequest
 }
 
 func (f *fakeAppService) CreateTransaction(_ context.Context, req app.CreateTransactionRequest) app.WriteResult {
@@ -142,6 +241,9 @@ func (f *fakeAppService) GetTransactions(context.Context, []int64, bool) ([]app.
 
 func (f *fakeAppService) ListTransactions(_ context.Context, req app.ListTransactionsRequest) ([]app.TransactionDTO, error) {
 	f.listTransactions = req
+	if f.listTransactionsErr != nil {
+		return nil, f.listTransactionsErr
+	}
 	return []app.TransactionDTO{}, nil
 }
 
