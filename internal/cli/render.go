@@ -30,6 +30,7 @@ func RenderTransactionCompact(w io.Writer, tx app.TransactionDTO) error {
 		{"Date", tx.TransactionDate.Format("2006-01-02 15:04")},
 		{"Author", tx.AuthorName},
 		{"Household", stringValue(tx.HouseholdName)},
+		{"Category", categoryValue(tx.Category)},
 		{"Description", stringValue(tx.Description)},
 		{"Notes", stringValue(tx.Notes)},
 	}
@@ -51,6 +52,8 @@ func RenderTransactionsCSV(w io.Writer, txs []app.TransactionDTO) error {
 		"author_name",
 		"household_id",
 		"household_name",
+		"category_code",
+		"category_name",
 		"description",
 		"notes",
 		"created_at",
@@ -68,6 +71,8 @@ func RenderTransactionsCSV(w io.Writer, txs []app.TransactionDTO) error {
 			tx.AuthorName,
 			formatInt(tx.HouseholdID),
 			stringValue(tx.HouseholdName),
+			categoryCode(tx.Category),
+			categoryValue(tx.Category),
 			stringValue(tx.Description),
 			stringValue(tx.Notes),
 			formatTime(tx.CreatedAt),
@@ -86,6 +91,20 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func categoryCode(category *app.CategoryRefDTO) string {
+	if category == nil {
+		return ""
+	}
+	return category.Code
+}
+
+func categoryValue(category *app.CategoryRefDTO) string {
+	if category == nil {
+		return ""
+	}
+	return category.Name
 }
 
 func formatInt(value *int64) string {
