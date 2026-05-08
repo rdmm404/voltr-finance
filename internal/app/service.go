@@ -12,6 +12,7 @@ type Repository interface {
 	UserRepository
 	HouseholdRepository
 	TransactionRepository
+	CategoryRepository
 }
 
 type UserRepository interface {
@@ -36,6 +37,17 @@ type HouseholdRepository interface {
 type TransactionRepository interface {
 	GetTransactionsByIdWithDetails(context.Context, sqlc.GetTransactionsByIdWithDetailsParams) ([]sqlc.GetTransactionsByIdWithDetailsRow, error)
 	ListTransactions(context.Context, sqlc.ListTransactionsParams) ([]sqlc.ListTransactionsRow, error)
+}
+
+type CategoryRepository interface {
+	CreateCategory(context.Context, sqlc.CreateCategoryParams) (sqlc.Category, error)
+	ListCategories(context.Context, bool) ([]sqlc.Category, error)
+	GetCategoryById(context.Context, int64) (sqlc.Category, error)
+	GetActiveCategoryById(context.Context, int64) (sqlc.Category, error)
+	GetCategoryByCode(context.Context, string) (sqlc.Category, error)
+	GetActiveCategoryByCode(context.Context, string) (sqlc.Category, error)
+	UpdateCategory(context.Context, sqlc.UpdateCategoryParams) (sqlc.Category, error)
+	DeactivateCategory(context.Context, string) (sqlc.Category, error)
 }
 
 type TransactionService interface {
