@@ -23,6 +23,7 @@ type fakeRepo struct {
 	lastTelegramID       *string
 	lastListTransactions sqlc.ListTransactionsParams
 	transactionDetails   []sqlc.GetTransactionsByIdWithDetailsRow
+	listTransactionRows  []sqlc.ListTransactionsRow
 
 	lastCreateCategory                sqlc.CreateCategoryParams
 	lastUpdateCategory                sqlc.UpdateCategoryParams
@@ -104,7 +105,7 @@ func (f *fakeRepo) GetTransactionsByIdWithDetails(context.Context, sqlc.GetTrans
 
 func (f *fakeRepo) ListTransactions(_ context.Context, arg sqlc.ListTransactionsParams) ([]sqlc.ListTransactionsRow, error) {
 	f.lastListTransactions = arg
-	return nil, nil
+	return f.listTransactionRows, nil
 }
 
 func (f *fakeRepo) CreateCategory(_ context.Context, arg sqlc.CreateCategoryParams) (sqlc.Category, error) {
@@ -124,8 +125,8 @@ func (f *fakeRepo) GetCategoryById(context.Context, int64) (sqlc.Category, error
 	return f.categoryByID, nil
 }
 
-func (f *fakeRepo) GetActiveCategoryById(context.Context, int64) (sqlc.Category, error) {
-	if f.categoryByID.ID == 0 || !f.categoryByID.IsActive {
+func (f *fakeRepo) GetActiveCategoryById(_ context.Context, id int64) (sqlc.Category, error) {
+	if f.categoryByID.ID == 0 || f.categoryByID.ID != id || !f.categoryByID.IsActive {
 		return sqlc.Category{}, sql.ErrNoRows
 	}
 	return f.categoryByID, nil
@@ -138,8 +139,8 @@ func (f *fakeRepo) GetCategoryByCode(context.Context, string) (sqlc.Category, er
 	return f.categoryByCode, nil
 }
 
-func (f *fakeRepo) GetActiveCategoryByCode(context.Context, string) (sqlc.Category, error) {
-	if f.categoryByCode.ID == 0 || !f.categoryByCode.IsActive {
+func (f *fakeRepo) GetActiveCategoryByCode(_ context.Context, code string) (sqlc.Category, error) {
+	if f.categoryByCode.ID == 0 || f.categoryByCode.Code != code || !f.categoryByCode.IsActive {
 		return sqlc.Category{}, sql.ErrNoRows
 	}
 	return f.categoryByCode, nil
@@ -168,6 +169,7 @@ func (f *fakeRepo) DeactivateCategory(context.Context, string) (sqlc.Category, e
 
 type fakeTransactionService struct {
 	saved         []sqlc.CreateTransactionParams
+	updated       []transaction.UpdateTransactionById
 	saveResult    transaction.TransactionResult
 	updateResult  transaction.TransactionResult
 	deleteResult  transaction.TransactionResult
@@ -186,7 +188,8 @@ func (f *fakeTransactionService) SaveTransactions(_ context.Context, transaction
 	return f.saveResult
 }
 
-func (f *fakeTransactionService) UpdateTransactionsById(context.Context, []transaction.UpdateTransactionById) transaction.TransactionResult {
+func (f *fakeTransactionService) UpdateTransactionsById(_ context.Context, transactions []transaction.UpdateTransactionById) transaction.TransactionResult {
+	f.updated = transactions
 	return f.updateResult
 }
 
