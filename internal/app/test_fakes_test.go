@@ -319,12 +319,21 @@ func (f *fakeRepo) DeleteBudgetLineCategories(context.Context, int64) error {
 
 func (f *fakeRepo) CreateBudgetLineCategory(_ context.Context, arg sqlc.CreateBudgetLineCategoryParams) error {
 	f.createdBudgetLineCategories = append(f.createdBudgetLineCategories, arg)
+	categoryCode := ""
+	categoryName := ""
+	for _, category := range f.budgetLineCategories {
+		if category.CategoryID == arg.CategoryID {
+			categoryCode = category.CategoryCode
+			categoryName = category.CategoryName
+			break
+		}
+	}
 	f.budgetLineCategories = append(f.budgetLineCategories, sqlc.ListBudgetLineCategoriesRow{
 		BudgetID:     arg.BudgetID,
 		BudgetLineID: arg.BudgetLineID,
 		CategoryID:   arg.CategoryID,
-		CategoryCode: "",
-		CategoryName: "",
+		CategoryCode: categoryCode,
+		CategoryName: categoryName,
 	})
 	return nil
 }
@@ -335,6 +344,16 @@ func (f *fakeRepo) ListBudgetTransactions(context.Context, sqlc.ListBudgetTransa
 
 func (f *fakeRepo) SumUncategorizedBudgetTransactions(context.Context, sqlc.SumUncategorizedBudgetTransactionsParams) (float32, error) {
 	return 0, nil
+}
+
+type fakeTransactor struct {
+	repo  Repository
+	calls int
+}
+
+func (f *fakeTransactor) WithinTx(ctx context.Context, fn func(Repository) error) error {
+	f.calls++
+	return fn(f.repo)
 }
 
 type fakeTransactionService struct {

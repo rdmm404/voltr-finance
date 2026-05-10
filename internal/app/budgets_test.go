@@ -374,7 +374,8 @@ func TestGetMonthlyBudgetCopiesLatestPriorHouseholdBudgetWhenMissing(t *testing.
 			{ID: 202, BudgetID: targetID, Name: "Rent", AllocationAmount: rentAllocation, SortOrder: 2},
 		},
 	}
-	svc := NewService(repo, &fakeTransactionService{})
+	transactor := &fakeTransactor{repo: repo}
+	svc := NewServiceWithTransactor(repo, &fakeTransactionService{}, transactor)
 
 	budget, err := svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
 		HouseholdID:     &householdID,
@@ -388,6 +389,9 @@ func TestGetMonthlyBudgetCopiesLatestPriorHouseholdBudgetWhenMissing(t *testing.
 	}
 	if budget.SourceBudgetID == nil || *budget.SourceBudgetID != sourceID {
 		t.Fatalf("source budget id = %v, want %d", budget.SourceBudgetID, sourceID)
+	}
+	if transactor.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", transactor.calls)
 	}
 	if repo.lastCreateHouseholdBudget.SourceBudgetID == nil || *repo.lastCreateHouseholdBudget.SourceBudgetID != sourceID {
 		t.Fatalf("created source budget id = %v, want %d", repo.lastCreateHouseholdBudget.SourceBudgetID, sourceID)
@@ -412,6 +416,18 @@ func TestGetMonthlyBudgetCopiesLatestPriorHouseholdBudgetWhenMissing(t *testing.
 	if repo.createdBudgetLineCategories[0] != wantCategory {
 		t.Fatalf("created budget line category = %+v, want %+v", repo.createdBudgetLineCategories[0], wantCategory)
 	}
+	if len(budget.Lines) != 2 {
+		t.Fatalf("returned lines = %+v, want two copied target lines", budget.Lines)
+	}
+	if budget.Lines[0].ID != 201 || budget.Lines[0].BudgetID != targetID || budget.Lines[0].Name != "Groceries" || budget.Lines[0].AllocationAmount != "250.25" {
+		t.Fatalf("returned first line = %+v, want copied groceries target line", budget.Lines[0])
+	}
+	if len(budget.Lines[0].Categories) != 1 || budget.Lines[0].Categories[0].ID != 3 || budget.Lines[0].Categories[0].Code != "groceries" {
+		t.Fatalf("returned first line categories = %+v, want copied groceries category", budget.Lines[0].Categories)
+	}
+	if budget.Lines[1].ID != 202 || budget.Lines[1].BudgetID != targetID || budget.Lines[1].Name != "Rent" || budget.Lines[1].AllocationAmount != "1200.00" {
+		t.Fatalf("returned second line = %+v, want copied rent target line", budget.Lines[1])
+	}
 }
 
 func TestGetMonthlyBudgetCopiesLatestPriorUserBudgetWhenMissing(t *testing.T) {
@@ -420,6 +436,10 @@ func TestGetMonthlyBudgetCopiesLatestPriorUserBudgetWhenMissing(t *testing.T) {
 	targetID := int64(18)
 	julyStart := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
 	julyEnd := pgtype.Date{Time: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+	utilitiesAllocation, err := parseBudgetNumeric("88.40")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
 	repo := &fakeRepo{
 		latestPriorUser: sqlc.Budget{
 			ID:     sourceID,
@@ -432,8 +452,18 @@ func TestGetMonthlyBudgetCopiesLatestPriorUserBudgetWhenMissing(t *testing.T) {
 			PeriodEnd:      julyEnd,
 			SourceBudgetID: &sourceID,
 		},
+		budgetLines: []sqlc.BudgetLine{
+			{ID: 301, BudgetID: sourceID, Name: "Utilities", AllocationAmount: utilitiesAllocation, SortOrder: 4},
+		},
+		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
+			{BudgetID: sourceID, BudgetLineID: 301, CategoryID: 9, CategoryCode: "utilities", CategoryName: "Utilities"},
+		},
+		createdBudgetLineRows: []sqlc.BudgetLine{
+			{ID: 401, BudgetID: targetID, Name: "Utilities", AllocationAmount: utilitiesAllocation, SortOrder: 4},
+		},
 	}
-	svc := NewService(repo, &fakeTransactionService{})
+	transactor := &fakeTransactor{repo: repo}
+	svc := NewServiceWithTransactor(repo, &fakeTransactionService{}, transactor)
 
 	budget, err := svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
 		UserID:          &userID,
@@ -448,11 +478,68 @@ func TestGetMonthlyBudgetCopiesLatestPriorUserBudgetWhenMissing(t *testing.T) {
 	if repo.lastLatestPriorUserBudget.UserID != userID {
 		t.Fatalf("latest prior user id = %d, want %d", repo.lastLatestPriorUserBudget.UserID, userID)
 	}
+	if transactor.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", transactor.calls)
+	}
 	if budget.SourceBudgetID == nil || *budget.SourceBudgetID != sourceID {
 		t.Fatalf("source budget id = %v, want %d", budget.SourceBudgetID, sourceID)
 	}
 	if repo.lastCreateUserBudget.SourceBudgetID == nil || *repo.lastCreateUserBudget.SourceBudgetID != sourceID {
 		t.Fatalf("created source budget id = %v, want %d", repo.lastCreateUserBudget.SourceBudgetID, sourceID)
+	}
+	if len(repo.createdBudgetLines) != 1 {
+		t.Fatalf("created budget lines = %+v, want one line", repo.createdBudgetLines)
+	}
+	wantLine := sqlc.CreateBudgetLineParams{BudgetID: targetID, Name: "Utilities", AllocationAmount: utilitiesAllocation, SortOrder: 4}
+	gotLine := repo.createdBudgetLines[0]
+	if gotLine.BudgetID != wantLine.BudgetID || gotLine.Name != wantLine.Name || gotLine.SortOrder != wantLine.SortOrder || budgetNumericString(gotLine.AllocationAmount) != budgetNumericString(wantLine.AllocationAmount) {
+		t.Fatalf("created budget line = %+v, want %+v", gotLine, wantLine)
+	}
+	if len(repo.createdBudgetLineCategories) != 1 {
+		t.Fatalf("created budget line categories = %+v, want one mapping", repo.createdBudgetLineCategories)
+	}
+	wantCategory := sqlc.CreateBudgetLineCategoryParams{BudgetID: targetID, BudgetLineID: 401, CategoryID: 9}
+	if repo.createdBudgetLineCategories[0] != wantCategory {
+		t.Fatalf("created budget line category = %+v, want %+v", repo.createdBudgetLineCategories[0], wantCategory)
+	}
+	if len(budget.Lines) != 1 || budget.Lines[0].ID != 401 || budget.Lines[0].BudgetID != targetID || budget.Lines[0].Name != "Utilities" {
+		t.Fatalf("returned lines = %+v, want copied user target line", budget.Lines)
+	}
+	if len(budget.Lines[0].Categories) != 1 || budget.Lines[0].Categories[0].ID != 9 || budget.Lines[0].Categories[0].Code != "utilities" {
+		t.Fatalf("returned categories = %+v, want copied utilities category", budget.Lines[0].Categories)
+	}
+}
+
+func TestGetMonthlyBudgetReturnsDatabaseErrorWhenCopyNeedsMissingTransactor(t *testing.T) {
+	householdID := int64(7)
+	sourceID := int64(7)
+	amount, err := parseBudgetNumeric("10.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		latestPriorHousehold: sqlc.Budget{
+			ID:          sourceID,
+			HouseholdID: &householdID,
+		},
+		budgetLines: []sqlc.BudgetLine{
+			{ID: 101, BudgetID: sourceID, Name: "Groceries", AllocationAmount: amount, SortOrder: 1},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	_, err = svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
+		HouseholdID:     &householdID,
+		Year:            2026,
+		Month:           7,
+		CreateIfMissing: true,
+	})
+
+	if appErr, ok := err.(*AppError); !ok || appErr.Code != CodeDatabaseError {
+		t.Fatalf("err = %v, want database error", err)
+	}
+	if len(repo.createdBudgetLines) != 0 {
+		t.Fatalf("created budget lines = %+v, want none", repo.createdBudgetLines)
 	}
 }
 

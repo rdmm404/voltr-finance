@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/transaction"
 )
@@ -80,13 +83,47 @@ type TransactionService interface {
 	RestoreTransactionsById(context.Context, []int64, int64) transaction.TransactionResult
 }
 
+type Transactor interface {
+	WithinTx(ctx context.Context, fn func(Repository) error) error
+}
+
+type SQLCTransactor struct {
+	pool    *pgxpool.Pool
+	queries *sqlc.Queries
+}
+
+func NewSQLCTransactor(pool *pgxpool.Pool, queries *sqlc.Queries) *SQLCTransactor {
+	return &SQLCTransactor{pool: pool, queries: queries}
+}
+
+func (t *SQLCTransactor) WithinTx(ctx context.Context, fn func(Repository) error) error {
+	tx, err := t.pool.Begin(ctx)
+	if err != nil {
+		return mapBudgetError(err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := fn(t.queries.WithTx(tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return mapBudgetError(err)
+	}
+	return nil
+}
+
 type Service struct {
 	repo         Repository
 	transactions TransactionService
+	transactor   Transactor
 }
 
 func NewService(repo Repository, transactions TransactionService) *Service {
 	return &Service{repo: repo, transactions: transactions}
+}
+
+func NewServiceWithTransactor(repo Repository, transactions TransactionService, transactor Transactor) *Service {
+	return &Service{repo: repo, transactions: transactions, transactor: transactor}
 }
 
 func mapUserError(err error) error {

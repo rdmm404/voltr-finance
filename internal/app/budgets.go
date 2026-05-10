@@ -110,30 +110,53 @@ func (s *Service) createMonthlyBudget(ctx context.Context, householdID, userID *
 		return sqlc.Budget{}, err
 	}
 
+	if sourceBudgetID == nil {
+		return s.createBudget(ctx, s.repo, householdID, userID, periodStart, periodEnd, nil)
+	}
+	if s.transactor == nil {
+		return sqlc.Budget{}, NewError(CodeDatabaseError, "database error", errors.New("budget copy requires transaction support"))
+	}
+
 	var budget sqlc.Budget
+	err = s.transactor.WithinTx(ctx, func(repo Repository) error {
+		created, err := s.createBudget(ctx, repo, householdID, userID, periodStart, periodEnd, sourceBudgetID)
+		if err != nil {
+			return err
+		}
+		if err := s.copyBudgetLines(ctx, repo, sourceBudget.ID, created.ID); err != nil {
+			return err
+		}
+		budget = created
+		return nil
+	})
+	if err != nil {
+		return sqlc.Budget{}, err
+	}
+	return budget, nil
+}
+
+func (s *Service) createBudget(ctx context.Context, repo Repository, householdID, userID *int64, periodStart, periodEnd pgtype.Date, sourceBudgetID *int64) (sqlc.Budget, error) {
 	if householdID != nil {
-		budget, err = s.repo.CreateHouseholdBudget(ctx, sqlc.CreateHouseholdBudgetParams{
+		budget, err := repo.CreateHouseholdBudget(ctx, sqlc.CreateHouseholdBudgetParams{
 			HouseholdID:    *householdID,
 			PeriodStart:    periodStart,
 			PeriodEnd:      periodEnd,
 			SourceBudgetID: sourceBudgetID,
 		})
-	} else {
-		budget, err = s.repo.CreateUserBudget(ctx, sqlc.CreateUserBudgetParams{
-			UserID:         *userID,
-			PeriodStart:    periodStart,
-			PeriodEnd:      periodEnd,
-			SourceBudgetID: sourceBudgetID,
-		})
-	}
-	if err != nil {
-		return sqlc.Budget{}, mapBudgetError(err)
+		if err != nil {
+			return sqlc.Budget{}, mapBudgetError(err)
+		}
+		return budget, nil
 	}
 
-	if sourceBudgetID != nil {
-		if err := s.copyBudgetLines(ctx, sourceBudget.ID, budget.ID); err != nil {
-			return sqlc.Budget{}, err
-		}
+	budget, err := repo.CreateUserBudget(ctx, sqlc.CreateUserBudgetParams{
+		UserID:         *userID,
+		PeriodStart:    periodStart,
+		PeriodEnd:      periodEnd,
+		SourceBudgetID: sourceBudgetID,
+	})
+	if err != nil {
+		return sqlc.Budget{}, mapBudgetError(err)
 	}
 	return budget, nil
 }
@@ -164,12 +187,12 @@ func (s *Service) latestPriorBudget(ctx context.Context, householdID, userID *in
 	return budget, &sourceBudgetID, nil
 }
 
-func (s *Service) copyBudgetLines(ctx context.Context, sourceBudgetID, targetBudgetID int64) error {
-	sourceLines, err := s.repo.ListBudgetLines(ctx, sourceBudgetID)
+func (s *Service) copyBudgetLines(ctx context.Context, repo Repository, sourceBudgetID, targetBudgetID int64) error {
+	sourceLines, err := repo.ListBudgetLines(ctx, sourceBudgetID)
 	if err != nil {
 		return mapBudgetError(err)
 	}
-	sourceMappings, err := s.repo.ListBudgetLineCategories(ctx, sourceBudgetID)
+	sourceMappings, err := repo.ListBudgetLineCategories(ctx, sourceBudgetID)
 	if err != nil {
 		return mapBudgetError(err)
 	}
@@ -180,7 +203,7 @@ func (s *Service) copyBudgetLines(ctx context.Context, sourceBudgetID, targetBud
 	}
 
 	for _, sourceLine := range sourceLines {
-		targetLine, err := s.repo.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
+		targetLine, err := repo.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
 			BudgetID:         targetBudgetID,
 			Name:             sourceLine.Name,
 			AllocationAmount: sourceLine.AllocationAmount,
@@ -190,7 +213,7 @@ func (s *Service) copyBudgetLines(ctx context.Context, sourceBudgetID, targetBud
 			return mapBudgetError(err)
 		}
 		for _, mapping := range mappingsByLineID[sourceLine.ID] {
-			err := s.repo.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{
+			err := repo.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{
 				BudgetID:     targetBudgetID,
 				BudgetLineID: targetLine.ID,
 				CategoryID:   mapping.CategoryID,
