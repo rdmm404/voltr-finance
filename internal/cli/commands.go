@@ -35,12 +35,19 @@ type AppService interface {
 	GetHousehold(context.Context, app.GetHouseholdRequest) (app.HouseholdDTO, error)
 	ListHouseholds(context.Context) ([]app.HouseholdDTO, error)
 	GetHouseholdUsers(context.Context, int64) ([]app.UserDTO, error)
+
+	CreateCategory(context.Context, app.CreateCategoryRequest) (app.CategoryDTO, error)
+	ListCategories(context.Context, app.ListCategoriesRequest) ([]app.CategoryDTO, error)
+	GetCategoryByCode(context.Context, string) (app.CategoryDTO, error)
+	UpdateCategory(context.Context, app.UpdateCategoryRequest) (app.CategoryDTO, error)
+	DeactivateCategory(context.Context, string) (app.CategoryDTO, error)
 }
 
 type CLI struct {
 	Transactions TransactionsCmd `cmd:"" help:"Manage transactions."`
 	Users        UsersCmd        `cmd:"" help:"Manage users."`
 	Households   HouseholdsCmd   `cmd:"" help:"Read households."`
+	Categories   CategoriesCmd   `cmd:"" help:"Manage transaction categories."`
 }
 
 type runContext struct {
@@ -99,7 +106,7 @@ type TransactionCreateCmd struct {
 	TransactionDate   time.Time `required:"" placeholder:"RFC3339" help:"Transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00."`
 	Description       *string   `help:"Short transaction description."`
 	Notes             *string   `help:"Longer transaction notes."`
-	BudgetCategoryID  *int64    `placeholder:"INT-64" help:"Internal budget category ID."`
+	Category          *string   `help:"Category code."`
 	HouseholdID       *int64    `required:"" placeholder:"INT-64" help:"Internal household ID."`
 	AuthorID          *int64    `placeholder:"INT-64" help:"Internal author user ID. Exactly one author selector may be provided."`
 	AuthorDiscordID   *string   `help:"Author Discord user ID. Exactly one author selector may be provided."`
@@ -110,13 +117,13 @@ type TransactionCreateCmd struct {
 
 func (c *TransactionCreateCmd) Run(ctx *runContext) error {
 	result := ctx.svc.CreateTransaction(ctx.Context, app.CreateTransactionRequest{
-		Amount:           c.Amount,
-		TransactionDate:  c.TransactionDate,
-		Description:      c.Description,
-		Notes:            c.Notes,
-		BudgetCategoryID: c.BudgetCategoryID,
-		HouseholdID:      c.HouseholdID,
-		Author:           identity(c.AuthorID, c.AuthorDiscordID, c.AuthorTelegramID, c.AuthorPhoneNumber, c.AuthorWhatsappID),
+		Amount:          c.Amount,
+		TransactionDate: c.TransactionDate,
+		Description:     c.Description,
+		Notes:           c.Notes,
+		CategoryCode:    c.Category,
+		HouseholdID:     c.HouseholdID,
+		Author:          identity(c.AuthorID, c.AuthorDiscordID, c.AuthorTelegramID, c.AuthorPhoneNumber, c.AuthorWhatsappID),
 	})
 	return renderWriteResult(ctx.stdout, result)
 }
@@ -134,38 +141,38 @@ func (c *TransactionCreateBulkCmd) Run(ctx *runContext) error {
 }
 
 type TransactionUpdateCmd struct {
-	ID                    int64      `required:"" help:"Internal transaction ID."`
-	Amount                *float32   `placeholder:"FLOAT-32" help:"Replacement transaction amount, in dollars."`
-	TransactionDate       *time.Time `placeholder:"RFC3339" help:"Replacement transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00."`
-	Description           *string    `help:"Replacement short transaction description."`
-	Notes                 *string    `help:"Replacement longer transaction notes."`
-	BudgetCategoryID      *int64     `placeholder:"INT-64" help:"Replacement internal budget category ID."`
-	HouseholdID           *int64     `placeholder:"INT-64" help:"Replacement internal household ID."`
-	AuthorID              *int64     `placeholder:"INT-64" help:"Replacement internal author user ID. Exactly one author selector may be provided."`
-	AuthorDiscordID       *string    `help:"Replacement author Discord user ID. Exactly one author selector may be provided."`
-	AuthorTelegramID      *string    `help:"Replacement author Telegram user ID. Exactly one author selector may be provided."`
-	AuthorPhoneNumber     *string    `help:"Replacement author phone number. Exactly one author selector may be provided."`
-	AuthorWhatsappID      *string    `help:"Replacement author WhatsApp ID. Exactly one author selector may be provided."`
-	ClearDescription      bool       `help:"Clear the transaction description."`
-	ClearNotes            bool       `help:"Clear the transaction notes."`
-	ClearBudgetCategoryID bool       `help:"Clear the budget category ID."`
-	ClearHouseholdID      bool       `help:"Clear the household ID."`
+	ID                int64      `required:"" help:"Internal transaction ID."`
+	Amount            *float32   `placeholder:"FLOAT-32" help:"Replacement transaction amount, in dollars."`
+	TransactionDate   *time.Time `placeholder:"RFC3339" help:"Replacement transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00."`
+	Description       *string    `help:"Replacement short transaction description."`
+	Notes             *string    `help:"Replacement longer transaction notes."`
+	Category          *string    `help:"Replacement category code."`
+	HouseholdID       *int64     `placeholder:"INT-64" help:"Replacement internal household ID."`
+	AuthorID          *int64     `placeholder:"INT-64" help:"Replacement internal author user ID. Exactly one author selector may be provided."`
+	AuthorDiscordID   *string    `help:"Replacement author Discord user ID. Exactly one author selector may be provided."`
+	AuthorTelegramID  *string    `help:"Replacement author Telegram user ID. Exactly one author selector may be provided."`
+	AuthorPhoneNumber *string    `help:"Replacement author phone number. Exactly one author selector may be provided."`
+	AuthorWhatsappID  *string    `help:"Replacement author WhatsApp ID. Exactly one author selector may be provided."`
+	ClearDescription  bool       `help:"Clear the transaction description."`
+	ClearNotes        bool       `help:"Clear the transaction notes."`
+	ClearCategory     bool       `help:"Clear the transaction category."`
+	ClearHouseholdID  bool       `help:"Clear the household ID."`
 }
 
 func (c *TransactionUpdateCmd) Run(ctx *runContext) error {
 	selector := identity(c.AuthorID, c.AuthorDiscordID, c.AuthorTelegramID, c.AuthorPhoneNumber, c.AuthorWhatsappID)
 	req := app.UpdateTransactionRequest{
-		ID:                    c.ID,
-		Amount:                c.Amount,
-		TransactionDate:       c.TransactionDate,
-		Description:           c.Description,
-		Notes:                 c.Notes,
-		BudgetCategoryID:      c.BudgetCategoryID,
-		HouseholdID:           c.HouseholdID,
-		ClearDescription:      c.ClearDescription,
-		ClearNotes:            c.ClearNotes,
-		ClearBudgetCategoryID: c.ClearBudgetCategoryID,
-		ClearHouseholdID:      c.ClearHouseholdID,
+		ID:               c.ID,
+		Amount:           c.Amount,
+		TransactionDate:  c.TransactionDate,
+		Description:      c.Description,
+		Notes:            c.Notes,
+		CategoryCode:     c.Category,
+		HouseholdID:      c.HouseholdID,
+		ClearDescription: c.ClearDescription,
+		ClearNotes:       c.ClearNotes,
+		ClearCategoryID:  c.ClearCategory,
+		ClearHouseholdID: c.ClearHouseholdID,
 	}
 	if selector != (app.IdentitySelector{}) {
 		req.Author = &selector
@@ -276,6 +283,75 @@ func (c *TransactionRestoreCmd) Run(ctx *runContext) error {
 		IDs:              ids,
 		RestoredByUserID: c.RestoredByUserID,
 	}))
+}
+
+type CategoriesCmd struct {
+	Create     CategoryCreateCmd     `cmd:"" help:"Create a category."`
+	List       CategoryListCmd       `cmd:"" help:"List categories."`
+	Rename     CategoryRenameCmd     `cmd:"" help:"Rename a category by code."`
+	Deactivate CategoryDeactivateCmd `cmd:"" help:"Deactivate a category by code."`
+}
+
+type CategoryCreateCmd struct {
+	Name        string  `arg:"" required:"" help:"Category display name."`
+	Code        *string `help:"Stable category code. Defaults to a slug generated from name."`
+	Description *string `help:"Optional category description."`
+}
+
+func (c *CategoryCreateCmd) Run(ctx *runContext) error {
+	category, err := ctx.svc.CreateCategory(ctx.Context, app.CreateCategoryRequest{
+		Name:        c.Name,
+		Code:        c.Code,
+		Description: c.Description,
+	})
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, category)
+}
+
+type CategoryListCmd struct {
+	IncludeInactive bool `help:"Include inactive categories."`
+}
+
+func (c *CategoryListCmd) Run(ctx *runContext) error {
+	categories, err := ctx.svc.ListCategories(ctx.Context, app.ListCategoriesRequest{IncludeInactive: c.IncludeInactive})
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, categories)
+}
+
+type CategoryRenameCmd struct {
+	Code string `arg:"" required:"" help:"Existing category code."`
+	Name string `arg:"" required:"" help:"New category display name."`
+}
+
+func (c *CategoryRenameCmd) Run(ctx *runContext) error {
+	existing, err := ctx.svc.GetCategoryByCode(ctx.Context, c.Code)
+	if err != nil {
+		return err
+	}
+	category, err := ctx.svc.UpdateCategory(ctx.Context, app.UpdateCategoryRequest{
+		ID:   existing.ID,
+		Name: &c.Name,
+	})
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, category)
+}
+
+type CategoryDeactivateCmd struct {
+	Code string `arg:"" required:"" help:"Category code to deactivate."`
+}
+
+func (c *CategoryDeactivateCmd) Run(ctx *runContext) error {
+	category, err := ctx.svc.DeactivateCategory(ctx.Context, c.Code)
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, category)
 }
 
 type UsersCmd struct {

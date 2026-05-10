@@ -23,6 +23,14 @@ type fakeRepo struct {
 	lastTelegramID       *string
 	lastListTransactions sqlc.ListTransactionsParams
 	transactionDetails   []sqlc.GetTransactionsByIdWithDetailsRow
+	listTransactionRows  []sqlc.ListTransactionsRow
+
+	lastCreateCategory                sqlc.CreateCategoryParams
+	lastUpdateCategory                sqlc.UpdateCategoryParams
+	lastListCategoriesIncludeInactive bool
+	categoryByID                      sqlc.Category
+	categoryByCode                    sqlc.Category
+	listCategoriesResult              []sqlc.Category
 }
 
 func (f *fakeRepo) CreateUser(_ context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
@@ -97,11 +105,71 @@ func (f *fakeRepo) GetTransactionsByIdWithDetails(context.Context, sqlc.GetTrans
 
 func (f *fakeRepo) ListTransactions(_ context.Context, arg sqlc.ListTransactionsParams) ([]sqlc.ListTransactionsRow, error) {
 	f.lastListTransactions = arg
-	return nil, nil
+	return f.listTransactionRows, nil
+}
+
+func (f *fakeRepo) CreateCategory(_ context.Context, arg sqlc.CreateCategoryParams) (sqlc.Category, error) {
+	f.lastCreateCategory = arg
+	return sqlc.Category{ID: 1, Code: arg.Code, Name: arg.Name, Description: arg.Description, IsActive: true}, nil
+}
+
+func (f *fakeRepo) ListCategories(_ context.Context, includeInactive bool) ([]sqlc.Category, error) {
+	f.lastListCategoriesIncludeInactive = includeInactive
+	return f.listCategoriesResult, nil
+}
+
+func (f *fakeRepo) GetCategoryById(context.Context, int64) (sqlc.Category, error) {
+	if f.categoryByID.ID == 0 {
+		return sqlc.Category{}, sql.ErrNoRows
+	}
+	return f.categoryByID, nil
+}
+
+func (f *fakeRepo) GetActiveCategoryById(_ context.Context, id int64) (sqlc.Category, error) {
+	if f.categoryByID.ID == 0 || f.categoryByID.ID != id || !f.categoryByID.IsActive {
+		return sqlc.Category{}, sql.ErrNoRows
+	}
+	return f.categoryByID, nil
+}
+
+func (f *fakeRepo) GetCategoryByCode(context.Context, string) (sqlc.Category, error) {
+	if f.categoryByCode.ID == 0 {
+		return sqlc.Category{}, sql.ErrNoRows
+	}
+	return f.categoryByCode, nil
+}
+
+func (f *fakeRepo) GetActiveCategoryByCode(_ context.Context, code string) (sqlc.Category, error) {
+	if f.categoryByCode.ID == 0 || f.categoryByCode.Code != code || !f.categoryByCode.IsActive {
+		return sqlc.Category{}, sql.ErrNoRows
+	}
+	return f.categoryByCode, nil
+}
+
+func (f *fakeRepo) UpdateCategory(_ context.Context, arg sqlc.UpdateCategoryParams) (sqlc.Category, error) {
+	f.lastUpdateCategory = arg
+	name := arg.Name
+	if !arg.SetName {
+		name = f.categoryByID.Name
+	}
+	description := arg.Description
+	if !arg.SetDescription {
+		description = f.categoryByID.Description
+	}
+	return sqlc.Category{ID: arg.ID, Code: f.categoryByID.Code, Name: name, Description: description, IsActive: true}, nil
+}
+
+func (f *fakeRepo) DeactivateCategory(context.Context, string) (sqlc.Category, error) {
+	if f.categoryByCode.ID == 0 {
+		return sqlc.Category{}, sql.ErrNoRows
+	}
+	f.categoryByCode.IsActive = false
+	return f.categoryByCode, nil
 }
 
 type fakeTransactionService struct {
 	saved         []sqlc.CreateTransactionParams
+	updated       []transaction.UpdateTransactionById
 	saveResult    transaction.TransactionResult
 	updateResult  transaction.TransactionResult
 	deleteResult  transaction.TransactionResult
@@ -120,7 +188,8 @@ func (f *fakeTransactionService) SaveTransactions(_ context.Context, transaction
 	return f.saveResult
 }
 
-func (f *fakeTransactionService) UpdateTransactionsById(context.Context, []transaction.UpdateTransactionById) transaction.TransactionResult {
+func (f *fakeTransactionService) UpdateTransactionsById(_ context.Context, transactions []transaction.UpdateTransactionById) transaction.TransactionResult {
+	f.updated = transactions
 	return f.updateResult
 }
 

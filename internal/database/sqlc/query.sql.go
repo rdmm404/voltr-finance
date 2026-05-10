@@ -11,6 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createCategory = `-- name: CreateCategory :one
+
+INSERT INTO category (code, name, description)
+VALUES ($1, $2, $3)
+RETURNING id, code, name, description, is_active, created_at, updated_at
+`
+
+type CreateCategoryParams struct {
+	Code        string  `json:"code"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+}
+
+// ******************* category *******************
+// WRITES
+func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
+	row := q.db.QueryRow(ctx, createCategory, arg.Code, arg.Name, arg.Description)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createLlmMessage = `-- name: CreateLlmMessage :one
 INSERT INTO
     llm_message (session_id, user_id, role, contents, parent_id)
@@ -73,7 +103,7 @@ const createTransaction = `-- name: CreateTransaction :one
 INSERT INTO transaction
 (
     amount,
-    budget_category_id,
+    category_id,
     description,
     transaction_date,
     transaction_id,
@@ -83,25 +113,25 @@ INSERT INTO transaction
 )
 VALUES
 ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
+RETURNING id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id
 `
 
 type CreateTransactionParams struct {
-	Amount           float32            `json:"amount"`
-	BudgetCategoryID *int64             `json:"budgetCategoryId"`
-	Description      *string            `json:"description"`
-	TransactionDate  pgtype.Timestamptz `json:"transactionDate"`
-	TransactionID    string             `json:"transactionId"`
-	AuthorID         int64              `json:"authorId"`
-	HouseholdID      *int64             `json:"householdId"`
-	Notes            *string            `json:"notes"`
+	Amount          float32            `json:"amount"`
+	CategoryID      *int64             `json:"categoryId"`
+	Description     *string            `json:"description"`
+	TransactionDate pgtype.Timestamptz `json:"transactionDate"`
+	TransactionID   string             `json:"transactionId"`
+	AuthorID        int64              `json:"authorId"`
+	HouseholdID     *int64             `json:"householdId"`
+	Notes           *string            `json:"notes"`
 }
 
 // WRITES
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
 	row := q.db.QueryRow(ctx, createTransaction,
 		arg.Amount,
-		arg.BudgetCategoryID,
+		arg.CategoryID,
 		arg.Description,
 		arg.TransactionDate,
 		arg.TransactionID,
@@ -114,7 +144,6 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.ID,
 		&i.Amount,
 		&i.AuthorID,
-		&i.BudgetCategoryID,
 		&i.Description,
 		&i.TransactionDate,
 		&i.TransactionID,
@@ -125,6 +154,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.DeletedAt,
 		&i.DeletedByUserID,
 		&i.DeleteReason,
+		&i.CategoryID,
 	)
 	return i, err
 }
@@ -165,6 +195,69 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deactivateCategory = `-- name: DeactivateCategory :one
+UPDATE category
+SET is_active = false,
+    updated_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING id, code, name, description, is_active, created_at, updated_at
+`
+
+func (q *Queries) DeactivateCategory(ctx context.Context, code string) (Category, error) {
+	row := q.db.QueryRow(ctx, deactivateCategory, code)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getActiveCategoryByCode = `-- name: GetActiveCategoryByCode :one
+SELECT id, code, name, description, is_active, created_at, updated_at FROM category
+WHERE code = $1 AND is_active
+`
+
+func (q *Queries) GetActiveCategoryByCode(ctx context.Context, code string) (Category, error) {
+	row := q.db.QueryRow(ctx, getActiveCategoryByCode, code)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getActiveCategoryById = `-- name: GetActiveCategoryById :one
+SELECT id, code, name, description, is_active, created_at, updated_at FROM category
+WHERE id = $1 AND is_active
+`
+
+func (q *Queries) GetActiveCategoryById(ctx context.Context, id int64) (Category, error) {
+	row := q.db.QueryRow(ctx, getActiveCategoryById, id)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getActiveSessionBySourceId = `-- name: GetActiveSessionBySourceId :one
 SELECT
     id, user_id, source_id, created_at, updated_at
@@ -182,6 +275,46 @@ func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID strin
 		&i.ID,
 		&i.UserID,
 		&i.SourceID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCategoryByCode = `-- name: GetCategoryByCode :one
+SELECT id, code, name, description, is_active, created_at, updated_at FROM category
+WHERE code = $1
+`
+
+func (q *Queries) GetCategoryByCode(ctx context.Context, code string) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategoryByCode, code)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCategoryById = `-- name: GetCategoryById :one
+SELECT id, code, name, description, is_active, created_at, updated_at FROM category
+WHERE id = $1
+`
+
+func (q *Queries) GetCategoryById(ctx context.Context, id int64) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategoryById, id)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -397,7 +530,7 @@ func (q *Queries) GetTableAndColumnMetadata(ctx context.Context, tableNames []st
 
 const getTransactionById = `-- name: GetTransactionById :one
 
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+SELECT id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id FROM transaction
 WHERE id = $1
 `
 
@@ -410,7 +543,6 @@ func (q *Queries) GetTransactionById(ctx context.Context, id int64) (Transaction
 		&i.ID,
 		&i.Amount,
 		&i.AuthorID,
-		&i.BudgetCategoryID,
 		&i.Description,
 		&i.TransactionDate,
 		&i.TransactionID,
@@ -421,12 +553,13 @@ func (q *Queries) GetTransactionById(ctx context.Context, id int64) (Transaction
 		&i.DeletedAt,
 		&i.DeletedByUserID,
 		&i.DeleteReason,
+		&i.CategoryID,
 	)
 	return i, err
 }
 
 const getTransactionByIdActive = `-- name: GetTransactionByIdActive :one
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+SELECT id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id FROM transaction
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -437,7 +570,6 @@ func (q *Queries) GetTransactionByIdActive(ctx context.Context, id int64) (Trans
 		&i.ID,
 		&i.Amount,
 		&i.AuthorID,
-		&i.BudgetCategoryID,
 		&i.Description,
 		&i.TransactionDate,
 		&i.TransactionID,
@@ -448,12 +580,13 @@ func (q *Queries) GetTransactionByIdActive(ctx context.Context, id int64) (Trans
 		&i.DeletedAt,
 		&i.DeletedByUserID,
 		&i.DeleteReason,
+		&i.CategoryID,
 	)
 	return i, err
 }
 
 const getTransactionsById = `-- name: GetTransactionsById :many
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+SELECT id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id FROM transaction
 WHERE id = ANY($1::BIGINT[])
 `
 
@@ -470,7 +603,6 @@ func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Trans
 			&i.ID,
 			&i.Amount,
 			&i.AuthorID,
-			&i.BudgetCategoryID,
 			&i.Description,
 			&i.TransactionDate,
 			&i.TransactionID,
@@ -481,6 +613,7 @@ func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Trans
 			&i.DeletedAt,
 			&i.DeletedByUserID,
 			&i.DeleteReason,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -493,7 +626,7 @@ func (q *Queries) GetTransactionsById(ctx context.Context, ids []int64) ([]Trans
 }
 
 const getTransactionsByIdActive = `-- name: GetTransactionsByIdActive :many
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+SELECT id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id FROM transaction
 WHERE id = ANY($1::BIGINT[])
   AND deleted_at IS NULL
 `
@@ -511,7 +644,6 @@ func (q *Queries) GetTransactionsByIdActive(ctx context.Context, ids []int64) ([
 			&i.ID,
 			&i.Amount,
 			&i.AuthorID,
-			&i.BudgetCategoryID,
 			&i.Description,
 			&i.TransactionDate,
 			&i.TransactionID,
@@ -522,6 +654,7 @@ func (q *Queries) GetTransactionsByIdActive(ctx context.Context, ids []int64) ([
 			&i.DeletedAt,
 			&i.DeletedByUserID,
 			&i.DeleteReason,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -535,14 +668,18 @@ func (q *Queries) GetTransactionsByIdActive(ctx context.Context, ids []int64) ([
 
 const getTransactionsByIdWithDetails = `-- name: GetTransactionsByIdWithDetails :many
 SELECT
-    t.id, t.amount, t.author_id, t.budget_category_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason,
+    t.id, t.amount, t.author_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason, t.category_id,
     u.id AS author_id,
     u.name AS author_name,
     h.id AS household_id,
-    h.name AS household_name
+    h.name AS household_name,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name
 FROM transaction t
 JOIN users u ON u.id = t.author_id
 LEFT JOIN household h ON h.id = t.household_id
+LEFT JOIN category c ON c.id = t.category_id
 WHERE t.id = ANY($1::BIGINT[])
   AND ($2::bool OR t.deleted_at IS NULL)
 ORDER BY array_position($1::BIGINT[], t.id)
@@ -559,6 +696,9 @@ type GetTransactionsByIdWithDetailsRow struct {
 	AuthorName    string      `json:"authorName"`
 	HouseholdID   *int64      `json:"householdId"`
 	HouseholdName *string     `json:"householdName"`
+	CategoryID    *int64      `json:"categoryId"`
+	CategoryCode  *string     `json:"categoryCode"`
+	CategoryName  *string     `json:"categoryName"`
 }
 
 func (q *Queries) GetTransactionsByIdWithDetails(ctx context.Context, arg GetTransactionsByIdWithDetailsParams) ([]GetTransactionsByIdWithDetailsRow, error) {
@@ -574,7 +714,6 @@ func (q *Queries) GetTransactionsByIdWithDetails(ctx context.Context, arg GetTra
 			&i.Transaction.ID,
 			&i.Transaction.Amount,
 			&i.Transaction.AuthorID,
-			&i.Transaction.BudgetCategoryID,
 			&i.Transaction.Description,
 			&i.Transaction.TransactionDate,
 			&i.Transaction.TransactionID,
@@ -585,10 +724,14 @@ func (q *Queries) GetTransactionsByIdWithDetails(ctx context.Context, arg GetTra
 			&i.Transaction.DeletedAt,
 			&i.Transaction.DeletedByUserID,
 			&i.Transaction.DeleteReason,
+			&i.Transaction.CategoryID,
 			&i.AuthorID,
 			&i.AuthorName,
 			&i.HouseholdID,
 			&i.HouseholdName,
+			&i.CategoryID,
+			&i.CategoryCode,
+			&i.CategoryName,
 		); err != nil {
 			return nil, err
 		}
@@ -763,6 +906,42 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *stri
 	return i, err
 }
 
+const listCategories = `-- name: ListCategories :many
+
+SELECT id, code, name, description, is_active, created_at, updated_at FROM category
+WHERE ($1::bool OR is_active)
+ORDER BY name ASC, id ASC
+`
+
+// READS
+func (q *Queries) ListCategories(ctx context.Context, includeInactive bool) ([]Category, error) {
+	rows, err := q.db.Query(ctx, listCategories, includeInactive)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Category
+	for rows.Next() {
+		var i Category
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.Name,
+			&i.Description,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHouseholds = `-- name: ListHouseholds :many
 SELECT id, name, guild_id, created_at, updated_at FROM household
 ORDER BY name ASC, id ASC
@@ -851,14 +1030,18 @@ func (q *Queries) ListLlmMessagesBySessionId(ctx context.Context, sessionID int6
 
 const listTransactions = `-- name: ListTransactions :many
 SELECT
-    t.id, t.amount, t.author_id, t.budget_category_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason,
+    t.id, t.amount, t.author_id, t.description, t.transaction_date, t.transaction_id, t.household_id, t.notes, t.created_at, t.updated_at, t.deleted_at, t.deleted_by_user_id, t.delete_reason, t.category_id,
     u.id AS author_id,
     u.name AS author_name,
     h.id AS household_id,
-    h.name AS household_name
+    h.name AS household_name,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name
 FROM transaction t
 JOIN users u ON u.id = t.author_id
 LEFT JOIN household h ON h.id = t.household_id
+LEFT JOIN category c ON c.id = t.category_id
 WHERE
     (NOT $1::bool OR t.deleted_at IS NOT NULL)
     AND ($2::bool OR $1::bool OR t.deleted_at IS NULL)
@@ -906,6 +1089,9 @@ type ListTransactionsRow struct {
 	AuthorName    string      `json:"authorName"`
 	HouseholdID   *int64      `json:"householdId"`
 	HouseholdName *string     `json:"householdName"`
+	CategoryID    *int64      `json:"categoryId"`
+	CategoryCode  *string     `json:"categoryCode"`
+	CategoryName  *string     `json:"categoryName"`
 }
 
 func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error) {
@@ -933,7 +1119,6 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 			&i.Transaction.ID,
 			&i.Transaction.Amount,
 			&i.Transaction.AuthorID,
-			&i.Transaction.BudgetCategoryID,
 			&i.Transaction.Description,
 			&i.Transaction.TransactionDate,
 			&i.Transaction.TransactionID,
@@ -944,10 +1129,14 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 			&i.Transaction.DeletedAt,
 			&i.Transaction.DeletedByUserID,
 			&i.Transaction.DeleteReason,
+			&i.Transaction.CategoryID,
 			&i.AuthorID,
 			&i.AuthorName,
 			&i.HouseholdID,
 			&i.HouseholdName,
+			&i.CategoryID,
+			&i.CategoryCode,
+			&i.CategoryName,
 		); err != nil {
 			return nil, err
 		}
@@ -960,7 +1149,7 @@ func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsPara
 }
 
 const listTransactionsByHousehold = `-- name: ListTransactionsByHousehold :many
-SELECT id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason FROM transaction
+SELECT id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id FROM transaction
 WHERE transaction_type=2 AND household_id = $1
 `
 
@@ -977,7 +1166,6 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 			&i.ID,
 			&i.Amount,
 			&i.AuthorID,
-			&i.BudgetCategoryID,
 			&i.Description,
 			&i.TransactionDate,
 			&i.TransactionID,
@@ -988,6 +1176,7 @@ func (q *Queries) ListTransactionsByHousehold(ctx context.Context, householdID *
 			&i.DeletedAt,
 			&i.DeletedByUserID,
 			&i.DeleteReason,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -1042,7 +1231,7 @@ SET
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ANY($1::BIGINT[])
   AND deleted_at IS NOT NULL
-RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
+RETURNING id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id
 `
 
 func (q *Queries) RestoreTransactionsById(ctx context.Context, ids []int64) ([]Transaction, error) {
@@ -1058,7 +1247,6 @@ func (q *Queries) RestoreTransactionsById(ctx context.Context, ids []int64) ([]T
 			&i.ID,
 			&i.Amount,
 			&i.AuthorID,
-			&i.BudgetCategoryID,
 			&i.Description,
 			&i.TransactionDate,
 			&i.TransactionID,
@@ -1069,6 +1257,7 @@ func (q *Queries) RestoreTransactionsById(ctx context.Context, ids []int64) ([]T
 			&i.DeletedAt,
 			&i.DeletedByUserID,
 			&i.DeleteReason,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -1089,7 +1278,7 @@ SET
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ANY($3::BIGINT[])
   AND deleted_at IS NULL
-RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
+RETURNING id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id
 `
 
 type SoftDeleteTransactionsByIdParams struct {
@@ -1111,7 +1300,6 @@ func (q *Queries) SoftDeleteTransactionsById(ctx context.Context, arg SoftDelete
 			&i.ID,
 			&i.Amount,
 			&i.AuthorID,
-			&i.BudgetCategoryID,
 			&i.Description,
 			&i.TransactionDate,
 			&i.TransactionID,
@@ -1122,6 +1310,7 @@ func (q *Queries) SoftDeleteTransactionsById(ctx context.Context, arg SoftDelete
 			&i.DeletedAt,
 			&i.DeletedByUserID,
 			&i.DeleteReason,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -1131,6 +1320,53 @@ func (q *Queries) SoftDeleteTransactionsById(ctx context.Context, arg SoftDelete
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCategory = `-- name: UpdateCategory :one
+
+UPDATE category
+SET
+    name = CASE
+        WHEN $1::bool THEN $2::VARCHAR
+        ELSE name
+    END,
+    description = CASE
+        WHEN $3::bool THEN $4::TEXT
+        ELSE description
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $5::BIGINT
+RETURNING id, code, name, description, is_active, created_at, updated_at
+`
+
+type UpdateCategoryParams struct {
+	SetName        bool    `json:"setName"`
+	Name           string  `json:"name"`
+	SetDescription bool    `json:"setDescription"`
+	Description    *string `json:"description"`
+	ID             int64   `json:"id"`
+}
+
+// WRITES
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
+	row := q.db.QueryRow(ctx, updateCategory,
+		arg.SetName,
+		arg.Name,
+		arg.SetDescription,
+		arg.Description,
+		arg.ID,
+	)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Description,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateMessageContents = `-- name: UpdateMessageContents :exec
@@ -1159,9 +1395,9 @@ SET
         WHEN $5::bool THEN $6::BIGINT
         ELSE author_id
     END,
-    budget_category_id = CASE
+    category_id = CASE
         WHEN $7::bool THEN $8::BIGINT
-        ELSE budget_category_id
+        ELSE category_id
     END,
     description = CASE
         WHEN $9::bool THEN $10::text
@@ -1181,26 +1417,26 @@ SET
     END,
     transaction_id = $2
 WHERE
-    id = $1 RETURNING id, amount, author_id, budget_category_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason
+    id = $1 RETURNING id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id
 `
 
 type UpdateTransactionByIdParams struct {
-	ID                  int64            `json:"id"`
-	TransactionID       string           `json:"transactionId"`
-	SetAmount           bool             `json:"setAmount"`
-	Amount              float32          `json:"amount"`
-	SetAuthorID         bool             `json:"setAuthorId"`
-	AuthorID            int64            `json:"authorId"`
-	SetBudgetCategoryID bool             `json:"setBudgetCategoryId"`
-	BudgetCategoryID    *int64           `json:"budgetCategoryId"`
-	SetDescription      bool             `json:"setDescription"`
-	Description         *string          `json:"description"`
-	SetTransactionDate  bool             `json:"setTransactionDate"`
-	TransactionDate     pgtype.Timestamp `json:"transactionDate"`
-	SetNotes            bool             `json:"setNotes"`
-	Notes               *string          `json:"notes"`
-	SetHouseholdID      bool             `json:"setHouseholdId"`
-	HouseholdID         *int64           `json:"householdId"`
+	ID                 int64            `json:"id"`
+	TransactionID      string           `json:"transactionId"`
+	SetAmount          bool             `json:"setAmount"`
+	Amount             float32          `json:"amount"`
+	SetAuthorID        bool             `json:"setAuthorId"`
+	AuthorID           int64            `json:"authorId"`
+	SetCategoryID      bool             `json:"setCategoryId"`
+	CategoryID         *int64           `json:"categoryId"`
+	SetDescription     bool             `json:"setDescription"`
+	Description        *string          `json:"description"`
+	SetTransactionDate bool             `json:"setTransactionDate"`
+	TransactionDate    pgtype.Timestamp `json:"transactionDate"`
+	SetNotes           bool             `json:"setNotes"`
+	Notes              *string          `json:"notes"`
+	SetHouseholdID     bool             `json:"setHouseholdId"`
+	HouseholdID        *int64           `json:"householdId"`
 }
 
 func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransactionByIdParams) (Transaction, error) {
@@ -1211,8 +1447,8 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		arg.Amount,
 		arg.SetAuthorID,
 		arg.AuthorID,
-		arg.SetBudgetCategoryID,
-		arg.BudgetCategoryID,
+		arg.SetCategoryID,
+		arg.CategoryID,
 		arg.SetDescription,
 		arg.Description,
 		arg.SetTransactionDate,
@@ -1227,7 +1463,6 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		&i.ID,
 		&i.Amount,
 		&i.AuthorID,
-		&i.BudgetCategoryID,
 		&i.Description,
 		&i.TransactionDate,
 		&i.TransactionID,
@@ -1238,6 +1473,7 @@ func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransacti
 		&i.DeletedAt,
 		&i.DeletedByUserID,
 		&i.DeleteReason,
+		&i.CategoryID,
 	)
 	return i, err
 }

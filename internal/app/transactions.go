@@ -12,29 +12,31 @@ import (
 )
 
 type TransactionDTO struct {
-	ID              int64      `json:"id"`
-	Amount          float32    `json:"amount"`
-	TransactionDate time.Time  `json:"transactionDate"`
-	AuthorID        int64      `json:"authorId"`
-	AuthorName      string     `json:"authorName,omitempty"`
-	HouseholdID     *int64     `json:"householdId,omitempty"`
-	HouseholdName   *string    `json:"householdName,omitempty"`
-	Description     *string    `json:"description,omitempty"`
-	Notes           *string    `json:"notes,omitempty"`
-	CreatedAt       *time.Time `json:"createdAt,omitempty"`
-	UpdatedAt       *time.Time `json:"updatedAt,omitempty"`
-	DeletedAt       *time.Time `json:"deletedAt,omitempty"`
-	DeleteReason    *string    `json:"deleteReason,omitempty"`
+	ID              int64           `json:"id"`
+	Amount          float32         `json:"amount"`
+	TransactionDate time.Time       `json:"transactionDate"`
+	AuthorID        int64           `json:"authorId"`
+	AuthorName      string          `json:"authorName,omitempty"`
+	HouseholdID     *int64          `json:"householdId,omitempty"`
+	HouseholdName   *string         `json:"householdName,omitempty"`
+	Category        *CategoryRefDTO `json:"category,omitempty"`
+	Description     *string         `json:"description,omitempty"`
+	Notes           *string         `json:"notes,omitempty"`
+	CreatedAt       *time.Time      `json:"createdAt,omitempty"`
+	UpdatedAt       *time.Time      `json:"updatedAt,omitempty"`
+	DeletedAt       *time.Time      `json:"deletedAt,omitempty"`
+	DeleteReason    *string         `json:"deleteReason,omitempty"`
 }
 
 type CreateTransactionRequest struct {
-	Amount           float32          `json:"amount"`
-	TransactionDate  time.Time        `json:"transactionDate"`
-	Description      *string          `json:"description,omitempty"`
-	Notes            *string          `json:"notes,omitempty"`
-	BudgetCategoryID *int64           `json:"budgetCategoryId,omitempty"`
-	HouseholdID      *int64           `json:"householdId,omitempty"`
-	Author           IdentitySelector `json:"author"`
+	Amount          float32          `json:"amount"`
+	TransactionDate time.Time        `json:"transactionDate"`
+	Description     *string          `json:"description,omitempty"`
+	Notes           *string          `json:"notes,omitempty"`
+	CategoryID      *int64           `json:"categoryId,omitempty"`
+	CategoryCode    *string          `json:"categoryCode,omitempty"`
+	HouseholdID     *int64           `json:"householdId,omitempty"`
+	Author          IdentitySelector `json:"author"`
 }
 
 type BulkCreateTransactionsRequest struct {
@@ -44,18 +46,19 @@ type BulkCreateTransactionsRequest struct {
 type UpdateTransactionRequest struct {
 	ID int64 `json:"id"`
 
-	Amount           *float32          `json:"amount,omitempty"`
-	TransactionDate  *time.Time        `json:"transactionDate,omitempty"`
-	Description      *string           `json:"description,omitempty"`
-	Notes            *string           `json:"notes,omitempty"`
-	BudgetCategoryID *int64            `json:"budgetCategoryId,omitempty"`
-	HouseholdID      *int64            `json:"householdId,omitempty"`
-	Author           *IdentitySelector `json:"author,omitempty"`
+	Amount          *float32          `json:"amount,omitempty"`
+	TransactionDate *time.Time        `json:"transactionDate,omitempty"`
+	Description     *string           `json:"description,omitempty"`
+	Notes           *string           `json:"notes,omitempty"`
+	CategoryID      *int64            `json:"categoryId,omitempty"`
+	CategoryCode    *string           `json:"categoryCode,omitempty"`
+	HouseholdID     *int64            `json:"householdId,omitempty"`
+	Author          *IdentitySelector `json:"author,omitempty"`
 
-	ClearDescription      bool `json:"clearDescription,omitempty"`
-	ClearNotes            bool `json:"clearNotes,omitempty"`
-	ClearBudgetCategoryID bool `json:"clearBudgetCategoryId,omitempty"`
-	ClearHouseholdID      bool `json:"clearHouseholdId,omitempty"`
+	ClearDescription bool `json:"clearDescription,omitempty"`
+	ClearNotes       bool `json:"clearNotes,omitempty"`
+	ClearCategoryID  bool `json:"clearCategoryId,omitempty"`
+	ClearHouseholdID bool `json:"clearHouseholdId,omitempty"`
 }
 
 type BulkUpdateTransactionsRequest struct {
@@ -169,7 +172,7 @@ func (s *Service) GetTransactions(ctx context.Context, ids []int64, includeDelet
 	}
 	dtos := make([]TransactionDTO, 0, len(rows))
 	for _, row := range rows {
-		dtos = append(dtos, transactionDTO(row.Transaction, row.AuthorName, row.HouseholdName))
+		dtos = append(dtos, transactionDTO(row.Transaction, row.AuthorName, row.HouseholdName, row.CategoryID, row.CategoryCode, row.CategoryName))
 	}
 	return dtos, nil
 }
@@ -207,7 +210,7 @@ func (s *Service) ListTransactions(ctx context.Context, req ListTransactionsRequ
 
 	dtos := make([]TransactionDTO, 0, len(rows))
 	for _, row := range rows {
-		dtos = append(dtos, transactionDTO(row.Transaction, row.AuthorName, row.HouseholdName))
+		dtos = append(dtos, transactionDTO(row.Transaction, row.AuthorName, row.HouseholdName, row.CategoryID, row.CategoryCode, row.CategoryName))
 	}
 	return dtos, nil
 }
@@ -252,14 +255,18 @@ func (s *Service) createParams(ctx context.Context, req CreateTransactionRequest
 	if err != nil {
 		return sqlc.CreateTransactionParams{}, err
 	}
+	categoryID, err := s.resolveCategoryID(ctx, req.CategoryID, req.CategoryCode)
+	if err != nil {
+		return sqlc.CreateTransactionParams{}, err
+	}
 	return sqlc.CreateTransactionParams{
-		Amount:           req.Amount,
-		BudgetCategoryID: req.BudgetCategoryID,
-		Description:      req.Description,
-		TransactionDate:  pgtype.Timestamptz{Time: req.TransactionDate, Valid: true},
-		AuthorID:         author.ID,
-		HouseholdID:      req.HouseholdID,
-		Notes:            req.Notes,
+		Amount:          req.Amount,
+		CategoryID:      categoryID,
+		Description:     req.Description,
+		TransactionDate: pgtype.Timestamptz{Time: req.TransactionDate, Valid: true},
+		AuthorID:        author.ID,
+		HouseholdID:     req.HouseholdID,
+		Notes:           req.Notes,
 	}, nil
 }
 
@@ -280,8 +287,14 @@ func (s *Service) updateParams(ctx context.Context, req UpdateTransactionRequest
 	if req.Notes != nil || req.ClearNotes {
 		updates.Notes = utils.NewOptional(req.Notes)
 	}
-	if req.BudgetCategoryID != nil || req.ClearBudgetCategoryID {
-		updates.BudgetCategoryID = utils.NewOptional(req.BudgetCategoryID)
+	if req.CategoryID != nil || req.CategoryCode != nil {
+		categoryID, err := s.resolveCategoryID(ctx, req.CategoryID, req.CategoryCode)
+		if err != nil {
+			return transaction.UpdateTransactionById{}, err
+		}
+		updates.CategoryID = utils.NewOptional(categoryID)
+	} else if req.ClearCategoryID {
+		updates.CategoryID = utils.NewOptional((*int64)(nil))
 	}
 	if req.HouseholdID != nil || req.ClearHouseholdID {
 		updates.HouseholdID = utils.NewOptional(req.HouseholdID)
@@ -296,7 +309,42 @@ func (s *Service) updateParams(ctx context.Context, req UpdateTransactionRequest
 	return transaction.UpdateTransactionById{ID: req.ID, Updates: updates}, nil
 }
 
-func transactionDTO(tx sqlc.Transaction, authorName string, householdName *string) TransactionDTO {
+func (s *Service) resolveCategoryID(ctx context.Context, id *int64, code *string) (*int64, error) {
+	if id == nil && code == nil {
+		return nil, nil
+	}
+
+	if id != nil && code != nil {
+		categoryByID, err := s.repo.GetActiveCategoryById(ctx, *id)
+		if err != nil {
+			return nil, mapCategoryError(err)
+		}
+		categoryByCode, err := s.repo.GetActiveCategoryByCode(ctx, *code)
+		if err != nil {
+			return nil, mapCategoryError(err)
+		}
+		if categoryByID.ID != categoryByCode.ID {
+			return nil, NewError(CodeValidationError, "category id and code refer to different categories", nil)
+		}
+		return &categoryByID.ID, nil
+	}
+
+	if id != nil {
+		category, err := s.repo.GetActiveCategoryById(ctx, *id)
+		if err != nil {
+			return nil, mapCategoryError(err)
+		}
+		return &category.ID, nil
+	}
+
+	category, err := s.repo.GetActiveCategoryByCode(ctx, *code)
+	if err != nil {
+		return nil, mapCategoryError(err)
+	}
+	return &category.ID, nil
+}
+
+func transactionDTO(tx sqlc.Transaction, authorName string, householdName *string, categoryID *int64, categoryCode, categoryName *string) TransactionDTO {
 	return TransactionDTO{
 		ID:              tx.ID,
 		Amount:          tx.Amount,
@@ -305,6 +353,7 @@ func transactionDTO(tx sqlc.Transaction, authorName string, householdName *strin
 		AuthorName:      authorName,
 		HouseholdID:     tx.HouseholdID,
 		HouseholdName:   householdName,
+		Category:        transactionCategoryDTO(categoryID, categoryCode, categoryName),
 		Description:     tx.Description,
 		Notes:           tx.Notes,
 		CreatedAt:       validTime(tx.CreatedAt.Time, tx.CreatedAt.Valid),
@@ -312,6 +361,13 @@ func transactionDTO(tx sqlc.Transaction, authorName string, householdName *strin
 		DeletedAt:       validTime(tx.DeletedAt.Time, tx.DeletedAt.Valid),
 		DeleteReason:    tx.DeleteReason,
 	}
+}
+
+func transactionCategoryDTO(id *int64, code, name *string) *CategoryRefDTO {
+	if id == nil || code == nil || name == nil {
+		return nil
+	}
+	return &CategoryRefDTO{ID: *id, Code: *code, Name: *name}
 }
 
 func timestamptz(value *time.Time) pgtype.Timestamptz {

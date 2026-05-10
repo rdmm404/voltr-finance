@@ -32,6 +32,87 @@ func TestKongTransactionsCreate(t *testing.T) {
 	}
 }
 
+func TestKongTransactionsCreateCategoryFlag(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"transactions", "create",
+		"--amount", "42.50",
+		"--transaction-date", "2026-05-05T14:30:00-04:00",
+		"--author-telegram-id", "123456",
+		"--household-id", "1",
+		"--category", "groceries",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.createTransaction.CategoryCode == nil || *svc.createTransaction.CategoryCode != "groceries" {
+		t.Fatalf("category = %v, want groceries", svc.createTransaction.CategoryCode)
+	}
+}
+
+func TestKongTransactionsUpdateClearCategory(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"transactions", "update",
+		"--id", "101",
+		"--clear-category",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !svc.updateTransaction.ClearCategoryID {
+		t.Fatalf("ClearCategoryID = false, want true")
+	}
+}
+
+func TestKongCategoryCreate(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"categories", "create",
+		"Restaurants & Takeout",
+		"--code", "restaurants",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.createCategory.Name != "Restaurants & Takeout" || svc.createCategory.Code == nil || *svc.createCategory.Code != "restaurants" {
+		t.Fatalf("createCategory = %+v, want name and explicit code", svc.createCategory)
+	}
+}
+
+func TestKongCategoryListIncludesInactive(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"categories", "list",
+		"--include-inactive",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !svc.listCategories.IncludeInactive {
+		t.Fatalf("IncludeInactive = false, want true")
+	}
+}
+
+func TestKongCategoryDeactivate(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"categories", "deactivate",
+		"restaurants",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.deactivateCategoryCode != "restaurants" {
+		t.Fatalf("deactivate code = %q, want restaurants", svc.deactivateCategoryCode)
+	}
+}
+
 func TestKongTransactionsListCSV(t *testing.T) {
 	svc := &fakeAppService{}
 	var out bytes.Buffer
@@ -210,12 +291,17 @@ func normalizeHelp(help string) string {
 }
 
 type fakeAppService struct {
-	createTransaction   app.CreateTransactionRequest
-	listTransactions    app.ListTransactionsRequest
-	listTransactionsErr error
-	deleteTransactions  app.DeleteTransactionsRequest
-	resolveUser         app.IdentitySelector
-	getHousehold        app.GetHouseholdRequest
+	createTransaction      app.CreateTransactionRequest
+	updateTransaction      app.UpdateTransactionRequest
+	listTransactions       app.ListTransactionsRequest
+	listTransactionsErr    error
+	deleteTransactions     app.DeleteTransactionsRequest
+	resolveUser            app.IdentitySelector
+	getHousehold           app.GetHouseholdRequest
+	createCategory         app.CreateCategoryRequest
+	listCategories         app.ListCategoriesRequest
+	updateCategory         app.UpdateCategoryRequest
+	deactivateCategoryCode string
 }
 
 func (f *fakeAppService) CreateTransaction(_ context.Context, req app.CreateTransactionRequest) app.WriteResult {
@@ -227,7 +313,8 @@ func (f *fakeAppService) CreateTransactions(context.Context, app.BulkCreateTrans
 	return app.WriteResult{}
 }
 
-func (f *fakeAppService) UpdateTransaction(context.Context, app.UpdateTransactionRequest) app.WriteResult {
+func (f *fakeAppService) UpdateTransaction(_ context.Context, req app.UpdateTransactionRequest) app.WriteResult {
+	f.updateTransaction = req
 	return app.WriteResult{}
 }
 
@@ -288,4 +375,36 @@ func (f *fakeAppService) ListHouseholds(context.Context) ([]app.HouseholdDTO, er
 
 func (f *fakeAppService) GetHouseholdUsers(context.Context, int64) ([]app.UserDTO, error) {
 	return nil, nil
+}
+
+func (f *fakeAppService) CreateCategory(_ context.Context, req app.CreateCategoryRequest) (app.CategoryDTO, error) {
+	f.createCategory = req
+	code := ""
+	if req.Code != nil {
+		code = *req.Code
+	}
+	return app.CategoryDTO{ID: 1, Code: code, Name: req.Name, IsActive: true}, nil
+}
+
+func (f *fakeAppService) ListCategories(_ context.Context, req app.ListCategoriesRequest) ([]app.CategoryDTO, error) {
+	f.listCategories = req
+	return []app.CategoryDTO{}, nil
+}
+
+func (f *fakeAppService) GetCategoryByCode(context.Context, string) (app.CategoryDTO, error) {
+	return app.CategoryDTO{ID: 1, Code: "groceries", Name: "Groceries", IsActive: true}, nil
+}
+
+func (f *fakeAppService) UpdateCategory(_ context.Context, req app.UpdateCategoryRequest) (app.CategoryDTO, error) {
+	f.updateCategory = req
+	name := ""
+	if req.Name != nil {
+		name = *req.Name
+	}
+	return app.CategoryDTO{ID: req.ID, Code: "groceries", Name: name, IsActive: true}, nil
+}
+
+func (f *fakeAppService) DeactivateCategory(_ context.Context, code string) (app.CategoryDTO, error) {
+	f.deactivateCategoryCode = code
+	return app.CategoryDTO{ID: 1, Code: code, Name: "Groceries", IsActive: false}, nil
 }

@@ -1,3 +1,58 @@
+-- ******************* category *******************
+-- WRITES
+
+-- name: CreateCategory :one
+INSERT INTO category (code, name, description)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- READS
+
+-- name: ListCategories :many
+SELECT * FROM category
+WHERE (sqlc.arg(include_inactive)::bool OR is_active)
+ORDER BY name ASC, id ASC;
+
+-- name: GetCategoryById :one
+SELECT * FROM category
+WHERE id = $1;
+
+-- name: GetActiveCategoryById :one
+SELECT * FROM category
+WHERE id = $1 AND is_active;
+
+-- name: GetCategoryByCode :one
+SELECT * FROM category
+WHERE code = $1;
+
+-- name: GetActiveCategoryByCode :one
+SELECT * FROM category
+WHERE code = $1 AND is_active;
+
+-- WRITES
+
+-- name: UpdateCategory :one
+UPDATE category
+SET
+    name = CASE
+        WHEN sqlc.arg(set_name)::bool THEN sqlc.arg(name)::VARCHAR
+        ELSE name
+    END,
+    description = CASE
+        WHEN sqlc.arg(set_description)::bool THEN sqlc.narg(description)::TEXT
+        ELSE description
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id)::BIGINT
+RETURNING *;
+
+-- name: DeactivateCategory :one
+UPDATE category
+SET is_active = false,
+    updated_at = CURRENT_TIMESTAMP
+WHERE code = $1
+RETURNING *;
+
 -- ******************* transaction *******************
 -- READS
 
@@ -24,10 +79,14 @@ SELECT
     u.id AS author_id,
     u.name AS author_name,
     h.id AS household_id,
-    h.name AS household_name
+    h.name AS household_name,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name
 FROM transaction t
 JOIN users u ON u.id = t.author_id
 LEFT JOIN household h ON h.id = t.household_id
+LEFT JOIN category c ON c.id = t.category_id
 WHERE t.id = ANY(sqlc.arg(ids)::BIGINT[])
   AND (sqlc.arg(include_deleted)::bool OR t.deleted_at IS NULL)
 ORDER BY array_position(sqlc.arg(ids)::BIGINT[], t.id);
@@ -47,10 +106,14 @@ SELECT
     u.id AS author_id,
     u.name AS author_name,
     h.id AS household_id,
-    h.name AS household_name
+    h.name AS household_name,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name
 FROM transaction t
 JOIN users u ON u.id = t.author_id
 LEFT JOIN household h ON h.id = t.household_id
+LEFT JOIN category c ON c.id = t.category_id
 WHERE
     (NOT sqlc.arg(only_deleted)::bool OR t.deleted_at IS NOT NULL)
     AND (sqlc.arg(include_deleted)::bool OR sqlc.arg(only_deleted)::bool OR t.deleted_at IS NULL)
@@ -83,7 +146,7 @@ OFFSET sqlc.arg(result_offset)::INT;
 INSERT INTO transaction
 (
     amount,
-    budget_category_id,
+    category_id,
     description,
     transaction_date,
     transaction_id,
@@ -107,9 +170,9 @@ SET
         WHEN sqlc.arg(set_author_id)::bool THEN sqlc.arg(author_id)::BIGINT
         ELSE author_id
     END,
-    budget_category_id = CASE
-        WHEN sqlc.arg(set_budget_category_id)::bool THEN sqlc.narg(budget_category_id)::BIGINT
-        ELSE budget_category_id
+    category_id = CASE
+        WHEN sqlc.arg(set_category_id)::bool THEN sqlc.narg(category_id)::BIGINT
+        ELSE category_id
     END,
     description = CASE
         WHEN sqlc.arg(set_description)::bool THEN sqlc.narg(description)::text

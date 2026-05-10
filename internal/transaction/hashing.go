@@ -14,6 +14,7 @@ func generateTransactionHash(
 	description string,
 	transactionDate time.Time,
 	authorId, householdId int64,
+	categoryId *int64,
 	amount float32,
 ) (string, error) {
 	if authorId == 0 && householdId == 0 {
@@ -22,13 +23,24 @@ func generateTransactionHash(
 
 	h := xxhash.New()
 
-	fmt.Fprintf(h, "%s|%d|%d|%d|%.2f",
-		description,
-		transactionDate.Unix(),
-		authorId,
-		householdId,
-		amount,
-	)
+	if categoryId == nil {
+		fmt.Fprintf(h, "%s|%d|%d|%d|%.2f",
+			description,
+			transactionDate.Unix(),
+			authorId,
+			householdId,
+			amount,
+		)
+	} else {
+		fmt.Fprintf(h, "%s|%d|%d|%d|%d|%.2f",
+			description,
+			transactionDate.Unix(),
+			authorId,
+			householdId,
+			*categoryId,
+			amount,
+		)
+	}
 
 	return base62.EncodeToString(h.Sum(nil)), nil
 }
@@ -39,6 +51,7 @@ func generateHashForTransactionCreate(transaction sqlc.CreateTransactionParams) 
 		transaction.TransactionDate.Time,
 		transaction.AuthorID,
 		utils.ValueOrZero(transaction.HouseholdID),
+		transaction.CategoryID,
 		transaction.Amount,
 	)
 }
@@ -69,11 +82,17 @@ func generateHashForTransactionUpdate(transaction sqlc.Transaction, updates *Tra
 		amount = updates.Amount.Value
 	}
 
+	categoryId := transaction.CategoryID
+	if updates.CategoryID.Set {
+		categoryId = updates.CategoryID.Value
+	}
+
 	return generateTransactionHash(
 		utils.ValueOrZero(description),
 		transactionDate,
 		authorId,
 		utils.ValueOrZero(householdId),
+		categoryId,
 		amount,
 	)
 }

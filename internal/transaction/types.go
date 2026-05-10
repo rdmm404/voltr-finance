@@ -27,13 +27,13 @@ type TransactionResult struct {
 }
 
 type TransactionUpdate struct {
-	Amount           utils.Optional[float32]
-	AuthorID         utils.Optional[int64]
-	BudgetCategoryID utils.Optional[*int64]
-	Description      utils.Optional[*string]
-	TransactionDate  utils.Optional[time.Time]
-	Notes            utils.Optional[*string]
-	HouseholdID      utils.Optional[*int64]
+	Amount          utils.Optional[float32]
+	AuthorID        utils.Optional[int64]
+	CategoryID      utils.Optional[*int64]
+	Description     utils.Optional[*string]
+	TransactionDate utils.Optional[time.Time]
+	Notes           utils.Optional[*string]
+	HouseholdID     utils.Optional[*int64]
 }
 
 type UpdateTransactionById struct {

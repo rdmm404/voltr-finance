@@ -111,22 +111,22 @@ func (ts *TransactionService) UpdateTransactionsById(ctx context.Context, transa
 		}
 
 		params := sqlc.UpdateTransactionByIdParams{
-			ID:                  trans.ID,
-			TransactionID:       transHash,
-			SetAmount:           trans.Updates.Amount.Set,
-			Amount:              trans.Updates.Amount.Value,
-			SetAuthorID:         trans.Updates.AuthorID.Set,
-			AuthorID:            trans.Updates.AuthorID.Value,
-			SetBudgetCategoryID: trans.Updates.BudgetCategoryID.Set,
-			BudgetCategoryID:    trans.Updates.BudgetCategoryID.Value,
-			SetDescription:      trans.Updates.Description.Set,
-			Description:         trans.Updates.Description.Value,
-			SetTransactionDate:  trans.Updates.TransactionDate.Set,
-			TransactionDate:     pgtype.Timestamp{Time: trans.Updates.TransactionDate.Value, Valid: true},
-			SetNotes:            trans.Updates.Notes.Set,
-			Notes:               trans.Updates.Notes.Value,
-			SetHouseholdID:      trans.Updates.HouseholdID.Set,
-			HouseholdID:         trans.Updates.HouseholdID.Value,
+			ID:                 trans.ID,
+			TransactionID:      transHash,
+			SetAmount:          trans.Updates.Amount.Set,
+			Amount:             trans.Updates.Amount.Value,
+			SetAuthorID:        trans.Updates.AuthorID.Set,
+			AuthorID:           trans.Updates.AuthorID.Value,
+			SetCategoryID:      trans.Updates.CategoryID.Set,
+			CategoryID:         trans.Updates.CategoryID.Value,
+			SetDescription:     trans.Updates.Description.Set,
+			Description:        trans.Updates.Description.Value,
+			SetTransactionDate: trans.Updates.TransactionDate.Set,
+			TransactionDate:    pgtype.Timestamp{Time: trans.Updates.TransactionDate.Value, Valid: true},
+			SetNotes:           trans.Updates.Notes.Set,
+			Notes:              trans.Updates.Notes.Value,
+			SetHouseholdID:     trans.Updates.HouseholdID.Set,
+			HouseholdID:        trans.Updates.HouseholdID.Value,
 		}
 
 		updatedTrans, err := ts.repository.UpdateTransactionById(ctx, params)

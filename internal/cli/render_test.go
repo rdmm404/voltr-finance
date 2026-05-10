@@ -36,6 +36,7 @@ func TestRenderSingleTransactionCompact(t *testing.T) {
 		"Date: 2026-05-05 14:30",
 		"Author: Rafael",
 		"Household: Home",
+		"Category: ",
 		"Description: Groceries",
 		"Notes: Costco",
 		"",
@@ -65,7 +66,7 @@ func TestRenderTransactionsCSVUsesStableColumns(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	wantHeader := "id,amount,transaction_date,author_id,author_name,household_id,household_name,description,notes,created_at,deleted_at"
+	wantHeader := "id,amount,transaction_date,author_id,author_name,household_id,household_name,category_code,category_name,description,notes,created_at,deleted_at"
 	if lines[0] != wantHeader {
 		t.Fatalf("header = %q, want %q", lines[0], wantHeader)
 	}
