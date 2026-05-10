@@ -33,20 +33,25 @@ type fakeRepo struct {
 	categoryByCode                    sqlc.Category
 	listCategoriesResult              []sqlc.Category
 
-	householdBudgetByPeriod sqlc.Budget
-	userBudgetByPeriod      sqlc.Budget
-	budgetByID              sqlc.Budget
-	latestPriorHousehold    sqlc.Budget
-	latestPriorUser         sqlc.Budget
-	createdHouseholdBudget  sqlc.Budget
-	createdUserBudget       sqlc.Budget
-	budgetLines             []sqlc.BudgetLine
-	budgetLineCategories    []sqlc.ListBudgetLineCategoriesRow
+	householdBudgetByPeriod     sqlc.Budget
+	userBudgetByPeriod          sqlc.Budget
+	budgetByID                  sqlc.Budget
+	latestPriorHousehold        sqlc.Budget
+	latestPriorUser             sqlc.Budget
+	createdHouseholdBudget      sqlc.Budget
+	createdUserBudget           sqlc.Budget
+	budgetLines                 []sqlc.BudgetLine
+	budgetLineCategories        []sqlc.ListBudgetLineCategoriesRow
+	createdBudgetLines          []sqlc.CreateBudgetLineParams
+	createdBudgetLineRows       []sqlc.BudgetLine
+	createdBudgetLineCategories []sqlc.CreateBudgetLineCategoryParams
 
 	lastHouseholdBudgetPeriodStart       time.Time
 	lastUserBudgetPeriodStart            time.Time
 	lastCreateHouseholdBudget            sqlc.CreateHouseholdBudgetParams
 	lastCreateUserBudget                 sqlc.CreateUserBudgetParams
+	lastLatestPriorHouseholdBudget       sqlc.GetLatestPriorHouseholdBudgetParams
+	lastLatestPriorUserBudget            sqlc.GetLatestPriorUserBudgetParams
 	lastListBudgetLinesBudgetID          int64
 	lastListBudgetLineCategoriesBudgetID int64
 }
@@ -208,14 +213,16 @@ func (f *fakeRepo) GetBudgetById(context.Context, int64) (sqlc.Budget, error) {
 	return f.budgetByID, nil
 }
 
-func (f *fakeRepo) GetLatestPriorHouseholdBudget(context.Context, sqlc.GetLatestPriorHouseholdBudgetParams) (sqlc.Budget, error) {
+func (f *fakeRepo) GetLatestPriorHouseholdBudget(_ context.Context, arg sqlc.GetLatestPriorHouseholdBudgetParams) (sqlc.Budget, error) {
+	f.lastLatestPriorHouseholdBudget = arg
 	if f.latestPriorHousehold.ID == 0 {
 		return sqlc.Budget{}, sql.ErrNoRows
 	}
 	return f.latestPriorHousehold, nil
 }
 
-func (f *fakeRepo) GetLatestPriorUserBudget(context.Context, sqlc.GetLatestPriorUserBudgetParams) (sqlc.Budget, error) {
+func (f *fakeRepo) GetLatestPriorUserBudget(_ context.Context, arg sqlc.GetLatestPriorUserBudgetParams) (sqlc.Budget, error) {
+	f.lastLatestPriorUserBudget = arg
 	if f.latestPriorUser.ID == 0 {
 		return sqlc.Budget{}, sql.ErrNoRows
 	}
@@ -280,8 +287,22 @@ func (f *fakeRepo) CreateUserBudget(_ context.Context, arg sqlc.CreateUserBudget
 	}, nil
 }
 
-func (f *fakeRepo) CreateBudgetLine(context.Context, sqlc.CreateBudgetLineParams) (sqlc.BudgetLine, error) {
-	return sqlc.BudgetLine{}, nil
+func (f *fakeRepo) CreateBudgetLine(_ context.Context, arg sqlc.CreateBudgetLineParams) (sqlc.BudgetLine, error) {
+	f.createdBudgetLines = append(f.createdBudgetLines, arg)
+	if len(f.createdBudgetLineRows) >= len(f.createdBudgetLines) {
+		row := f.createdBudgetLineRows[len(f.createdBudgetLines)-1]
+		f.budgetLines = append(f.budgetLines, row)
+		return row, nil
+	}
+	row := sqlc.BudgetLine{
+		ID:               int64(len(f.createdBudgetLines)),
+		BudgetID:         arg.BudgetID,
+		Name:             arg.Name,
+		AllocationAmount: arg.AllocationAmount,
+		SortOrder:        arg.SortOrder,
+	}
+	f.budgetLines = append(f.budgetLines, row)
+	return row, nil
 }
 
 func (f *fakeRepo) UpdateBudgetLine(context.Context, sqlc.UpdateBudgetLineParams) (sqlc.BudgetLine, error) {
@@ -296,7 +317,15 @@ func (f *fakeRepo) DeleteBudgetLineCategories(context.Context, int64) error {
 	return nil
 }
 
-func (f *fakeRepo) CreateBudgetLineCategory(context.Context, sqlc.CreateBudgetLineCategoryParams) error {
+func (f *fakeRepo) CreateBudgetLineCategory(_ context.Context, arg sqlc.CreateBudgetLineCategoryParams) error {
+	f.createdBudgetLineCategories = append(f.createdBudgetLineCategories, arg)
+	f.budgetLineCategories = append(f.budgetLineCategories, sqlc.ListBudgetLineCategoriesRow{
+		BudgetID:     arg.BudgetID,
+		BudgetLineID: arg.BudgetLineID,
+		CategoryID:   arg.CategoryID,
+		CategoryCode: "",
+		CategoryName: "",
+	})
 	return nil
 }
 

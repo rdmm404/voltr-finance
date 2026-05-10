@@ -303,6 +303,159 @@ func TestGetMonthlyBudgetCreatesEmptyUserBudgetWhenMissing(t *testing.T) {
 	}
 }
 
+func TestGetMonthlyBudgetCreatesEmptyHouseholdBudgetWhenNoPriorBudget(t *testing.T) {
+	householdID := int64(7)
+	repo := &fakeRepo{}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	budget, err := svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
+		HouseholdID:     &householdID,
+		Year:            2026,
+		Month:           7,
+		CreateIfMissing: true,
+	})
+
+	if err != nil {
+		t.Fatalf("GetMonthlyBudget returned error: %v", err)
+	}
+	if budget.ID == 0 || budget.HouseholdID == nil || *budget.HouseholdID != householdID {
+		t.Fatalf("budget = %+v, want created household budget", budget)
+	}
+	if repo.lastLatestPriorHouseholdBudget.HouseholdID != householdID {
+		t.Fatalf("latest prior household id = %d, want %d", repo.lastLatestPriorHouseholdBudget.HouseholdID, householdID)
+	}
+	wantStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	if repo.lastLatestPriorHouseholdBudget.PeriodStart.Time != wantStart {
+		t.Fatalf("latest prior period start = %s, want %s", repo.lastLatestPriorHouseholdBudget.PeriodStart.Time, wantStart)
+	}
+	if repo.lastCreateHouseholdBudget.SourceBudgetID != nil {
+		t.Fatalf("source budget id = %v, want nil", repo.lastCreateHouseholdBudget.SourceBudgetID)
+	}
+	if len(repo.createdBudgetLines) != 0 {
+		t.Fatalf("created budget lines = %+v, want none", repo.createdBudgetLines)
+	}
+}
+
+func TestGetMonthlyBudgetCopiesLatestPriorHouseholdBudgetWhenMissing(t *testing.T) {
+	householdID := int64(7)
+	sourceID := int64(7)
+	targetID := int64(12)
+	julyStart := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	julyEnd := pgtype.Date{Time: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+	groceriesAllocation, err := parseBudgetNumeric("250.25")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	rentAllocation, err := parseBudgetNumeric("1200.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		latestPriorHousehold: sqlc.Budget{
+			ID:          sourceID,
+			HouseholdID: &householdID,
+		},
+		createdHouseholdBudget: sqlc.Budget{
+			ID:             targetID,
+			HouseholdID:    &householdID,
+			PeriodStart:    julyStart,
+			PeriodEnd:      julyEnd,
+			SourceBudgetID: &sourceID,
+		},
+		budgetLines: []sqlc.BudgetLine{
+			{ID: 101, BudgetID: sourceID, Name: "Groceries", AllocationAmount: groceriesAllocation, SortOrder: 1},
+			{ID: 102, BudgetID: sourceID, Name: "Rent", AllocationAmount: rentAllocation, SortOrder: 2},
+		},
+		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
+			{BudgetID: sourceID, BudgetLineID: 101, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
+		},
+		createdBudgetLineRows: []sqlc.BudgetLine{
+			{ID: 201, BudgetID: targetID, Name: "Groceries", AllocationAmount: groceriesAllocation, SortOrder: 1},
+			{ID: 202, BudgetID: targetID, Name: "Rent", AllocationAmount: rentAllocation, SortOrder: 2},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	budget, err := svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
+		HouseholdID:     &householdID,
+		Year:            2026,
+		Month:           7,
+		CreateIfMissing: true,
+	})
+
+	if err != nil {
+		t.Fatalf("GetMonthlyBudget returned error: %v", err)
+	}
+	if budget.SourceBudgetID == nil || *budget.SourceBudgetID != sourceID {
+		t.Fatalf("source budget id = %v, want %d", budget.SourceBudgetID, sourceID)
+	}
+	if repo.lastCreateHouseholdBudget.SourceBudgetID == nil || *repo.lastCreateHouseholdBudget.SourceBudgetID != sourceID {
+		t.Fatalf("created source budget id = %v, want %d", repo.lastCreateHouseholdBudget.SourceBudgetID, sourceID)
+	}
+	if len(repo.createdBudgetLines) != 2 {
+		t.Fatalf("created budget lines = %+v, want 2 lines", repo.createdBudgetLines)
+	}
+	wantLines := []sqlc.CreateBudgetLineParams{
+		{BudgetID: targetID, Name: "Groceries", AllocationAmount: groceriesAllocation, SortOrder: 1},
+		{BudgetID: targetID, Name: "Rent", AllocationAmount: rentAllocation, SortOrder: 2},
+	}
+	for i, want := range wantLines {
+		got := repo.createdBudgetLines[i]
+		if got.BudgetID != want.BudgetID || got.Name != want.Name || got.SortOrder != want.SortOrder || budgetNumericString(got.AllocationAmount) != budgetNumericString(want.AllocationAmount) {
+			t.Fatalf("created budget line %d = %+v, want %+v", i, got, want)
+		}
+	}
+	if len(repo.createdBudgetLineCategories) != 1 {
+		t.Fatalf("created budget line categories = %+v, want one mapping", repo.createdBudgetLineCategories)
+	}
+	wantCategory := sqlc.CreateBudgetLineCategoryParams{BudgetID: targetID, BudgetLineID: 201, CategoryID: 3}
+	if repo.createdBudgetLineCategories[0] != wantCategory {
+		t.Fatalf("created budget line category = %+v, want %+v", repo.createdBudgetLineCategories[0], wantCategory)
+	}
+}
+
+func TestGetMonthlyBudgetCopiesLatestPriorUserBudgetWhenMissing(t *testing.T) {
+	userID := int64(8)
+	sourceID := int64(17)
+	targetID := int64(18)
+	julyStart := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	julyEnd := pgtype.Date{Time: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+	repo := &fakeRepo{
+		latestPriorUser: sqlc.Budget{
+			ID:     sourceID,
+			UserID: &userID,
+		},
+		createdUserBudget: sqlc.Budget{
+			ID:             targetID,
+			UserID:         &userID,
+			PeriodStart:    julyStart,
+			PeriodEnd:      julyEnd,
+			SourceBudgetID: &sourceID,
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	budget, err := svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
+		UserID:          &userID,
+		Year:            2026,
+		Month:           7,
+		CreateIfMissing: true,
+	})
+
+	if err != nil {
+		t.Fatalf("GetMonthlyBudget returned error: %v", err)
+	}
+	if repo.lastLatestPriorUserBudget.UserID != userID {
+		t.Fatalf("latest prior user id = %d, want %d", repo.lastLatestPriorUserBudget.UserID, userID)
+	}
+	if budget.SourceBudgetID == nil || *budget.SourceBudgetID != sourceID {
+		t.Fatalf("source budget id = %v, want %d", budget.SourceBudgetID, sourceID)
+	}
+	if repo.lastCreateUserBudget.SourceBudgetID == nil || *repo.lastCreateUserBudget.SourceBudgetID != sourceID {
+		t.Fatalf("created source budget id = %v, want %d", repo.lastCreateUserBudget.SourceBudgetID, sourceID)
+	}
+}
+
 func int64Ptr(value int64) *int64 {
 	return &value
 }

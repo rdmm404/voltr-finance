@@ -65,7 +65,7 @@ func (s *Service) GetMonthlyBudget(ctx context.Context, req GetMonthlyBudgetRequ
 
 	budget, err = s.createMonthlyBudget(ctx, req.HouseholdID, req.UserID, periodStart, periodEnd)
 	if err != nil {
-		return BudgetDTO{}, mapBudgetError(err)
+		return BudgetDTO{}, err
 	}
 	return s.budgetDTO(ctx, budget)
 }
@@ -105,20 +105,102 @@ func (s *Service) findBudgetByPeriod(ctx context.Context, householdID, userID *i
 }
 
 func (s *Service) createMonthlyBudget(ctx context.Context, householdID, userID *int64, periodStart, periodEnd pgtype.Date) (sqlc.Budget, error) {
+	sourceBudget, sourceBudgetID, err := s.latestPriorBudget(ctx, householdID, userID, periodStart)
+	if err != nil {
+		return sqlc.Budget{}, err
+	}
+
+	var budget sqlc.Budget
 	if householdID != nil {
-		return s.repo.CreateHouseholdBudget(ctx, sqlc.CreateHouseholdBudgetParams{
+		budget, err = s.repo.CreateHouseholdBudget(ctx, sqlc.CreateHouseholdBudgetParams{
 			HouseholdID:    *householdID,
 			PeriodStart:    periodStart,
 			PeriodEnd:      periodEnd,
-			SourceBudgetID: nil,
+			SourceBudgetID: sourceBudgetID,
+		})
+	} else {
+		budget, err = s.repo.CreateUserBudget(ctx, sqlc.CreateUserBudgetParams{
+			UserID:         *userID,
+			PeriodStart:    periodStart,
+			PeriodEnd:      periodEnd,
+			SourceBudgetID: sourceBudgetID,
 		})
 	}
-	return s.repo.CreateUserBudget(ctx, sqlc.CreateUserBudgetParams{
-		UserID:         *userID,
-		PeriodStart:    periodStart,
-		PeriodEnd:      periodEnd,
-		SourceBudgetID: nil,
-	})
+	if err != nil {
+		return sqlc.Budget{}, mapBudgetError(err)
+	}
+
+	if sourceBudgetID != nil {
+		if err := s.copyBudgetLines(ctx, sourceBudget.ID, budget.ID); err != nil {
+			return sqlc.Budget{}, err
+		}
+	}
+	return budget, nil
+}
+
+func (s *Service) latestPriorBudget(ctx context.Context, householdID, userID *int64, periodStart pgtype.Date) (sqlc.Budget, *int64, error) {
+	var (
+		budget sqlc.Budget
+		err    error
+	)
+	if householdID != nil {
+		budget, err = s.repo.GetLatestPriorHouseholdBudget(ctx, sqlc.GetLatestPriorHouseholdBudgetParams{
+			HouseholdID: *householdID,
+			PeriodStart: periodStart,
+		})
+	} else {
+		budget, err = s.repo.GetLatestPriorUserBudget(ctx, sqlc.GetLatestPriorUserBudgetParams{
+			UserID:      *userID,
+			PeriodStart: periodStart,
+		})
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return sqlc.Budget{}, nil, nil
+	}
+	if err != nil {
+		return sqlc.Budget{}, nil, mapBudgetError(err)
+	}
+	sourceBudgetID := budget.ID
+	return budget, &sourceBudgetID, nil
+}
+
+func (s *Service) copyBudgetLines(ctx context.Context, sourceBudgetID, targetBudgetID int64) error {
+	sourceLines, err := s.repo.ListBudgetLines(ctx, sourceBudgetID)
+	if err != nil {
+		return mapBudgetError(err)
+	}
+	sourceMappings, err := s.repo.ListBudgetLineCategories(ctx, sourceBudgetID)
+	if err != nil {
+		return mapBudgetError(err)
+	}
+
+	mappingsByLineID := make(map[int64][]sqlc.ListBudgetLineCategoriesRow)
+	for _, mapping := range sourceMappings {
+		mappingsByLineID[mapping.BudgetLineID] = append(mappingsByLineID[mapping.BudgetLineID], mapping)
+	}
+
+	for _, sourceLine := range sourceLines {
+		targetLine, err := s.repo.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
+			BudgetID:         targetBudgetID,
+			Name:             sourceLine.Name,
+			AllocationAmount: sourceLine.AllocationAmount,
+			SortOrder:        sourceLine.SortOrder,
+		})
+		if err != nil {
+			return mapBudgetError(err)
+		}
+		for _, mapping := range mappingsByLineID[sourceLine.ID] {
+			err := s.repo.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{
+				BudgetID:     targetBudgetID,
+				BudgetLineID: targetLine.ID,
+				CategoryID:   mapping.CategoryID,
+			})
+			if err != nil {
+				return mapBudgetError(err)
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Service) budgetDTO(ctx context.Context, budget sqlc.Budget) (BudgetDTO, error) {
