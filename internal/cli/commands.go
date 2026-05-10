@@ -41,6 +41,12 @@ type AppService interface {
 	GetCategoryByCode(context.Context, string) (app.CategoryDTO, error)
 	UpdateCategory(context.Context, app.UpdateCategoryRequest) (app.CategoryDTO, error)
 	DeactivateCategory(context.Context, string) (app.CategoryDTO, error)
+
+	GetMonthlyBudget(context.Context, app.GetMonthlyBudgetRequest) (app.BudgetDTO, error)
+	CreateBudgetLine(context.Context, app.CreateBudgetLineRequest) (app.BudgetLineDTO, error)
+	UpdateBudgetLine(context.Context, app.UpdateBudgetLineRequest) (app.BudgetLineDTO, error)
+	DeleteBudgetLine(context.Context, int64) error
+	GetBudgetReport(context.Context, int64) (app.BudgetReportDTO, error)
 }
 
 type CLI struct {
@@ -48,6 +54,7 @@ type CLI struct {
 	Users        UsersCmd        `cmd:"" help:"Manage users."`
 	Households   HouseholdsCmd   `cmd:"" help:"Read households."`
 	Categories   CategoriesCmd   `cmd:"" help:"Manage transaction categories."`
+	Budgets      BudgetsCmd      `cmd:"" help:"Manage budgets."`
 }
 
 type runContext struct {
@@ -490,6 +497,112 @@ func (c *HouseholdUsersCmd) Run(ctx *runContext) error {
 	return RenderJSON(ctx.stdout, users)
 }
 
+type BudgetsCmd struct {
+	Get    BudgetGetCmd    `cmd:"" help:"Get a monthly budget."`
+	Report BudgetReportCmd `cmd:"" help:"Show a budget report."`
+	Lines  BudgetLinesCmd  `cmd:"" help:"Manage budget lines."`
+}
+
+type BudgetGetCmd struct {
+	HouseholdID *int64 `placeholder:"INT-64" help:"Household budget owner."`
+	UserID      *int64 `placeholder:"INT-64" help:"Personal budget owner."`
+	Month       string `required:"" help:"Budget month in YYYY-MM format."`
+	Create      bool   `help:"Create the monthly budget if missing."`
+}
+
+func (c *BudgetGetCmd) Run(ctx *runContext) error {
+	year, month, err := parseBudgetMonth(c.Month)
+	if err != nil {
+		return err
+	}
+	budget, err := ctx.svc.GetMonthlyBudget(ctx.Context, app.GetMonthlyBudgetRequest{
+		HouseholdID:     c.HouseholdID,
+		UserID:          c.UserID,
+		Year:            year,
+		Month:           month,
+		CreateIfMissing: c.Create,
+	})
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, budget)
+}
+
+type BudgetReportCmd struct {
+	ID int64 `arg:"" required:"" help:"Budget ID."`
+}
+
+func (c *BudgetReportCmd) Run(ctx *runContext) error {
+	report, err := ctx.svc.GetBudgetReport(ctx.Context, c.ID)
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, report)
+}
+
+type BudgetLinesCmd struct {
+	Add    BudgetLineAddCmd    `cmd:"" help:"Add a budget line."`
+	Update BudgetLineUpdateCmd `cmd:"" help:"Update a budget line."`
+	Delete BudgetLineDeleteCmd `cmd:"" help:"Delete a budget line."`
+}
+
+type BudgetLineAddCmd struct {
+	BudgetID   int64   `required:"" placeholder:"INT-64" help:"Budget ID."`
+	Name       string  `required:"" help:"Budget line name."`
+	Amount     string  `required:"" help:"Allocation amount."`
+	Categories *string `help:"Comma-separated category codes."`
+	SortOrder  *int32  `help:"Display sort order."`
+}
+
+func (c *BudgetLineAddCmd) Run(ctx *runContext) error {
+	line, err := ctx.svc.CreateBudgetLine(ctx.Context, app.CreateBudgetLineRequest{
+		BudgetID:         c.BudgetID,
+		Name:             c.Name,
+		AllocationAmount: c.Amount,
+		CategoryCodes:    parseOptionalCSV(c.Categories),
+		SortOrder:        c.SortOrder,
+	})
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, line)
+}
+
+type BudgetLineUpdateCmd struct {
+	ID         int64   `arg:"" required:"" help:"Budget line ID."`
+	Name       *string `help:"Replacement budget line name."`
+	Amount     *string `help:"Replacement allocation amount."`
+	Categories *string `help:"Replacement comma-separated category codes."`
+	SortOrder  *int32  `help:"Replacement display sort order."`
+}
+
+func (c *BudgetLineUpdateCmd) Run(ctx *runContext) error {
+	var categoryCodes *[]string
+	if c.Categories != nil {
+		parsed := parseOptionalCSV(c.Categories)
+		categoryCodes = &parsed
+	}
+	line, err := ctx.svc.UpdateBudgetLine(ctx.Context, app.UpdateBudgetLineRequest{
+		LineID:           c.ID,
+		Name:             c.Name,
+		AllocationAmount: c.Amount,
+		CategoryCodes:    categoryCodes,
+		SortOrder:        c.SortOrder,
+	})
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, line)
+}
+
+type BudgetLineDeleteCmd struct {
+	ID int64 `arg:"" required:"" help:"Budget line ID."`
+}
+
+func (c *BudgetLineDeleteCmd) Run(ctx *runContext) error {
+	return ctx.svc.DeleteBudgetLine(ctx.Context, c.ID)
+}
+
 func identity(authorID *int64, discordID, telegramID, phoneNumber, whatsappID *string) app.IdentitySelector {
 	return app.IdentitySelector{AuthorID: authorID, DiscordID: discordID, TelegramID: telegramID, PhoneNumber: phoneNumber, WhatsappID: whatsappID}
 }
@@ -557,6 +670,29 @@ func parseIDs(raw string) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func parseBudgetMonth(value string) (int, int, error) {
+	parsed, err := time.Parse("2006-01", value)
+	if err != nil {
+		return 0, 0, fmt.Errorf("month must be in YYYY-MM format")
+	}
+	return parsed.Year(), int(parsed.Month()), nil
+}
+
+func parseOptionalCSV(value *string) []string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil
+	}
+	parts := strings.Split(*value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func isHelpArgs(args []string) bool {
