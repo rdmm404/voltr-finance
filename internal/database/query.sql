@@ -53,6 +53,168 @@ SET is_active = false,
 WHERE code = $1
 RETURNING *;
 
+-- ******************* budget *******************
+-- READS
+
+-- name: GetHouseholdBudgetByPeriod :one
+SELECT * FROM budget
+WHERE household_id = sqlc.arg(household_id)::BIGINT
+  AND user_id IS NULL
+  AND period_start = sqlc.arg(period_start)::DATE
+  AND period_end = sqlc.arg(period_end)::DATE;
+
+-- name: GetUserBudgetByPeriod :one
+SELECT * FROM budget
+WHERE user_id = sqlc.arg(user_id)::BIGINT
+  AND household_id IS NULL
+  AND period_start = sqlc.arg(period_start)::DATE
+  AND period_end = sqlc.arg(period_end)::DATE;
+
+-- name: GetBudgetById :one
+SELECT * FROM budget
+WHERE id = sqlc.arg(id)::BIGINT;
+
+-- name: GetLatestPriorHouseholdBudget :one
+SELECT * FROM budget
+WHERE household_id = sqlc.arg(household_id)::BIGINT
+  AND user_id IS NULL
+  AND period_start < sqlc.arg(period_start)::DATE
+ORDER BY period_start DESC, id DESC
+LIMIT 1;
+
+-- name: GetLatestPriorUserBudget :one
+SELECT * FROM budget
+WHERE user_id = sqlc.arg(user_id)::BIGINT
+  AND household_id IS NULL
+  AND period_start < sqlc.arg(period_start)::DATE
+ORDER BY period_start DESC, id DESC
+LIMIT 1;
+
+-- name: ListBudgetLines :many
+SELECT * FROM budget_line
+WHERE budget_id = sqlc.arg(budget_id)::BIGINT
+ORDER BY sort_order ASC, id ASC;
+
+-- name: ListBudgetLineCategories :many
+SELECT
+    blc.budget_id,
+    blc.budget_line_id,
+    blc.category_id,
+    c.code AS category_code,
+    c.name AS category_name
+FROM budget_line_category blc
+JOIN category c ON c.id = blc.category_id
+WHERE blc.budget_id = sqlc.arg(budget_id)::BIGINT
+ORDER BY blc.budget_line_id ASC, c.name ASC, c.id ASC;
+
+-- name: GetBudgetLineById :one
+SELECT * FROM budget_line
+WHERE id = sqlc.arg(id)::BIGINT;
+
+-- name: GetMaxBudgetLineSortOrder :one
+SELECT COALESCE(MAX(sort_order), 0)::INTEGER AS sort_order
+FROM budget_line
+WHERE budget_id = sqlc.arg(budget_id)::BIGINT;
+
+-- name: ListBudgetTransactions :many
+SELECT
+    t.category_id::BIGINT AS category_id,
+    SUM(t.amount)::REAL AS actual_amount
+FROM transaction t
+WHERE t.deleted_at IS NULL
+  AND t.category_id IS NOT NULL
+  AND t.transaction_date >= sqlc.arg(period_start)::DATE
+  AND t.transaction_date < (sqlc.arg(period_end)::DATE + INTERVAL '1 day')
+  AND (
+      (sqlc.narg(household_id)::BIGINT IS NOT NULL AND t.household_id = sqlc.narg(household_id)::BIGINT)
+      OR
+      (sqlc.narg(user_id)::BIGINT IS NOT NULL AND t.author_id = sqlc.narg(user_id)::BIGINT)
+  )
+GROUP BY t.category_id
+ORDER BY t.category_id ASC;
+
+-- name: SumUncategorizedBudgetTransactions :one
+SELECT COALESCE(SUM(t.amount), 0)::REAL AS actual_amount
+FROM transaction t
+WHERE t.deleted_at IS NULL
+  AND t.category_id IS NULL
+  AND t.transaction_date >= sqlc.arg(period_start)::DATE
+  AND t.transaction_date < (sqlc.arg(period_end)::DATE + INTERVAL '1 day')
+  AND (
+      (sqlc.narg(household_id)::BIGINT IS NOT NULL AND t.household_id = sqlc.narg(household_id)::BIGINT)
+      OR
+      (sqlc.narg(user_id)::BIGINT IS NOT NULL AND t.author_id = sqlc.narg(user_id)::BIGINT)
+  );
+
+-- WRITES
+
+-- name: CreateHouseholdBudget :one
+INSERT INTO budget (household_id, user_id, period_start, period_end, source_budget_id)
+VALUES (
+    sqlc.arg(household_id)::BIGINT,
+    NULL,
+    sqlc.arg(period_start)::DATE,
+    sqlc.arg(period_end)::DATE,
+    sqlc.narg(source_budget_id)::BIGINT
+)
+RETURNING *;
+
+-- name: CreateUserBudget :one
+INSERT INTO budget (household_id, user_id, period_start, period_end, source_budget_id)
+VALUES (
+    NULL,
+    sqlc.arg(user_id)::BIGINT,
+    sqlc.arg(period_start)::DATE,
+    sqlc.arg(period_end)::DATE,
+    sqlc.narg(source_budget_id)::BIGINT
+)
+RETURNING *;
+
+-- name: CreateBudgetLine :one
+INSERT INTO budget_line (budget_id, name, allocation_amount, sort_order)
+VALUES (
+    sqlc.arg(budget_id)::BIGINT,
+    sqlc.arg(name)::VARCHAR,
+    sqlc.arg(allocation_amount)::NUMERIC,
+    sqlc.arg(sort_order)::INTEGER
+)
+RETURNING *;
+
+-- name: UpdateBudgetLine :one
+UPDATE budget_line
+SET
+    name = CASE
+        WHEN sqlc.arg(set_name)::bool THEN sqlc.arg(name)::VARCHAR
+        ELSE name
+    END,
+    allocation_amount = CASE
+        WHEN sqlc.arg(set_allocation_amount)::bool THEN sqlc.arg(allocation_amount)::NUMERIC
+        ELSE allocation_amount
+    END,
+    sort_order = CASE
+        WHEN sqlc.arg(set_sort_order)::bool THEN sqlc.arg(sort_order)::INTEGER
+        ELSE sort_order
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id)::BIGINT
+RETURNING *;
+
+-- name: DeleteBudgetLine :exec
+DELETE FROM budget_line
+WHERE id = sqlc.arg(id)::BIGINT;
+
+-- name: DeleteBudgetLineCategories :exec
+DELETE FROM budget_line_category
+WHERE budget_line_id = sqlc.arg(budget_line_id)::BIGINT;
+
+-- name: CreateBudgetLineCategory :exec
+INSERT INTO budget_line_category (budget_id, budget_line_id, category_id)
+VALUES (
+    sqlc.arg(budget_id)::BIGINT,
+    sqlc.arg(budget_line_id)::BIGINT,
+    sqlc.arg(category_id)::BIGINT
+);
+
 -- ******************* transaction *******************
 -- READS
 
