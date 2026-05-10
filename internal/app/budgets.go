@@ -343,7 +343,7 @@ func (s *Service) CreateBudgetLine(ctx context.Context, req CreateBudgetLineRequ
 	if err != nil {
 		return BudgetLineDTO{}, err
 	}
-	categoryIDs, err := s.resolveBudgetCategoryIDs(ctx, req.CategoryIDs, req.CategoryCodes)
+	categoryIDs, err := s.resolveLineCategoryIDs(ctx, req.CategoryIDs, req.CategoryCodes)
 	if err != nil {
 		return BudgetLineDTO{}, err
 	}
@@ -416,7 +416,7 @@ func (s *Service) UpdateBudgetLine(ctx context.Context, req UpdateBudgetLineRequ
 		if req.CategoryCodes != nil {
 			categoryCodes = *req.CategoryCodes
 		}
-		resolvedCategoryIDs, err := s.resolveBudgetCategoryIDs(ctx, categoryIDs, categoryCodes)
+		resolvedCategoryIDs, err := s.resolveLineCategoryIDs(ctx, categoryIDs, categoryCodes)
 		if err != nil {
 			return BudgetLineDTO{}, err
 		}
@@ -543,7 +543,7 @@ func validateBudgetLineName(name string) (string, error) {
 	return name, nil
 }
 
-func (s *Service) resolveBudgetCategoryIDs(ctx context.Context, ids []int64, codes []string) ([]int64, error) {
+func (s *Service) resolveLineCategoryIDs(ctx context.Context, ids []int64, codes []string) ([]int64, error) {
 	seen := make(map[int64]struct{}, len(ids)+len(codes))
 	resolved := make([]int64, 0, len(ids)+len(codes))
 	for _, id := range ids {
