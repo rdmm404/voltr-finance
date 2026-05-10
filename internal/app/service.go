@@ -13,6 +13,7 @@ type Repository interface {
 	HouseholdRepository
 	TransactionRepository
 	CategoryRepository
+	BudgetRepository
 }
 
 type UserRepository interface {
@@ -48,6 +49,27 @@ type CategoryRepository interface {
 	GetActiveCategoryByCode(context.Context, string) (sqlc.Category, error)
 	UpdateCategory(context.Context, sqlc.UpdateCategoryParams) (sqlc.Category, error)
 	DeactivateCategory(context.Context, string) (sqlc.Category, error)
+}
+
+type BudgetRepository interface {
+	GetHouseholdBudgetByPeriod(context.Context, sqlc.GetHouseholdBudgetByPeriodParams) (sqlc.Budget, error)
+	GetUserBudgetByPeriod(context.Context, sqlc.GetUserBudgetByPeriodParams) (sqlc.Budget, error)
+	GetBudgetById(context.Context, int64) (sqlc.Budget, error)
+	GetLatestPriorHouseholdBudget(context.Context, sqlc.GetLatestPriorHouseholdBudgetParams) (sqlc.Budget, error)
+	GetLatestPriorUserBudget(context.Context, sqlc.GetLatestPriorUserBudgetParams) (sqlc.Budget, error)
+	ListBudgetLines(context.Context, int64) ([]sqlc.BudgetLine, error)
+	ListBudgetLineCategories(context.Context, int64) ([]sqlc.ListBudgetLineCategoriesRow, error)
+	GetBudgetLineById(context.Context, int64) (sqlc.BudgetLine, error)
+	GetMaxBudgetLineSortOrder(context.Context, int64) (int32, error)
+	CreateHouseholdBudget(context.Context, sqlc.CreateHouseholdBudgetParams) (sqlc.Budget, error)
+	CreateUserBudget(context.Context, sqlc.CreateUserBudgetParams) (sqlc.Budget, error)
+	CreateBudgetLine(context.Context, sqlc.CreateBudgetLineParams) (sqlc.BudgetLine, error)
+	UpdateBudgetLine(context.Context, sqlc.UpdateBudgetLineParams) (sqlc.BudgetLine, error)
+	DeleteBudgetLine(context.Context, int64) error
+	DeleteBudgetLineCategories(context.Context, int64) error
+	CreateBudgetLineCategory(context.Context, sqlc.CreateBudgetLineCategoryParams) error
+	ListBudgetTransactions(context.Context, sqlc.ListBudgetTransactionsParams) ([]sqlc.ListBudgetTransactionsRow, error)
+	SumUncategorizedBudgetTransactions(context.Context, sqlc.SumUncategorizedBudgetTransactionsParams) (float32, error)
 }
 
 type TransactionService interface {
