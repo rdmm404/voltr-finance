@@ -101,6 +101,55 @@ Look up a household by name:
 
 The returned `id` can be passed to transaction commands as `--household-id`.
 
+## Budgets
+
+Get or create a household monthly budget. When `--create` is provided and the month does not exist, the app copies the latest prior budget for the same owner. If no prior budget exists, it creates an empty budget.
+
+```bash
+/tmp/voltr-finance --config /tmp/voltr-finance.json budgets get \
+  --household-id 1 \
+  --month 2026-05 \
+  --create
+```
+
+Get or create a personal monthly budget:
+
+```bash
+/tmp/voltr-finance --config /tmp/voltr-finance.json budgets get \
+  --user-id 4 \
+  --month 2026-05 \
+  --create
+```
+
+Add a budget line. Category inputs use category codes:
+
+```bash
+/tmp/voltr-finance --config /tmp/voltr-finance.json budgets lines add \
+  --budget-id 12 \
+  --name "Groceries" \
+  --amount 800.00 \
+  --categories groceries,costco
+```
+
+Update a budget line by line ID:
+
+```bash
+/tmp/voltr-finance --config /tmp/voltr-finance.json budgets lines update 44 \
+  --amount 900.00
+```
+
+Delete a budget line by line ID:
+
+```bash
+/tmp/voltr-finance --config /tmp/voltr-finance.json budgets lines delete 44
+```
+
+Show budget actuals:
+
+```bash
+/tmp/voltr-finance --config /tmp/voltr-finance.json budgets report 12
+```
+
 ## Nanobot Mapping
 
 Map Nanobot sender metadata to exactly one CLI identity flag.
