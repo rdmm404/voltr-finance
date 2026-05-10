@@ -8,8 +8,8 @@ ALTER TABLE budget ADD COLUMN source_budget_id BIGINT REFERENCES budget(id);
 
 UPDATE budget
 SET
-    period_start = date_trunc('month', created_at)::DATE,
-    period_end = (date_trunc('month', created_at)::DATE + INTERVAL '1 month - 1 day')::DATE
+    period_start = CURRENT_DATE,
+    period_end = CURRENT_DATE
 WHERE period_start IS NULL OR period_end IS NULL;
 
 ALTER TABLE budget ALTER COLUMN period_start SET NOT NULL;
@@ -54,6 +54,9 @@ CREATE TABLE budget_line (
     UNIQUE (budget_id, sort_order)
 );
 
+CREATE INDEX idx_budget_line_budget_id
+ON budget_line(budget_id);
+
 CREATE TABLE budget_line_category (
     budget_id BIGINT NOT NULL REFERENCES budget(id) ON DELETE CASCADE,
     budget_line_id BIGINT NOT NULL,
@@ -78,6 +81,7 @@ SET search_path TO transactions, public;
 DROP INDEX IF EXISTS idx_budget_line_category_category_id;
 DROP INDEX IF EXISTS idx_budget_line_category_budget_id;
 DROP TABLE IF EXISTS budget_line_category;
+DROP INDEX IF EXISTS idx_budget_line_budget_id;
 DROP TABLE IF EXISTS budget_line;
 
 DROP INDEX IF EXISTS idx_budget_user_period_start;
