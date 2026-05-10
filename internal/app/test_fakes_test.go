@@ -33,33 +33,37 @@ type fakeRepo struct {
 	categoryByCode                    sqlc.Category
 	listCategoriesResult              []sqlc.Category
 
-	householdBudgetByPeriod     sqlc.Budget
-	userBudgetByPeriod          sqlc.Budget
-	budgetByID                  sqlc.Budget
-	latestPriorHousehold        sqlc.Budget
-	latestPriorUser             sqlc.Budget
-	createdHouseholdBudget      sqlc.Budget
-	createdUserBudget           sqlc.Budget
-	budgetLines                 []sqlc.BudgetLine
-	budgetLineCategories        []sqlc.ListBudgetLineCategoriesRow
-	createdBudgetLines          []sqlc.CreateBudgetLineParams
-	createdBudgetLineRows       []sqlc.BudgetLine
-	createdBudgetLineCategories []sqlc.CreateBudgetLineCategoryParams
-	budgetLineByID              sqlc.BudgetLine
-	updatedBudgetLine           sqlc.BudgetLine
-	lastUpdateBudgetLine        sqlc.UpdateBudgetLineParams
-	maxSortOrder                int32
-	deletedBudgetLineID         int64
-	deletedBudgetLineCategoryID int64
+	householdBudgetByPeriod         sqlc.Budget
+	userBudgetByPeriod              sqlc.Budget
+	budgetByID                      sqlc.Budget
+	latestPriorHousehold            sqlc.Budget
+	latestPriorUser                 sqlc.Budget
+	createdHouseholdBudget          sqlc.Budget
+	createdUserBudget               sqlc.Budget
+	budgetLines                     []sqlc.BudgetLine
+	budgetLineCategories            []sqlc.ListBudgetLineCategoriesRow
+	createdBudgetLines              []sqlc.CreateBudgetLineParams
+	createdBudgetLineRows           []sqlc.BudgetLine
+	createdBudgetLineCategories     []sqlc.CreateBudgetLineCategoryParams
+	budgetLineByID                  sqlc.BudgetLine
+	updatedBudgetLine               sqlc.BudgetLine
+	lastUpdateBudgetLine            sqlc.UpdateBudgetLineParams
+	maxSortOrder                    int32
+	deletedBudgetLineID             int64
+	deletedBudgetLineCategoryID     int64
+	budgetTransactions              []sqlc.ListBudgetTransactionsRow
+	uncategorizedBudgetTransactions float32
 
-	lastHouseholdBudgetPeriodStart       time.Time
-	lastUserBudgetPeriodStart            time.Time
-	lastCreateHouseholdBudget            sqlc.CreateHouseholdBudgetParams
-	lastCreateUserBudget                 sqlc.CreateUserBudgetParams
-	lastLatestPriorHouseholdBudget       sqlc.GetLatestPriorHouseholdBudgetParams
-	lastLatestPriorUserBudget            sqlc.GetLatestPriorUserBudgetParams
-	lastListBudgetLinesBudgetID          int64
-	lastListBudgetLineCategoriesBudgetID int64
+	lastHouseholdBudgetPeriodStart         time.Time
+	lastUserBudgetPeriodStart              time.Time
+	lastCreateHouseholdBudget              sqlc.CreateHouseholdBudgetParams
+	lastCreateUserBudget                   sqlc.CreateUserBudgetParams
+	lastLatestPriorHouseholdBudget         sqlc.GetLatestPriorHouseholdBudgetParams
+	lastLatestPriorUserBudget              sqlc.GetLatestPriorUserBudgetParams
+	lastListBudgetLinesBudgetID            int64
+	lastListBudgetLineCategoriesBudgetID   int64
+	lastListBudgetTransactions             sqlc.ListBudgetTransactionsParams
+	lastSumUncategorizedBudgetTransactions sqlc.SumUncategorizedBudgetTransactionsParams
 }
 
 func (f *fakeRepo) CreateUser(_ context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
@@ -381,12 +385,14 @@ func (f *fakeRepo) CreateBudgetLineCategory(_ context.Context, arg sqlc.CreateBu
 	return nil
 }
 
-func (f *fakeRepo) ListBudgetTransactions(context.Context, sqlc.ListBudgetTransactionsParams) ([]sqlc.ListBudgetTransactionsRow, error) {
-	return nil, nil
+func (f *fakeRepo) ListBudgetTransactions(_ context.Context, arg sqlc.ListBudgetTransactionsParams) ([]sqlc.ListBudgetTransactionsRow, error) {
+	f.lastListBudgetTransactions = arg
+	return f.budgetTransactions, nil
 }
 
-func (f *fakeRepo) SumUncategorizedBudgetTransactions(context.Context, sqlc.SumUncategorizedBudgetTransactionsParams) (float32, error) {
-	return 0, nil
+func (f *fakeRepo) SumUncategorizedBudgetTransactions(_ context.Context, arg sqlc.SumUncategorizedBudgetTransactionsParams) (float32, error) {
+	f.lastSumUncategorizedBudgetTransactions = arg
+	return f.uncategorizedBudgetTransactions, nil
 }
 
 type fakeTransactor struct {

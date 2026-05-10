@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +40,39 @@ type BudgetLineDTO struct {
 	AllocationAmount string           `json:"allocationAmount"`
 	SortOrder        int32            `json:"sortOrder"`
 	Categories       []CategoryRefDTO `json:"categories"`
+}
+
+type BudgetReportDTO struct {
+	Budget BudgetSummaryDTO      `json:"budget"`
+	Lines  []BudgetReportLineDTO `json:"lines"`
+	Totals BudgetReportTotalsDTO `json:"totals"`
+}
+
+type BudgetSummaryDTO struct {
+	ID             int64     `json:"id"`
+	HouseholdID    *int64    `json:"householdId,omitempty"`
+	UserID         *int64    `json:"userId,omitempty"`
+	PeriodStart    time.Time `json:"periodStart"`
+	PeriodEnd      time.Time `json:"periodEnd"`
+	SourceBudgetID *int64    `json:"sourceBudgetId,omitempty"`
+}
+
+type BudgetReportLineDTO struct {
+	ID               int64            `json:"id"`
+	BudgetID         int64            `json:"budgetId"`
+	Name             string           `json:"name"`
+	AllocationAmount string           `json:"allocationAmount"`
+	ActualAmount     string           `json:"actualAmount"`
+	RemainingAmount  string           `json:"remainingAmount"`
+	SortOrder        int32            `json:"sortOrder"`
+	Categories       []CategoryRefDTO `json:"categories"`
+}
+
+type BudgetReportTotalsDTO struct {
+	AllocationAmount          string `json:"allocationAmount"`
+	ActualAmount              string `json:"actualAmount"`
+	RemainingAmount           string `json:"remainingAmount"`
+	UncategorizedActualAmount string `json:"uncategorizedActualAmount"`
 }
 
 type CreateBudgetLineRequest struct {
@@ -405,6 +440,101 @@ func (s *Service) DeleteBudgetLine(ctx context.Context, lineID int64) error {
 	return nil
 }
 
+func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetReportDTO, error) {
+	if budgetID == 0 {
+		return BudgetReportDTO{}, NewError(CodeValidationError, "budget id is required", nil)
+	}
+	budget, err := s.repo.GetBudgetById(ctx, budgetID)
+	if err != nil {
+		return BudgetReportDTO{}, mapBudgetError(err)
+	}
+	lines, err := s.repo.ListBudgetLines(ctx, budgetID)
+	if err != nil {
+		return BudgetReportDTO{}, mapBudgetError(err)
+	}
+	mappings, err := s.repo.ListBudgetLineCategories(ctx, budgetID)
+	if err != nil {
+		return BudgetReportDTO{}, mapBudgetError(err)
+	}
+	actualRows, err := s.repo.ListBudgetTransactions(ctx, sqlc.ListBudgetTransactionsParams{
+		PeriodStart: budget.PeriodStart,
+		PeriodEnd:   budget.PeriodEnd,
+		HouseholdID: budget.HouseholdID,
+		UserID:      budget.UserID,
+	})
+	if err != nil {
+		return BudgetReportDTO{}, mapBudgetError(err)
+	}
+	uncategorized, err := s.repo.SumUncategorizedBudgetTransactions(ctx, sqlc.SumUncategorizedBudgetTransactionsParams{
+		PeriodStart: budget.PeriodStart,
+		PeriodEnd:   budget.PeriodEnd,
+		HouseholdID: budget.HouseholdID,
+		UserID:      budget.UserID,
+	})
+	if err != nil {
+		return BudgetReportDTO{}, mapBudgetError(err)
+	}
+
+	actualByCategory := make(map[int64]float64, len(actualRows))
+	for _, row := range actualRows {
+		actualByCategory[row.CategoryID] = float64(row.ActualAmount)
+	}
+	categoriesByLine := make(map[int64][]CategoryRefDTO)
+	categoryIDsByLine := make(map[int64][]int64)
+	for _, row := range mappings {
+		categoriesByLine[row.BudgetLineID] = append(categoriesByLine[row.BudgetLineID], CategoryRefDTO{
+			ID:   row.CategoryID,
+			Code: row.CategoryCode,
+			Name: row.CategoryName,
+		})
+		categoryIDsByLine[row.BudgetLineID] = append(categoryIDsByLine[row.BudgetLineID], row.CategoryID)
+	}
+
+	reportLines := make([]BudgetReportLineDTO, 0, len(lines))
+	totalAllocation := 0.0
+	totalActual := 0.0
+	for _, line := range lines {
+		allocation, err := parseMoney(budgetNumericString(line.AllocationAmount))
+		if err != nil {
+			return BudgetReportDTO{}, NewError(CodeDatabaseError, "invalid budget allocation amount", err)
+		}
+		actual := 0.0
+		for _, categoryID := range categoryIDsByLine[line.ID] {
+			actual += actualByCategory[categoryID]
+		}
+		totalAllocation += allocation
+		totalActual += actual
+		reportLines = append(reportLines, BudgetReportLineDTO{
+			ID:               line.ID,
+			BudgetID:         line.BudgetID,
+			Name:             line.Name,
+			AllocationAmount: moneyString(allocation),
+			ActualAmount:     moneyString(actual),
+			RemainingAmount:  moneyString(allocation - actual),
+			SortOrder:        line.SortOrder,
+			Categories:       categoriesByLine[line.ID],
+		})
+	}
+
+	return BudgetReportDTO{
+		Budget: BudgetSummaryDTO{
+			ID:             budget.ID,
+			HouseholdID:    budget.HouseholdID,
+			UserID:         budget.UserID,
+			PeriodStart:    budget.PeriodStart.Time,
+			PeriodEnd:      budget.PeriodEnd.Time,
+			SourceBudgetID: budget.SourceBudgetID,
+		},
+		Lines: reportLines,
+		Totals: BudgetReportTotalsDTO{
+			AllocationAmount:          moneyString(totalAllocation),
+			ActualAmount:              moneyString(totalActual),
+			RemainingAmount:           moneyString(totalAllocation - totalActual),
+			UncategorizedActualAmount: moneyString(float64(uncategorized)),
+		},
+	}, nil
+}
+
 func validateBudgetLineName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -494,6 +624,14 @@ func (s *Service) budgetLineDTOWithCategories(ctx context.Context, line sqlc.Bud
 		})
 	}
 	return budgetLineDTO(line, categories), nil
+}
+
+func moneyString(value float64) string {
+	return fmt.Sprintf("%.2f", value)
+}
+
+func parseMoney(value string) (float64, error) {
+	return strconv.ParseFloat(strings.TrimSpace(value), 64)
 }
 
 func parseBudgetNumeric(value string) (pgtype.Numeric, error) {

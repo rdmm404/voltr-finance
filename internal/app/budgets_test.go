@@ -694,6 +694,100 @@ func TestDeleteBudgetLineDeletesLine(t *testing.T) {
 	}
 }
 
+func TestGetBudgetReportDerivesActualsFromCategories(t *testing.T) {
+	householdID := int64(1)
+	groceriesAllocation, err := parseBudgetNumeric("800.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	savingsAllocation, err := parseBudgetNumeric("500.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		budgetByID: sqlc.Budget{
+			ID:          12,
+			HouseholdID: &householdID,
+			PeriodStart: pgtype.Date{Time: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+			PeriodEnd:   pgtype.Date{Time: time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), Valid: true},
+		},
+		budgetLines: []sqlc.BudgetLine{
+			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: groceriesAllocation, SortOrder: 1},
+			{ID: 45, BudgetID: 12, Name: "Savings", AllocationAmount: savingsAllocation, SortOrder: 2},
+		},
+		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
+			{BudgetID: 12, BudgetLineID: 44, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
+		},
+		budgetTransactions: []sqlc.ListBudgetTransactionsRow{
+			{CategoryID: 3, ActualAmount: 570.25},
+		},
+		uncategorizedBudgetTransactions: 123.45,
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	report, err := svc.GetBudgetReport(context.Background(), 12)
+
+	if err != nil {
+		t.Fatalf("GetBudgetReport returned error: %v", err)
+	}
+	if len(report.Lines) != 2 {
+		t.Fatalf("lines = %d, want 2", len(report.Lines))
+	}
+	if report.Lines[0].ActualAmount != "570.25" || report.Lines[0].RemainingAmount != "229.75" {
+		t.Fatalf("groceries line = %+v, want actual 570.25 remaining 229.75", report.Lines[0])
+	}
+	if report.Lines[1].ActualAmount != "0.00" || report.Lines[1].RemainingAmount != "500.00" {
+		t.Fatalf("savings line = %+v, want zero actual and full remaining", report.Lines[1])
+	}
+	if report.Totals.AllocationAmount != "1300.00" || report.Totals.ActualAmount != "570.25" || report.Totals.RemainingAmount != "729.75" {
+		t.Fatalf("totals = %+v, want allocation 1300 actual 570.25 remaining 729.75", report.Totals)
+	}
+	if report.Totals.UncategorizedActualAmount != "123.45" {
+		t.Fatalf("uncategorized = %q, want 123.45", report.Totals.UncategorizedActualAmount)
+	}
+	if repo.lastListBudgetTransactions.HouseholdID == nil || *repo.lastListBudgetTransactions.HouseholdID != householdID || repo.lastListBudgetTransactions.UserID != nil {
+		t.Fatalf("transaction params = %+v, want household scope", repo.lastListBudgetTransactions)
+	}
+	if repo.lastSumUncategorizedBudgetTransactions.PeriodStart.Time != report.Budget.PeriodStart {
+		t.Fatalf("uncategorized params period start = %s, want %s", repo.lastSumUncategorizedBudgetTransactions.PeriodStart.Time, report.Budget.PeriodStart)
+	}
+}
+
+func TestGetBudgetReportNegativeTransactionsReduceActuals(t *testing.T) {
+	householdID := int64(1)
+	allocation, err := parseBudgetNumeric("100.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		budgetByID: sqlc.Budget{
+			ID:          12,
+			HouseholdID: &householdID,
+			PeriodStart: pgtype.Date{Time: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+			PeriodEnd:   pgtype.Date{Time: time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), Valid: true},
+		},
+		budgetLines: []sqlc.BudgetLine{
+			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: allocation, SortOrder: 1},
+		},
+		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
+			{BudgetID: 12, BudgetLineID: 44, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
+		},
+		budgetTransactions: []sqlc.ListBudgetTransactionsRow{
+			{CategoryID: 3, ActualAmount: 60.00},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	report, err := svc.GetBudgetReport(context.Background(), 12)
+
+	if err != nil {
+		t.Fatalf("GetBudgetReport returned error: %v", err)
+	}
+	if report.Lines[0].ActualAmount != "60.00" || report.Lines[0].RemainingAmount != "40.00" {
+		t.Fatalf("line = %+v, want net actual 60.00 remaining 40.00", report.Lines[0])
+	}
+}
+
 func int64Ptr(value int64) *int64 {
 	return &value
 }
