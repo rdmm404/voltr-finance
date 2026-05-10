@@ -543,6 +543,157 @@ func TestGetMonthlyBudgetReturnsDatabaseErrorWhenCopyNeedsMissingTransactor(t *t
 	}
 }
 
+func TestCreateBudgetLineResolvesCategoryCodes(t *testing.T) {
+	allocation, err := parseBudgetNumeric("800.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		budgetByID:     sqlc.Budget{ID: 12},
+		categoryByCode: sqlc.Category{ID: 3, Code: "groceries", Name: "Groceries", IsActive: true},
+		maxSortOrder:   2,
+		createdBudgetLineRows: []sqlc.BudgetLine{
+			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: allocation, SortOrder: 3},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	line, err := svc.CreateBudgetLine(context.Background(), CreateBudgetLineRequest{
+		BudgetID:         12,
+		Name:             " Groceries ",
+		AllocationAmount: "800.00",
+		CategoryCodes:    []string{"groceries"},
+	})
+
+	if err != nil {
+		t.Fatalf("CreateBudgetLine returned error: %v", err)
+	}
+	if line.ID != 44 || line.BudgetID != 12 || line.Name != "Groceries" || line.SortOrder != 3 || line.AllocationAmount != "800.00" {
+		t.Fatalf("line = %+v, want created groceries line", line)
+	}
+	if len(line.Categories) != 1 || line.Categories[0].ID != 3 || line.Categories[0].Code != "groceries" {
+		t.Fatalf("line categories = %+v, want groceries", line.Categories)
+	}
+	if len(repo.createdBudgetLines) != 1 || repo.createdBudgetLines[0].SortOrder != 3 || budgetNumericString(repo.createdBudgetLines[0].AllocationAmount) != "800.00" {
+		t.Fatalf("created budget lines = %+v, want next sort order and normalized amount", repo.createdBudgetLines)
+	}
+	if len(repo.createdBudgetLineCategories) != 1 || repo.createdBudgetLineCategories[0].CategoryID != 3 {
+		t.Fatalf("created mappings = %+v, want category 3", repo.createdBudgetLineCategories)
+	}
+}
+
+func TestCreateBudgetLineRejectsReusedCategory(t *testing.T) {
+	repo := &fakeRepo{
+		budgetByID:     sqlc.Budget{ID: 12},
+		categoryByCode: sqlc.Category{ID: 3, Code: "groceries", Name: "Groceries", IsActive: true},
+		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
+			{BudgetID: 12, BudgetLineID: 40, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	_, err := svc.CreateBudgetLine(context.Background(), CreateBudgetLineRequest{
+		BudgetID:         12,
+		Name:             "Food",
+		AllocationAmount: "800.00",
+		CategoryCodes:    []string{"groceries"},
+	})
+
+	if appErr, ok := err.(*AppError); !ok || appErr.Code != CodeValidationError {
+		t.Fatalf("err = %v, want validation error", err)
+	}
+	if len(repo.createdBudgetLines) != 0 {
+		t.Fatalf("created budget lines = %+v, want none", repo.createdBudgetLines)
+	}
+}
+
+func TestUpdateBudgetLineReplacesOnlyThatLineCategories(t *testing.T) {
+	oldAllocation, err := parseBudgetNumeric("800.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	newAllocation, err := parseBudgetNumeric("900.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		budgetLineByID:    sqlc.BudgetLine{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: oldAllocation, SortOrder: 1},
+		categoryByCode:    sqlc.Category{ID: 3, Code: "groceries", Name: "Groceries", IsActive: true},
+		updatedBudgetLine: sqlc.BudgetLine{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: newAllocation, SortOrder: 1},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	line, err := svc.UpdateBudgetLine(context.Background(), UpdateBudgetLineRequest{
+		LineID:           44,
+		AllocationAmount: strPtr("900.00"),
+		CategoryCodes:    &[]string{"groceries"},
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateBudgetLine returned error: %v", err)
+	}
+	if line.ID != 44 || line.AllocationAmount != "900.00" {
+		t.Fatalf("line = %+v, want updated line amount", line)
+	}
+	if !repo.lastUpdateBudgetLine.SetAllocationAmount || budgetNumericString(repo.lastUpdateBudgetLine.AllocationAmount) != "900.00" {
+		t.Fatalf("lastUpdateBudgetLine = %+v, want amount update", repo.lastUpdateBudgetLine)
+	}
+	if repo.deletedBudgetLineCategoryID != 44 {
+		t.Fatalf("deletedBudgetLineCategoryID = %d, want 44", repo.deletedBudgetLineCategoryID)
+	}
+	if len(repo.createdBudgetLineCategories) != 1 || repo.createdBudgetLineCategories[0].BudgetLineID != 44 {
+		t.Fatalf("created mappings = %+v, want mapping for line 44", repo.createdBudgetLineCategories)
+	}
+}
+
+func TestUpdateBudgetLineCanClearCategories(t *testing.T) {
+	allocation, err := parseBudgetNumeric("100.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	repo := &fakeRepo{
+		budgetLineByID:    sqlc.BudgetLine{ID: 44, BudgetID: 12, Name: "Savings", AllocationAmount: allocation, SortOrder: 1},
+		updatedBudgetLine: sqlc.BudgetLine{ID: 44, BudgetID: 12, Name: "Savings", AllocationAmount: allocation, SortOrder: 1},
+		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
+			{BudgetID: 12, BudgetLineID: 44, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
+		},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+	emptyCodes := []string{}
+
+	line, err := svc.UpdateBudgetLine(context.Background(), UpdateBudgetLineRequest{
+		LineID:        44,
+		CategoryCodes: &emptyCodes,
+	})
+
+	if err != nil {
+		t.Fatalf("UpdateBudgetLine returned error: %v", err)
+	}
+	if repo.deletedBudgetLineCategoryID != 44 {
+		t.Fatalf("deletedBudgetLineCategoryID = %d, want 44", repo.deletedBudgetLineCategoryID)
+	}
+	if len(repo.createdBudgetLineCategories) != 0 {
+		t.Fatalf("created mappings = %+v, want none", repo.createdBudgetLineCategories)
+	}
+	if len(line.Categories) != 0 {
+		t.Fatalf("line categories = %+v, want none", line.Categories)
+	}
+}
+
+func TestDeleteBudgetLineDeletesLine(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	err := svc.DeleteBudgetLine(context.Background(), 44)
+
+	if err != nil {
+		t.Fatalf("DeleteBudgetLine returned error: %v", err)
+	}
+	if repo.deletedBudgetLineID != 44 {
+		t.Fatalf("deletedBudgetLineID = %d, want 44", repo.deletedBudgetLineID)
+	}
+}
+
 func int64Ptr(value int64) *int64 {
 	return &value
 }

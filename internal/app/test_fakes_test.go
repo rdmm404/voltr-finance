@@ -45,6 +45,12 @@ type fakeRepo struct {
 	createdBudgetLines          []sqlc.CreateBudgetLineParams
 	createdBudgetLineRows       []sqlc.BudgetLine
 	createdBudgetLineCategories []sqlc.CreateBudgetLineCategoryParams
+	budgetLineByID              sqlc.BudgetLine
+	updatedBudgetLine           sqlc.BudgetLine
+	lastUpdateBudgetLine        sqlc.UpdateBudgetLineParams
+	maxSortOrder                int32
+	deletedBudgetLineID         int64
+	deletedBudgetLineCategoryID int64
 
 	lastHouseholdBudgetPeriodStart       time.Time
 	lastUserBudgetPeriodStart            time.Time
@@ -251,12 +257,15 @@ func (f *fakeRepo) ListBudgetLineCategories(_ context.Context, budgetID int64) (
 	return categories, nil
 }
 
-func (f *fakeRepo) GetBudgetLineById(context.Context, int64) (sqlc.BudgetLine, error) {
-	return sqlc.BudgetLine{}, sql.ErrNoRows
+func (f *fakeRepo) GetBudgetLineById(_ context.Context, id int64) (sqlc.BudgetLine, error) {
+	if f.budgetLineByID.ID == 0 || f.budgetLineByID.ID != id {
+		return sqlc.BudgetLine{}, sql.ErrNoRows
+	}
+	return f.budgetLineByID, nil
 }
 
 func (f *fakeRepo) GetMaxBudgetLineSortOrder(context.Context, int64) (int32, error) {
-	return 0, nil
+	return f.maxSortOrder, nil
 }
 
 func (f *fakeRepo) CreateHouseholdBudget(_ context.Context, arg sqlc.CreateHouseholdBudgetParams) (sqlc.Budget, error) {
@@ -305,15 +314,41 @@ func (f *fakeRepo) CreateBudgetLine(_ context.Context, arg sqlc.CreateBudgetLine
 	return row, nil
 }
 
-func (f *fakeRepo) UpdateBudgetLine(context.Context, sqlc.UpdateBudgetLineParams) (sqlc.BudgetLine, error) {
-	return sqlc.BudgetLine{}, sql.ErrNoRows
+func (f *fakeRepo) UpdateBudgetLine(_ context.Context, arg sqlc.UpdateBudgetLineParams) (sqlc.BudgetLine, error) {
+	f.lastUpdateBudgetLine = arg
+	if f.updatedBudgetLine.ID != 0 {
+		return f.updatedBudgetLine, nil
+	}
+	if f.budgetLineByID.ID == 0 {
+		return sqlc.BudgetLine{}, sql.ErrNoRows
+	}
+	line := f.budgetLineByID
+	if arg.SetName {
+		line.Name = arg.Name
+	}
+	if arg.SetAllocationAmount {
+		line.AllocationAmount = arg.AllocationAmount
+	}
+	if arg.SetSortOrder {
+		line.SortOrder = arg.SortOrder
+	}
+	return line, nil
 }
 
-func (f *fakeRepo) DeleteBudgetLine(context.Context, int64) error {
+func (f *fakeRepo) DeleteBudgetLine(_ context.Context, id int64) error {
+	f.deletedBudgetLineID = id
 	return nil
 }
 
-func (f *fakeRepo) DeleteBudgetLineCategories(context.Context, int64) error {
+func (f *fakeRepo) DeleteBudgetLineCategories(_ context.Context, id int64) error {
+	f.deletedBudgetLineCategoryID = id
+	filtered := f.budgetLineCategories[:0]
+	for _, category := range f.budgetLineCategories {
+		if category.BudgetLineID != id {
+			filtered = append(filtered, category)
+		}
+	}
+	f.budgetLineCategories = filtered
 	return nil
 }
 
@@ -321,6 +356,14 @@ func (f *fakeRepo) CreateBudgetLineCategory(_ context.Context, arg sqlc.CreateBu
 	f.createdBudgetLineCategories = append(f.createdBudgetLineCategories, arg)
 	categoryCode := ""
 	categoryName := ""
+	if f.categoryByID.ID == arg.CategoryID {
+		categoryCode = f.categoryByID.Code
+		categoryName = f.categoryByID.Name
+	}
+	if f.categoryByCode.ID == arg.CategoryID {
+		categoryCode = f.categoryByCode.Code
+		categoryName = f.categoryByCode.Name
+	}
 	for _, category := range f.budgetLineCategories {
 		if category.CategoryID == arg.CategoryID {
 			categoryCode = category.CategoryCode
