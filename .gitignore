@@ -4,3 +4,4 @@ tmp
 .genkit
 .secrets/*
 .worktrees/
+config.json

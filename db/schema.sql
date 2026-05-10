@@ -41,25 +41,39 @@ CREATE TABLE transactions.budget (
 
 
 --
--- Name: budget_category; Type: TABLE; Schema: transactions; Owner: -
+-- Name: TABLE budget; Type: COMMENT; Schema: transactions; Owner: -
 --
 
-CREATE TABLE transactions.budget_category (
-    id bigint NOT NULL,
-    budget_id bigint,
-    category_name character varying NOT NULL,
-    allocation real NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
+COMMENT ON TABLE transactions.budget IS 'Defines a financial plan, which can be assigned to either an individual or a household.';
 
 
 --
--- Name: budget_category_id_seq; Type: SEQUENCE; Schema: transactions; Owner: -
+-- Name: COLUMN budget.id; Type: COMMENT; Schema: transactions; Owner: -
 --
 
-ALTER TABLE transactions.budget_category ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME transactions.budget_category_id_seq
+COMMENT ON COLUMN transactions.budget.id IS 'Internal unique identifier for the budget.';
+
+
+--
+-- Name: COLUMN budget.user_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.budget.user_id IS 'Optional reference to a specific user for personal budgets.';
+
+
+--
+-- Name: COLUMN budget.household_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.budget.household_id IS 'Optional reference to a household for shared group budgets.';
+
+
+--
+-- Name: budget_id_seq; Type: SEQUENCE; Schema: transactions; Owner: -
+--
+
+ALTER TABLE transactions.budget ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME transactions.budget_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -69,11 +83,26 @@ ALTER TABLE transactions.budget_category ALTER COLUMN id ADD GENERATED ALWAYS AS
 
 
 --
--- Name: budget_id_seq; Type: SEQUENCE; Schema: transactions; Owner: -
+-- Name: category; Type: TABLE; Schema: transactions; Owner: -
 --
 
-ALTER TABLE transactions.budget ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME transactions.budget_id_seq
+CREATE TABLE transactions.category (
+    id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    description text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--
+-- Name: category_id_seq; Type: SEQUENCE; Schema: transactions; Owner: -
+--
+
+ALTER TABLE transactions.category ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME transactions.category_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -93,6 +122,48 @@ CREATE TABLE transactions.household (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
+
+
+--
+-- Name: TABLE household; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON TABLE transactions.household IS 'Groups users together into a shared financial unit, linked to a Discord server.';
+
+
+--
+-- Name: COLUMN household.id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household.id IS 'Internal unique identifier for the household.';
+
+
+--
+-- Name: COLUMN household.name; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household.name IS 'A unique human-readable name for the household group.';
+
+
+--
+-- Name: COLUMN household.guild_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household.guild_id IS 'The Discord Guild (server) ID associated with this household.';
+
+
+--
+-- Name: COLUMN household.created_at; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household.created_at IS 'Timestamp when the household was established.';
+
+
+--
+-- Name: COLUMN household.updated_at; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household.updated_at IS 'Timestamp of the last update to household metadata.';
 
 
 --
@@ -119,6 +190,41 @@ CREATE TABLE transactions.household_user (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
+
+
+--
+-- Name: TABLE household_user; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON TABLE transactions.household_user IS 'A join table representing the many-to-many relationship between users and households.';
+
+
+--
+-- Name: COLUMN household_user.household_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household_user.household_id IS 'Reference to the household.';
+
+
+--
+-- Name: COLUMN household_user.user_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household_user.user_id IS 'Reference to the user.';
+
+
+--
+-- Name: COLUMN household_user.created_at; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household_user.created_at IS 'Timestamp when the user joined the household.';
+
+
+--
+-- Name: COLUMN household_user.updated_at; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.household_user.updated_at IS 'Timestamp of the last change to this membership record.';
 
 
 --
@@ -195,15 +301,81 @@ CREATE TABLE transactions.transaction (
     id bigint NOT NULL,
     amount real NOT NULL,
     author_id bigint NOT NULL,
-    budget_category_id bigint,
     description character varying,
     transaction_date timestamp with time zone NOT NULL,
     transaction_id character varying NOT NULL,
     household_id bigint,
     notes text,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp with time zone,
+    deleted_by_user_id bigint,
+    delete_reason text,
+    category_id bigint
 );
+
+
+--
+-- Name: TABLE transaction; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON TABLE transactions.transaction IS 'Records individual financial movements including amount, author, and categorization.';
+
+
+--
+-- Name: COLUMN transaction.id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.id IS 'Internal unique identifier for the transaction.';
+
+
+--
+-- Name: COLUMN transaction.amount; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.amount IS 'The numerical value of the transaction. If positive, it indicates an expense; if negative, income.';
+
+
+--
+-- Name: COLUMN transaction.author_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.author_id IS 'The user who created or is responsible for the transaction.';
+
+
+--
+-- Name: COLUMN transaction.description; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.description IS 'A short summary of the transaction purpose.';
+
+
+--
+-- Name: COLUMN transaction.transaction_date; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.transaction_date IS 'The actual date and time the financial event occurred.';
+
+
+--
+-- Name: COLUMN transaction.transaction_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.transaction_id IS 'A unique hash or external identifier to prevent duplicate entries.';
+
+
+--
+-- Name: COLUMN transaction.household_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.household_id IS 'The household context in which this transaction took place.';
+
+
+--
+-- Name: COLUMN transaction.notes; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.transaction.notes IS 'Extended details or commentary regarding the transaction.';
 
 
 --
@@ -226,11 +398,56 @@ ALTER TABLE transactions.transaction ALTER COLUMN id ADD GENERATED ALWAYS AS IDE
 
 CREATE TABLE transactions.users (
     id bigint NOT NULL,
-    discord_id character varying NOT NULL,
+    discord_id character varying,
     name character varying NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    telegram_id character varying,
+    phone_number character varying,
+    whatsapp_id character varying
 );
+
+
+--
+-- Name: TABLE users; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON TABLE transactions.users IS 'Stores identity information for individuals linked to Discord accounts.';
+
+
+--
+-- Name: COLUMN users.id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.users.id IS 'Internal unique identifier for the user.';
+
+
+--
+-- Name: COLUMN users.discord_id; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.users.discord_id IS 'The unique ID provided by the Discord API.';
+
+
+--
+-- Name: COLUMN users.name; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.users.name IS 'The display name or username of the Discord user.';
+
+
+--
+-- Name: COLUMN users.created_at; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.users.created_at IS 'Timestamp when the user record was first created.';
+
+
+--
+-- Name: COLUMN users.updated_at; Type: COMMENT; Schema: transactions; Owner: -
+--
+
+COMMENT ON COLUMN transactions.users.updated_at IS 'Timestamp of the most recent modification to the user record.';
 
 
 --
@@ -248,19 +465,27 @@ ALTER TABLE transactions.users ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY 
 
 
 --
--- Name: budget_category budget_category_pkey; Type: CONSTRAINT; Schema: transactions; Owner: -
---
-
-ALTER TABLE ONLY transactions.budget_category
-    ADD CONSTRAINT budget_category_pkey PRIMARY KEY (id);
-
-
---
 -- Name: budget budget_pkey; Type: CONSTRAINT; Schema: transactions; Owner: -
 --
 
 ALTER TABLE ONLY transactions.budget
     ADD CONSTRAINT budget_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: category category_code_key; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.category
+    ADD CONSTRAINT category_code_key UNIQUE (code);
+
+
+--
+-- Name: category category_pkey; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.category
+    ADD CONSTRAINT category_pkey PRIMARY KEY (id);
 
 
 --
@@ -352,6 +577,20 @@ ALTER TABLE ONLY transactions.users
 
 
 --
+-- Name: idx_category_code; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_category_code ON transactions.category USING btree (code);
+
+
+--
+-- Name: idx_category_is_active; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_category_is_active ON transactions.category USING btree (is_active);
+
+
+--
 -- Name: idx_household_guild_id; Type: INDEX; Schema: transactions; Owner: -
 --
 
@@ -408,10 +647,17 @@ CREATE INDEX idx_transaction_author_id ON transactions.transaction USING btree (
 
 
 --
--- Name: idx_transaction_budget_category_id; Type: INDEX; Schema: transactions; Owner: -
+-- Name: idx_transaction_category_id; Type: INDEX; Schema: transactions; Owner: -
 --
 
-CREATE INDEX idx_transaction_budget_category_id ON transactions.transaction USING btree (budget_category_id);
+CREATE INDEX idx_transaction_category_id ON transactions.transaction USING btree (category_id);
+
+
+--
+-- Name: idx_transaction_deleted_at; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_transaction_deleted_at ON transactions.transaction USING btree (deleted_at);
 
 
 --
@@ -429,11 +675,31 @@ CREATE INDEX idx_users_discord_id ON transactions.users USING btree (discord_id)
 
 
 --
--- Name: budget_category budget_category_budget_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+-- Name: idx_users_discord_id_unique_not_null; Type: INDEX; Schema: transactions; Owner: -
 --
 
-ALTER TABLE ONLY transactions.budget_category
-    ADD CONSTRAINT budget_category_budget_id_fkey FOREIGN KEY (budget_id) REFERENCES transactions.budget(id);
+CREATE UNIQUE INDEX idx_users_discord_id_unique_not_null ON transactions.users USING btree (discord_id) WHERE (discord_id IS NOT NULL);
+
+
+--
+-- Name: idx_users_phone_number_unique_not_null; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_users_phone_number_unique_not_null ON transactions.users USING btree (phone_number) WHERE (phone_number IS NOT NULL);
+
+
+--
+-- Name: idx_users_telegram_id_unique_not_null; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_users_telegram_id_unique_not_null ON transactions.users USING btree (telegram_id) WHERE (telegram_id IS NOT NULL);
+
+
+--
+-- Name: idx_users_whatsapp_id_unique_not_null; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_users_whatsapp_id_unique_not_null ON transactions.users USING btree (whatsapp_id) WHERE (whatsapp_id IS NOT NULL);
 
 
 --
@@ -509,11 +775,19 @@ ALTER TABLE ONLY transactions.transaction
 
 
 --
--- Name: transaction transaction_budget_category_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+-- Name: transaction transaction_category_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
 --
 
 ALTER TABLE ONLY transactions.transaction
-    ADD CONSTRAINT transaction_budget_category_id_fkey FOREIGN KEY (budget_category_id) REFERENCES transactions.budget_category(id);
+    ADD CONSTRAINT transaction_category_id_fkey FOREIGN KEY (category_id) REFERENCES transactions.category(id);
+
+
+--
+-- Name: transaction transaction_deleted_by_user_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.transaction
+    ADD CONSTRAINT transaction_deleted_by_user_id_fkey FOREIGN KEY (deleted_by_user_id) REFERENCES transactions.users(id);
 
 
 --
@@ -536,4 +810,7 @@ ALTER TABLE ONLY transactions.transaction
 --
 
 INSERT INTO transactions.schema_migrations (version) VALUES
-    ('20251130194702');
+    ('20251130194702'),
+    ('20260120030638'),
+    ('20260505000000'),
+    ('20260508000000');
