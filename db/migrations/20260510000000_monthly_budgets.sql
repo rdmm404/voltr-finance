@@ -1,6 +1,38 @@
 -- migrate:up
 SET search_path TO transactions, public;
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM budget
+        WHERE (household_id IS NULL AND user_id IS NULL)
+           OR (household_id IS NOT NULL AND user_id IS NOT NULL)
+    ) THEN
+        RAISE EXCEPTION 'Legacy budget rows have invalid ownership; clean up legacy budget rows before running this migration.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM budget
+        WHERE household_id IS NOT NULL AND user_id IS NULL
+        GROUP BY household_id
+        HAVING COUNT(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'Legacy household budgets contain duplicate owners; clean up legacy budget rows before running this migration.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM budget
+        WHERE user_id IS NOT NULL AND household_id IS NULL
+        GROUP BY user_id
+        HAVING COUNT(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'Legacy user budgets contain duplicate owners; clean up legacy budget rows before running this migration.';
+    END IF;
+END $$;
+
 ALTER TABLE budget DROP COLUMN type;
 ALTER TABLE budget ADD COLUMN period_start DATE;
 ALTER TABLE budget ADD COLUMN period_end DATE;

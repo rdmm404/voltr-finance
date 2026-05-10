@@ -123,8 +123,8 @@ SELECT
 FROM transaction t
 WHERE t.deleted_at IS NULL
   AND t.category_id IS NOT NULL
-  AND t.transaction_date >= sqlc.arg(period_start)::DATE
-  AND t.transaction_date < (sqlc.arg(period_end)::DATE + INTERVAL '1 day')
+  AND t.transaction_date >= (sqlc.arg(period_start)::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+  AND t.transaction_date < ((sqlc.arg(period_end)::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
   AND (
       (sqlc.narg(household_id)::BIGINT IS NOT NULL AND t.household_id = sqlc.narg(household_id)::BIGINT)
       OR
@@ -138,8 +138,8 @@ SELECT COALESCE(SUM(t.amount), 0)::REAL AS actual_amount
 FROM transaction t
 WHERE t.deleted_at IS NULL
   AND t.category_id IS NULL
-  AND t.transaction_date >= sqlc.arg(period_start)::DATE
-  AND t.transaction_date < (sqlc.arg(period_end)::DATE + INTERVAL '1 day')
+  AND t.transaction_date >= (sqlc.arg(period_start)::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+  AND t.transaction_date < ((sqlc.arg(period_end)::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
   AND (
       (sqlc.narg(household_id)::BIGINT IS NOT NULL AND t.household_id = sqlc.narg(household_id)::BIGINT)
       OR
