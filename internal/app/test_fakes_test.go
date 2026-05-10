@@ -43,10 +43,12 @@ type fakeRepo struct {
 	budgetLines             []sqlc.BudgetLine
 	budgetLineCategories    []sqlc.ListBudgetLineCategoriesRow
 
-	lastHouseholdBudgetPeriodStart time.Time
-	lastUserBudgetPeriodStart      time.Time
-	lastCreateHouseholdBudget      sqlc.CreateHouseholdBudgetParams
-	lastCreateUserBudget           sqlc.CreateUserBudgetParams
+	lastHouseholdBudgetPeriodStart       time.Time
+	lastUserBudgetPeriodStart            time.Time
+	lastCreateHouseholdBudget            sqlc.CreateHouseholdBudgetParams
+	lastCreateUserBudget                 sqlc.CreateUserBudgetParams
+	lastListBudgetLinesBudgetID          int64
+	lastListBudgetLineCategoriesBudgetID int64
 }
 
 func (f *fakeRepo) CreateUser(_ context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
@@ -220,12 +222,26 @@ func (f *fakeRepo) GetLatestPriorUserBudget(context.Context, sqlc.GetLatestPrior
 	return f.latestPriorUser, nil
 }
 
-func (f *fakeRepo) ListBudgetLines(context.Context, int64) ([]sqlc.BudgetLine, error) {
-	return f.budgetLines, nil
+func (f *fakeRepo) ListBudgetLines(_ context.Context, budgetID int64) ([]sqlc.BudgetLine, error) {
+	f.lastListBudgetLinesBudgetID = budgetID
+	lines := make([]sqlc.BudgetLine, 0, len(f.budgetLines))
+	for _, line := range f.budgetLines {
+		if line.BudgetID == budgetID {
+			lines = append(lines, line)
+		}
+	}
+	return lines, nil
 }
 
-func (f *fakeRepo) ListBudgetLineCategories(context.Context, int64) ([]sqlc.ListBudgetLineCategoriesRow, error) {
-	return f.budgetLineCategories, nil
+func (f *fakeRepo) ListBudgetLineCategories(_ context.Context, budgetID int64) ([]sqlc.ListBudgetLineCategoriesRow, error) {
+	f.lastListBudgetLineCategoriesBudgetID = budgetID
+	categories := make([]sqlc.ListBudgetLineCategoriesRow, 0, len(f.budgetLineCategories))
+	for _, category := range f.budgetLineCategories {
+		if category.BudgetID == budgetID {
+			categories = append(categories, category)
+		}
+	}
+	return categories, nil
 }
 
 func (f *fakeRepo) GetBudgetLineById(context.Context, int64) (sqlc.BudgetLine, error) {

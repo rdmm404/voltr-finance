@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math/big"
 	"strings"
 	"time"
@@ -79,6 +78,9 @@ func validateBudgetOwner(householdID, userID *int64) error {
 }
 
 func monthlyBudgetPeriod(year int, month int) (time.Time, time.Time, error) {
+	if year < 1 {
+		return time.Time{}, time.Time{}, NewError(CodeValidationError, "year must be greater than 0", nil)
+	}
 	if month < 1 || month > 12 {
 		return time.Time{}, time.Time{}, NewError(CodeValidationError, "month must be between 1 and 12", nil)
 	}
@@ -191,43 +193,36 @@ func parseBudgetNumeric(value string) (pgtype.Numeric, error) {
 			return pgtype.Numeric{}, NewError(CodeValidationError, "allocation amount supports at most two decimal places", nil)
 		}
 	}
-	digits := parts[0] + fraction
-	for _, char := range digits {
+	for _, char := range parts[0] + fraction {
 		if char < '0' || char > '9' {
 			return pgtype.Numeric{}, NewError(CodeValidationError, "allocation amount must be a decimal string", nil)
 		}
 	}
 
+	for len(fraction) < 2 {
+		fraction += "0"
+	}
+	digits := parts[0] + fraction
 	intValue := new(big.Int)
 	if _, ok := intValue.SetString(digits, 10); !ok {
-		return pgtype.Numeric{}, fmt.Errorf("parse allocation amount %q", value)
+		return pgtype.Numeric{}, NewError(CodeValidationError, "allocation amount must be a decimal string", nil)
 	}
-	return pgtype.Numeric{Int: intValue, Exp: -int32(len(fraction)), Valid: true}, nil
+	return pgtype.Numeric{Int: intValue, Exp: -2, Valid: true}, nil
 }
 
 func budgetNumericString(value pgtype.Numeric) string {
 	if !value.Valid || value.Int == nil {
-		return "0"
-	}
-	digits := value.Int.String()
-	if value.Exp >= 0 {
-		return digits + strings.Repeat("0", int(value.Exp))
+		return "0.00"
 	}
 
-	scale := int(-value.Exp)
-	negative := strings.HasPrefix(digits, "-")
-	if negative {
-		digits = strings.TrimPrefix(digits, "-")
+	ratio := new(big.Rat).SetInt(value.Int)
+	if value.Exp > 0 {
+		ratio.Mul(ratio, new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(value.Exp)), nil)))
 	}
-	for len(digits) <= scale {
-		digits = "0" + digits
+	if value.Exp < 0 {
+		ratio.Quo(ratio, new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-value.Exp)), nil)))
 	}
-	point := len(digits) - scale
-	result := digits[:point] + "." + digits[point:]
-	if negative {
-		result = "-" + result
-	}
-	return result
+	return ratio.FloatString(2)
 }
 
 func mapBudgetError(err error) error {
