@@ -73,6 +73,7 @@ type BudgetRepository interface {
 	DeleteBudgetLineCategories(context.Context, int64) error
 	CreateBudgetLineCategory(context.Context, sqlc.CreateBudgetLineCategoryParams) error
 	ListBudgetReportLines(context.Context, int64) ([]sqlc.ListBudgetReportLinesRow, error)
+	ListUnmappedBudgetTransactions(context.Context, int64) ([]sqlc.ListUnmappedBudgetTransactionsRow, error)
 	SumUncategorizedBudgetTransactions(context.Context, int64) (pgtype.Numeric, error)
 }
 

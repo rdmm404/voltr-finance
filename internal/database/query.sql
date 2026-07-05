@@ -137,7 +137,7 @@ LEFT JOIN transaction t
    AND (
        (b.household_id IS NOT NULL AND t.household_id = b.household_id)
        OR
-       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id AND t.household_id IS NULL)
    )
 WHERE b.id = sqlc.arg(budget_id)::BIGINT
 GROUP BY bl.id, bl.budget_id, bl.name, bl.allocation_amount, bl.sort_order
@@ -154,10 +154,39 @@ LEFT JOIN transaction t
    AND (
        (b.household_id IS NOT NULL AND t.household_id = b.household_id)
        OR
-       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id AND t.household_id IS NULL)
    )
 WHERE b.id = sqlc.arg(budget_id)::BIGINT
 GROUP BY b.id;
+
+-- name: ListUnmappedBudgetTransactions :many
+SELECT
+    t.id,
+    t.transaction_date,
+    t.description,
+    ROUND(t.amount::NUMERIC, 2) AS amount,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name
+FROM budget b
+JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id AND t.household_id IS NULL)
+   )
+LEFT JOIN category c ON c.id = t.category_id
+WHERE b.id = sqlc.arg(budget_id)::BIGINT
+  AND NOT EXISTS (
+      SELECT 1
+      FROM budget_line_category blc
+      WHERE blc.budget_id = b.id
+        AND blc.category_id = t.category_id
+  )
+ORDER BY t.transaction_date ASC, t.id ASC;
 
 -- WRITES
 

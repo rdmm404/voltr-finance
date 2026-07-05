@@ -850,6 +850,83 @@ func TestGetBudgetReportNegativeTransactionsReduceActuals(t *testing.T) {
 	}
 }
 
+func TestGetBudgetReportListsAndTotalsUnmappedTransactions(t *testing.T) {
+	householdID := int64(1)
+	categoryID := int64(9)
+	categoryCode := "dining"
+	categoryName := "Dining"
+	description := "restaurant"
+	repo := &fakeRepo{
+		budgetByID: sqlc.Budget{
+			ID:          12,
+			HouseholdID: &householdID,
+			PeriodStart: pgtype.Date{Time: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+			PeriodEnd:   pgtype.Date{Time: time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), Valid: true},
+		},
+		uncategorizedBudgetTransactions: pgtype.Numeric{Int: big.NewInt(1234), Exp: -2, Valid: true},
+		unmappedBudgetTransactions: []sqlc.ListUnmappedBudgetTransactionsRow{
+			{
+				ID:              101,
+				TransactionDate: pgtype.Timestamptz{Time: time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC), Valid: true},
+				Amount:          pgtype.Numeric{Int: big.NewInt(1234), Exp: -2, Valid: true},
+			},
+			{
+				ID:              102,
+				TransactionDate: pgtype.Timestamptz{Time: time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC), Valid: true},
+				Description:     &description,
+				Amount:          pgtype.Numeric{Int: big.NewInt(5678), Exp: -2, Valid: true},
+				CategoryID:      &categoryID,
+				CategoryCode:    &categoryCode,
+				CategoryName:    &categoryName,
+			},
+		},
+	}
+
+	report, err := NewService(repo, &fakeTransactionService{}).GetBudgetReport(context.Background(), 12)
+
+	if err != nil {
+		t.Fatalf("GetBudgetReport returned error: %v", err)
+	}
+	if len(report.UnmappedTransactions) != 2 {
+		t.Fatalf("unmapped transactions = %d, want 2", len(report.UnmappedTransactions))
+	}
+	if report.UnmappedTransactions[0].Amount != "12.34" || report.UnmappedTransactions[0].Category != nil {
+		t.Fatalf("uncategorized unmapped transaction = %+v", report.UnmappedTransactions[0])
+	}
+	second := report.UnmappedTransactions[1]
+	if second.Amount != "56.78" || second.Description == nil || *second.Description != description {
+		t.Fatalf("categorized unmapped transaction = %+v", second)
+	}
+	if second.Category == nil || second.Category.ID != categoryID || second.Category.Code != categoryCode || second.Category.Name != categoryName {
+		t.Fatalf("unmapped category = %+v", second.Category)
+	}
+	if report.Totals.UnmappedActualAmount != "69.12" {
+		t.Fatalf("unmapped total = %q, want 69.12", report.Totals.UnmappedActualAmount)
+	}
+	if report.Totals.UncategorizedActualAmount != "12.34" {
+		t.Fatalf("uncategorized total = %q, want 12.34", report.Totals.UncategorizedActualAmount)
+	}
+	if repo.lastListUnmappedBudgetTransactionsID != 12 {
+		t.Fatalf("unmapped budget id = %d, want 12", repo.lastListUnmappedBudgetTransactionsID)
+	}
+}
+
+func TestGetBudgetReportReturnsEmptyUnmappedTransactions(t *testing.T) {
+	repo := &fakeRepo{budgetByID: sqlc.Budget{ID: 12}}
+
+	report, err := NewService(repo, &fakeTransactionService{}).GetBudgetReport(context.Background(), 12)
+
+	if err != nil {
+		t.Fatalf("GetBudgetReport returned error: %v", err)
+	}
+	if report.UnmappedTransactions == nil || len(report.UnmappedTransactions) != 0 {
+		t.Fatalf("unmapped transactions = %#v, want non-nil empty list", report.UnmappedTransactions)
+	}
+	if report.Totals.UnmappedActualAmount != "0.00" {
+		t.Fatalf("unmapped total = %q, want 0.00", report.Totals.UnmappedActualAmount)
+	}
+}
+
 func int64Ptr(value int64) *int64 {
 	return &value
 }

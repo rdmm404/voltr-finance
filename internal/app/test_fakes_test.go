@@ -57,6 +57,7 @@ type fakeRepo struct {
 	deletedBudgetLineID             int64
 	deletedBudgetLineCategoryID     int64
 	budgetReportLines               []sqlc.ListBudgetReportLinesRow
+	unmappedBudgetTransactions      []sqlc.ListUnmappedBudgetTransactionsRow
 	uncategorizedBudgetTransactions pgtype.Numeric
 	createHouseholdBudgetErr        error
 	createUserBudgetErr             error
@@ -70,6 +71,7 @@ type fakeRepo struct {
 	lastListBudgetLinesBudgetID            int64
 	lastListBudgetLineCategoriesBudgetID   int64
 	lastListBudgetReportLinesBudgetID      int64
+	lastListUnmappedBudgetTransactionsID   int64
 	lastSumUncategorizedBudgetTransactions int64
 }
 
@@ -434,6 +436,11 @@ func (f *fakeRepo) SumUncategorizedBudgetTransactions(_ context.Context, budgetI
 		return f.uncategorizedBudgetTransactions, nil
 	}
 	return pgtype.Numeric{Int: big.NewInt(0), Exp: -2, Valid: true}, nil
+}
+
+func (f *fakeRepo) ListUnmappedBudgetTransactions(_ context.Context, budgetID int64) ([]sqlc.ListUnmappedBudgetTransactionsRow, error) {
+	f.lastListUnmappedBudgetTransactionsID = budgetID
+	return f.unmappedBudgetTransactions, nil
 }
 
 type fakeTransactor struct {

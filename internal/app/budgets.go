@@ -43,9 +43,18 @@ type BudgetLineDTO struct {
 }
 
 type BudgetReportDTO struct {
-	Budget BudgetSummaryDTO      `json:"budget"`
-	Lines  []BudgetReportLineDTO `json:"lines"`
-	Totals BudgetReportTotalsDTO `json:"totals"`
+	Budget               BudgetSummaryDTO               `json:"budget"`
+	Lines                []BudgetReportLineDTO          `json:"lines"`
+	UnmappedTransactions []BudgetUnmappedTransactionDTO `json:"unmappedTransactions"`
+	Totals               BudgetReportTotalsDTO          `json:"totals"`
+}
+
+type BudgetUnmappedTransactionDTO struct {
+	ID              int64           `json:"id"`
+	TransactionDate time.Time       `json:"transactionDate"`
+	Description     *string         `json:"description,omitempty"`
+	Amount          string          `json:"amount"`
+	Category        *CategoryRefDTO `json:"category,omitempty"`
 }
 
 type BudgetSummaryDTO struct {
@@ -72,6 +81,7 @@ type BudgetReportTotalsDTO struct {
 	AllocationAmount          string `json:"allocationAmount"`
 	ActualAmount              string `json:"actualAmount"`
 	RemainingAmount           string `json:"remainingAmount"`
+	UnmappedActualAmount      string `json:"unmappedActualAmount"`
 	UncategorizedActualAmount string `json:"uncategorizedActualAmount"`
 }
 
@@ -498,6 +508,10 @@ func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetRe
 	if err != nil {
 		return BudgetReportDTO{}, mapBudgetError(err)
 	}
+	unmappedRows, err := s.repo.ListUnmappedBudgetTransactions(ctx, budgetID)
+	if err != nil {
+		return BudgetReportDTO{}, mapBudgetError(err)
+	}
 
 	categoriesByLine := make(map[int64][]CategoryRefDTO)
 	for _, row := range mappings {
@@ -539,6 +553,26 @@ func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetRe
 		return BudgetReportDTO{}, NewError(CodeDatabaseError, "invalid uncategorized budget actual amount", err)
 	}
 	totalRemaining := new(big.Int).Sub(totalAllocation, totalActual)
+	unmappedTransactions := make([]BudgetUnmappedTransactionDTO, 0, len(unmappedRows))
+	unmappedActual := big.NewInt(0)
+	for _, row := range unmappedRows {
+		amountCents, err := numericCents(row.Amount)
+		if err != nil {
+			return BudgetReportDTO{}, NewError(CodeDatabaseError, "invalid unmapped transaction amount", err)
+		}
+		unmappedActual.Add(unmappedActual, amountCents)
+		var category *CategoryRefDTO
+		if row.CategoryID != nil && row.CategoryCode != nil && row.CategoryName != nil {
+			category = &CategoryRefDTO{ID: *row.CategoryID, Code: *row.CategoryCode, Name: *row.CategoryName}
+		}
+		unmappedTransactions = append(unmappedTransactions, BudgetUnmappedTransactionDTO{
+			ID:              row.ID,
+			TransactionDate: row.TransactionDate.Time,
+			Description:     row.Description,
+			Amount:          centsString(amountCents),
+			Category:        category,
+		})
+	}
 
 	return BudgetReportDTO{
 		Budget: BudgetSummaryDTO{
@@ -549,11 +583,13 @@ func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetRe
 			PeriodEnd:      budget.PeriodEnd.Time,
 			SourceBudgetID: budget.SourceBudgetID,
 		},
-		Lines: reportLines,
+		Lines:                reportLines,
+		UnmappedTransactions: unmappedTransactions,
 		Totals: BudgetReportTotalsDTO{
 			AllocationAmount:          centsString(totalAllocation),
 			ActualAmount:              centsString(totalActual),
 			RemainingAmount:           centsString(totalRemaining),
+			UnmappedActualAmount:      centsString(unmappedActual),
 			UncategorizedActualAmount: centsString(uncategorizedCents),
 		},
 	}, nil
