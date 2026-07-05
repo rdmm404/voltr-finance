@@ -34,9 +34,13 @@ CREATE TABLE transactions.budget (
     id bigint NOT NULL,
     user_id bigint,
     household_id bigint,
-    type character varying(50) NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    period_start date NOT NULL,
+    period_end date NOT NULL,
+    source_budget_id bigint,
+    CONSTRAINT chk_budget_exactly_one_owner CHECK ((((household_id IS NOT NULL) AND (user_id IS NULL)) OR ((household_id IS NULL) AND (user_id IS NOT NULL)))),
+    CONSTRAINT chk_budget_valid_period CHECK ((period_end >= period_start))
 );
 
 
@@ -74,6 +78,48 @@ COMMENT ON COLUMN transactions.budget.household_id IS 'Optional reference to a h
 
 ALTER TABLE transactions.budget ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME transactions.budget_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: budget_line; Type: TABLE; Schema: transactions; Owner: -
+--
+
+CREATE TABLE transactions.budget_line (
+    id bigint NOT NULL,
+    budget_id bigint NOT NULL,
+    name character varying NOT NULL,
+    allocation_amount numeric(12,2) NOT NULL,
+    sort_order integer NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT budget_line_allocation_amount_check CHECK ((allocation_amount >= (0)::numeric))
+);
+
+
+--
+-- Name: budget_line_category; Type: TABLE; Schema: transactions; Owner: -
+--
+
+CREATE TABLE transactions.budget_line_category (
+    budget_id bigint NOT NULL,
+    budget_line_id bigint NOT NULL,
+    category_id bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--
+-- Name: budget_line_id_seq; Type: SEQUENCE; Schema: transactions; Owner: -
+--
+
+ALTER TABLE transactions.budget_line ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME transactions.budget_line_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -465,6 +511,46 @@ ALTER TABLE transactions.users ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY 
 
 
 --
+-- Name: budget_line budget_line_budget_id_id_key; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line
+    ADD CONSTRAINT budget_line_budget_id_id_key UNIQUE (budget_id, id);
+
+
+--
+-- Name: budget_line budget_line_budget_id_sort_order_key; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line
+    ADD CONSTRAINT budget_line_budget_id_sort_order_key UNIQUE (budget_id, sort_order);
+
+
+--
+-- Name: budget_line_category budget_line_category_budget_id_category_id_key; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line_category
+    ADD CONSTRAINT budget_line_category_budget_id_category_id_key UNIQUE (budget_id, category_id);
+
+
+--
+-- Name: budget_line_category budget_line_category_pkey; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line_category
+    ADD CONSTRAINT budget_line_category_pkey PRIMARY KEY (budget_line_id, category_id);
+
+
+--
+-- Name: budget_line budget_line_pkey; Type: CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line
+    ADD CONSTRAINT budget_line_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: budget budget_pkey; Type: CONSTRAINT; Schema: transactions; Owner: -
 --
 
@@ -574,6 +660,55 @@ ALTER TABLE ONLY transactions.users
 
 ALTER TABLE ONLY transactions.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_budget_household_period; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_budget_household_period ON transactions.budget USING btree (household_id, period_start, period_end) WHERE (household_id IS NOT NULL);
+
+
+--
+-- Name: idx_budget_household_period_start; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_budget_household_period_start ON transactions.budget USING btree (household_id, period_start) WHERE (household_id IS NOT NULL);
+
+
+--
+-- Name: idx_budget_line_budget_id; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_budget_line_budget_id ON transactions.budget_line USING btree (budget_id);
+
+
+--
+-- Name: idx_budget_line_category_budget_id; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_budget_line_category_budget_id ON transactions.budget_line_category USING btree (budget_id);
+
+
+--
+-- Name: idx_budget_line_category_category_id; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_budget_line_category_category_id ON transactions.budget_line_category USING btree (category_id);
+
+
+--
+-- Name: idx_budget_user_period; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_budget_user_period ON transactions.budget USING btree (user_id, period_start, period_end) WHERE (user_id IS NOT NULL);
+
+
+--
+-- Name: idx_budget_user_period_start; Type: INDEX; Schema: transactions; Owner: -
+--
+
+CREATE INDEX idx_budget_user_period_start ON transactions.budget USING btree (user_id, period_start) WHERE (user_id IS NOT NULL);
 
 
 --
@@ -711,6 +846,46 @@ ALTER TABLE ONLY transactions.budget
 
 
 --
+-- Name: budget_line budget_line_budget_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line
+    ADD CONSTRAINT budget_line_budget_id_fkey FOREIGN KEY (budget_id) REFERENCES transactions.budget(id) ON DELETE CASCADE;
+
+
+--
+-- Name: budget_line_category budget_line_category_budget_id_budget_line_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line_category
+    ADD CONSTRAINT budget_line_category_budget_id_budget_line_id_fkey FOREIGN KEY (budget_id, budget_line_id) REFERENCES transactions.budget_line(budget_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: budget_line_category budget_line_category_budget_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line_category
+    ADD CONSTRAINT budget_line_category_budget_id_fkey FOREIGN KEY (budget_id) REFERENCES transactions.budget(id) ON DELETE CASCADE;
+
+
+--
+-- Name: budget_line_category budget_line_category_category_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget_line_category
+    ADD CONSTRAINT budget_line_category_category_id_fkey FOREIGN KEY (category_id) REFERENCES transactions.category(id);
+
+
+--
+-- Name: budget budget_source_budget_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
+--
+
+ALTER TABLE ONLY transactions.budget
+    ADD CONSTRAINT budget_source_budget_id_fkey FOREIGN KEY (source_budget_id) REFERENCES transactions.budget(id);
+
+
+--
 -- Name: budget budget_user_id_fkey; Type: FK CONSTRAINT; Schema: transactions; Owner: -
 --
 
@@ -813,4 +988,5 @@ INSERT INTO transactions.schema_migrations (version) VALUES
     ('20251130194702'),
     ('20260120030638'),
     ('20260505000000'),
-    ('20260508000000');
+    ('20260508000000'),
+    ('20260510000000');

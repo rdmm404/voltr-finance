@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"rdmm404/voltr-finance/internal/database/sqlc"
@@ -118,6 +118,12 @@ func (s *Service) GetMonthlyBudget(ctx context.Context, req GetMonthlyBudgetRequ
 
 	budget, err = s.createMonthlyBudget(ctx, req.HouseholdID, req.UserID, periodStart, periodEnd)
 	if err != nil {
+		if isUniqueViolation(err) {
+			budget, findErr := s.findBudgetByPeriod(ctx, req.HouseholdID, req.UserID, periodStart, periodEnd)
+			if findErr == nil {
+				return s.budgetDTO(ctx, budget)
+			}
+		}
 		return BudgetDTO{}, err
 	}
 	return s.budgetDTO(ctx, budget)
@@ -315,9 +321,7 @@ func (s *Service) budgetDTO(ctx context.Context, budget sqlc.Budget) (BudgetDTO,
 }
 
 func budgetLineDTO(line sqlc.BudgetLine, categories []CategoryRefDTO) BudgetLineDTO {
-	if categories == nil {
-		categories = []CategoryRefDTO{}
-	}
+	categories = normalizeCategories(categories)
 	return BudgetLineDTO{
 		ID:               line.ID,
 		BudgetID:         line.BudgetID,
@@ -328,12 +332,16 @@ func budgetLineDTO(line sqlc.BudgetLine, categories []CategoryRefDTO) BudgetLine
 	}
 }
 
+func normalizeCategories(categories []CategoryRefDTO) []CategoryRefDTO {
+	if categories == nil {
+		return []CategoryRefDTO{}
+	}
+	return categories
+}
+
 func (s *Service) CreateBudgetLine(ctx context.Context, req CreateBudgetLineRequest) (BudgetLineDTO, error) {
 	if req.BudgetID == 0 {
 		return BudgetLineDTO{}, NewError(CodeValidationError, "budget id is required", nil)
-	}
-	if _, err := s.repo.GetBudgetById(ctx, req.BudgetID); err != nil {
-		return BudgetLineDTO{}, mapBudgetError(err)
 	}
 	name, err := validateBudgetLineName(req.Name)
 	if err != nil {
@@ -343,32 +351,47 @@ func (s *Service) CreateBudgetLine(ctx context.Context, req CreateBudgetLineRequ
 	if err != nil {
 		return BudgetLineDTO{}, err
 	}
-	categoryIDs, err := s.resolveLineCategoryIDs(ctx, req.CategoryIDs, req.CategoryCodes)
-	if err != nil {
-		return BudgetLineDTO{}, err
+	if s.transactor == nil {
+		return BudgetLineDTO{}, NewError(CodeDatabaseError, "database error", errors.New("budget line changes require transaction support"))
 	}
-	if err := s.validateBudgetCategoryAvailability(ctx, req.BudgetID, 0, categoryIDs); err != nil {
-		return BudgetLineDTO{}, err
-	}
-	sortOrder := req.SortOrder
-	if sortOrder == nil {
-		maxSortOrder, err := s.repo.GetMaxBudgetLineSortOrder(ctx, req.BudgetID)
-		if err != nil {
-			return BudgetLineDTO{}, mapBudgetError(err)
+
+	var line sqlc.BudgetLine
+	err = s.transactor.WithinTx(ctx, func(repo Repository) error {
+		if _, err := repo.GetBudgetById(ctx, req.BudgetID); err != nil {
+			return mapBudgetError(err)
 		}
-		nextSortOrder := maxSortOrder + 1
-		sortOrder = &nextSortOrder
-	}
-	line, err := s.repo.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
-		BudgetID:         req.BudgetID,
-		Name:             name,
-		AllocationAmount: allocation,
-		SortOrder:        *sortOrder,
+		categoryIDs, err := s.resolveLineCategoryIDs(ctx, repo, req.CategoryIDs, req.CategoryCodes)
+		if err != nil {
+			return err
+		}
+		if err := s.validateBudgetCategoryAvailability(ctx, repo, req.BudgetID, 0, categoryIDs); err != nil {
+			return err
+		}
+		sortOrder := req.SortOrder
+		if sortOrder == nil {
+			maxSortOrder, err := repo.GetMaxBudgetLineSortOrder(ctx, req.BudgetID)
+			if err != nil {
+				return mapBudgetError(err)
+			}
+			nextSortOrder := maxSortOrder + 1
+			sortOrder = &nextSortOrder
+		}
+		created, err := repo.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
+			BudgetID:         req.BudgetID,
+			Name:             name,
+			AllocationAmount: allocation,
+			SortOrder:        *sortOrder,
+		})
+		if err != nil {
+			return mapBudgetError(err)
+		}
+		if err := s.replaceBudgetLineCategories(ctx, repo, req.BudgetID, created.ID, categoryIDs); err != nil {
+			return err
+		}
+		line = created
+		return nil
 	})
 	if err != nil {
-		return BudgetLineDTO{}, mapBudgetError(err)
-	}
-	if err := s.replaceBudgetLineCategories(ctx, req.BudgetID, line.ID, categoryIDs); err != nil {
 		return BudgetLineDTO{}, err
 	}
 	return s.budgetLineDTOWithCategories(ctx, line)
@@ -377,10 +400,6 @@ func (s *Service) CreateBudgetLine(ctx context.Context, req CreateBudgetLineRequ
 func (s *Service) UpdateBudgetLine(ctx context.Context, req UpdateBudgetLineRequest) (BudgetLineDTO, error) {
 	if req.LineID == 0 {
 		return BudgetLineDTO{}, NewError(CodeValidationError, "budget line id is required", nil)
-	}
-	existing, err := s.repo.GetBudgetLineById(ctx, req.LineID)
-	if err != nil {
-		return BudgetLineDTO{}, mapBudgetError(err)
 	}
 	params := sqlc.UpdateBudgetLineParams{ID: req.LineID}
 	if req.Name != nil {
@@ -403,29 +422,48 @@ func (s *Service) UpdateBudgetLine(ctx context.Context, req UpdateBudgetLineRequ
 		params.SetSortOrder = true
 		params.SortOrder = *req.SortOrder
 	}
-	line, err := s.repo.UpdateBudgetLine(ctx, params)
-	if err != nil {
-		return BudgetLineDTO{}, mapBudgetError(err)
+	if s.transactor == nil {
+		return BudgetLineDTO{}, NewError(CodeDatabaseError, "database error", errors.New("budget line changes require transaction support"))
 	}
-	if req.CategoryIDs != nil || req.CategoryCodes != nil {
-		categoryIDs := []int64(nil)
-		categoryCodes := []string(nil)
-		if req.CategoryIDs != nil {
-			categoryIDs = *req.CategoryIDs
-		}
-		if req.CategoryCodes != nil {
-			categoryCodes = *req.CategoryCodes
-		}
-		resolvedCategoryIDs, err := s.resolveLineCategoryIDs(ctx, categoryIDs, categoryCodes)
+
+	var line sqlc.BudgetLine
+	err := s.transactor.WithinTx(ctx, func(repo Repository) error {
+		existing, err := repo.GetBudgetLineById(ctx, req.LineID)
 		if err != nil {
-			return BudgetLineDTO{}, err
+			return mapBudgetError(err)
 		}
-		if err := s.validateBudgetCategoryAvailability(ctx, existing.BudgetID, existing.ID, resolvedCategoryIDs); err != nil {
-			return BudgetLineDTO{}, err
+		var resolvedCategoryIDs []int64
+		if req.CategoryIDs != nil || req.CategoryCodes != nil {
+			categoryIDs := []int64(nil)
+			categoryCodes := []string(nil)
+			if req.CategoryIDs != nil {
+				categoryIDs = *req.CategoryIDs
+			}
+			if req.CategoryCodes != nil {
+				categoryCodes = *req.CategoryCodes
+			}
+			resolvedCategoryIDs, err = s.resolveLineCategoryIDs(ctx, repo, categoryIDs, categoryCodes)
+			if err != nil {
+				return err
+			}
+			if err := s.validateBudgetCategoryAvailability(ctx, repo, existing.BudgetID, existing.ID, resolvedCategoryIDs); err != nil {
+				return err
+			}
 		}
-		if err := s.replaceBudgetLineCategories(ctx, existing.BudgetID, existing.ID, resolvedCategoryIDs); err != nil {
-			return BudgetLineDTO{}, err
+		updated, err := repo.UpdateBudgetLine(ctx, params)
+		if err != nil {
+			return mapBudgetError(err)
 		}
+		if req.CategoryIDs != nil || req.CategoryCodes != nil {
+			if err := s.replaceBudgetLineCategories(ctx, repo, existing.BudgetID, existing.ID, resolvedCategoryIDs); err != nil {
+				return err
+			}
+		}
+		line = updated
+		return nil
+	})
+	if err != nil {
+		return BudgetLineDTO{}, err
 	}
 	return s.budgetLineDTOWithCategories(ctx, line)
 }
@@ -448,7 +486,7 @@ func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetRe
 	if err != nil {
 		return BudgetReportDTO{}, mapBudgetError(err)
 	}
-	lines, err := s.repo.ListBudgetLines(ctx, budgetID)
+	lines, err := s.repo.ListBudgetReportLines(ctx, budgetID)
 	if err != nil {
 		return BudgetReportDTO{}, mapBudgetError(err)
 	}
@@ -456,65 +494,51 @@ func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetRe
 	if err != nil {
 		return BudgetReportDTO{}, mapBudgetError(err)
 	}
-	actualRows, err := s.repo.ListBudgetTransactions(ctx, sqlc.ListBudgetTransactionsParams{
-		PeriodStart: budget.PeriodStart,
-		PeriodEnd:   budget.PeriodEnd,
-		HouseholdID: budget.HouseholdID,
-		UserID:      budget.UserID,
-	})
-	if err != nil {
-		return BudgetReportDTO{}, mapBudgetError(err)
-	}
-	uncategorized, err := s.repo.SumUncategorizedBudgetTransactions(ctx, sqlc.SumUncategorizedBudgetTransactionsParams{
-		PeriodStart: budget.PeriodStart,
-		PeriodEnd:   budget.PeriodEnd,
-		HouseholdID: budget.HouseholdID,
-		UserID:      budget.UserID,
-	})
+	uncategorized, err := s.repo.SumUncategorizedBudgetTransactions(ctx, budgetID)
 	if err != nil {
 		return BudgetReportDTO{}, mapBudgetError(err)
 	}
 
-	actualByCategory := make(map[int64]float64, len(actualRows))
-	for _, row := range actualRows {
-		actualByCategory[row.CategoryID] = float64(row.ActualAmount)
-	}
 	categoriesByLine := make(map[int64][]CategoryRefDTO)
-	categoryIDsByLine := make(map[int64][]int64)
 	for _, row := range mappings {
 		categoriesByLine[row.BudgetLineID] = append(categoriesByLine[row.BudgetLineID], CategoryRefDTO{
 			ID:   row.CategoryID,
 			Code: row.CategoryCode,
 			Name: row.CategoryName,
 		})
-		categoryIDsByLine[row.BudgetLineID] = append(categoryIDsByLine[row.BudgetLineID], row.CategoryID)
 	}
 
 	reportLines := make([]BudgetReportLineDTO, 0, len(lines))
-	totalAllocation := 0.0
-	totalActual := 0.0
+	totalAllocation := big.NewInt(0)
+	totalActual := big.NewInt(0)
 	for _, line := range lines {
-		allocation, err := parseMoney(budgetNumericString(line.AllocationAmount))
+		allocationCents, err := numericCents(line.AllocationAmount)
 		if err != nil {
 			return BudgetReportDTO{}, NewError(CodeDatabaseError, "invalid budget allocation amount", err)
 		}
-		actual := 0.0
-		for _, categoryID := range categoryIDsByLine[line.ID] {
-			actual += actualByCategory[categoryID]
+		actualCents, err := numericCents(line.ActualAmount)
+		if err != nil {
+			return BudgetReportDTO{}, NewError(CodeDatabaseError, "invalid budget actual amount", err)
 		}
-		totalAllocation += allocation
-		totalActual += actual
+		remainingCents := new(big.Int).Sub(allocationCents, actualCents)
+		totalAllocation.Add(totalAllocation, allocationCents)
+		totalActual.Add(totalActual, actualCents)
 		reportLines = append(reportLines, BudgetReportLineDTO{
 			ID:               line.ID,
 			BudgetID:         line.BudgetID,
 			Name:             line.Name,
-			AllocationAmount: moneyString(allocation),
-			ActualAmount:     moneyString(actual),
-			RemainingAmount:  moneyString(allocation - actual),
+			AllocationAmount: centsString(allocationCents),
+			ActualAmount:     centsString(actualCents),
+			RemainingAmount:  centsString(remainingCents),
 			SortOrder:        line.SortOrder,
-			Categories:       categoriesByLine[line.ID],
+			Categories:       normalizeCategories(categoriesByLine[line.ID]),
 		})
 	}
+	uncategorizedCents, err := numericCents(uncategorized)
+	if err != nil {
+		return BudgetReportDTO{}, NewError(CodeDatabaseError, "invalid uncategorized budget actual amount", err)
+	}
+	totalRemaining := new(big.Int).Sub(totalAllocation, totalActual)
 
 	return BudgetReportDTO{
 		Budget: BudgetSummaryDTO{
@@ -527,10 +551,10 @@ func (s *Service) GetBudgetReport(ctx context.Context, budgetID int64) (BudgetRe
 		},
 		Lines: reportLines,
 		Totals: BudgetReportTotalsDTO{
-			AllocationAmount:          moneyString(totalAllocation),
-			ActualAmount:              moneyString(totalActual),
-			RemainingAmount:           moneyString(totalAllocation - totalActual),
-			UncategorizedActualAmount: moneyString(float64(uncategorized)),
+			AllocationAmount:          centsString(totalAllocation),
+			ActualAmount:              centsString(totalActual),
+			RemainingAmount:           centsString(totalRemaining),
+			UncategorizedActualAmount: centsString(uncategorizedCents),
 		},
 	}, nil
 }
@@ -543,11 +567,11 @@ func validateBudgetLineName(name string) (string, error) {
 	return name, nil
 }
 
-func (s *Service) resolveLineCategoryIDs(ctx context.Context, ids []int64, codes []string) ([]int64, error) {
+func (s *Service) resolveLineCategoryIDs(ctx context.Context, repo Repository, ids []int64, codes []string) ([]int64, error) {
 	seen := make(map[int64]struct{}, len(ids)+len(codes))
 	resolved := make([]int64, 0, len(ids)+len(codes))
 	for _, id := range ids {
-		category, err := s.repo.GetActiveCategoryById(ctx, id)
+		category, err := repo.GetActiveCategoryById(ctx, id)
 		if err != nil {
 			return nil, mapCategoryError(err)
 		}
@@ -558,7 +582,7 @@ func (s *Service) resolveLineCategoryIDs(ctx context.Context, ids []int64, codes
 		resolved = append(resolved, category.ID)
 	}
 	for _, code := range codes {
-		category, err := s.repo.GetActiveCategoryByCode(ctx, strings.TrimSpace(code))
+		category, err := repo.GetActiveCategoryByCode(ctx, strings.TrimSpace(code))
 		if err != nil {
 			return nil, mapCategoryError(err)
 		}
@@ -571,8 +595,8 @@ func (s *Service) resolveLineCategoryIDs(ctx context.Context, ids []int64, codes
 	return resolved, nil
 }
 
-func (s *Service) validateBudgetCategoryAvailability(ctx context.Context, budgetID, currentLineID int64, categoryIDs []int64) error {
-	existingMappings, err := s.repo.ListBudgetLineCategories(ctx, budgetID)
+func (s *Service) validateBudgetCategoryAvailability(ctx context.Context, repo Repository, budgetID, currentLineID int64, categoryIDs []int64) error {
+	existingMappings, err := repo.ListBudgetLineCategories(ctx, budgetID)
 	if err != nil {
 		return mapBudgetError(err)
 	}
@@ -591,12 +615,12 @@ func (s *Service) validateBudgetCategoryAvailability(ctx context.Context, budget
 	return nil
 }
 
-func (s *Service) replaceBudgetLineCategories(ctx context.Context, budgetID, lineID int64, categoryIDs []int64) error {
-	if err := s.repo.DeleteBudgetLineCategories(ctx, lineID); err != nil {
+func (s *Service) replaceBudgetLineCategories(ctx context.Context, repo Repository, budgetID, lineID int64, categoryIDs []int64) error {
+	if err := repo.DeleteBudgetLineCategories(ctx, lineID); err != nil {
 		return mapBudgetError(err)
 	}
 	for _, categoryID := range categoryIDs {
-		if err := s.repo.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{
+		if err := repo.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{
 			BudgetID:     budgetID,
 			BudgetLineID: lineID,
 			CategoryID:   categoryID,
@@ -626,12 +650,43 @@ func (s *Service) budgetLineDTOWithCategories(ctx context.Context, line sqlc.Bud
 	return budgetLineDTO(line, categories), nil
 }
 
-func moneyString(value float64) string {
-	return fmt.Sprintf("%.2f", value)
+func numericCents(value pgtype.Numeric) (*big.Int, error) {
+	if !value.Valid || value.Int == nil {
+		return big.NewInt(0), nil
+	}
+	ratio := new(big.Rat).SetInt(value.Int)
+	if value.Exp > 0 {
+		ratio.Mul(ratio, new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(value.Exp)), nil)))
+	}
+	if value.Exp < 0 {
+		ratio.Quo(ratio, new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-value.Exp)), nil)))
+	}
+	ratio.Mul(ratio, big.NewRat(100, 1))
+	if !ratio.IsInt() {
+		return nil, errors.New("amount has more than two decimal places")
+	}
+	return new(big.Int).Set(ratio.Num()), nil
 }
 
-func parseMoney(value string) (float64, error) {
-	return strconv.ParseFloat(strings.TrimSpace(value), 64)
+func centsString(cents *big.Int) string {
+	if cents == nil {
+		return "0.00"
+	}
+	value := new(big.Int).Set(cents)
+	sign := ""
+	if value.Sign() < 0 {
+		sign = "-"
+		value.Abs(value)
+	}
+	dollars, remainder := new(big.Int).QuoRem(value, big.NewInt(100), new(big.Int))
+	return sign + dollars.String() + "." + fmtTwoDigits(remainder.Int64())
+}
+
+func fmtTwoDigits(value int64) string {
+	if value < 10 {
+		return "0" + strconv.FormatInt(value, 10)
+	}
+	return strconv.FormatInt(value, 10)
 }
 
 func parseBudgetNumeric(value string) (pgtype.Numeric, error) {
@@ -687,6 +742,11 @@ func budgetNumericString(value pgtype.Numeric) string {
 		ratio.Quo(ratio, new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-value.Exp)), nil)))
 	}
 	return ratio.FloatString(2)
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 func mapBudgetError(err error) error {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"rdmm404/voltr-finance/internal/database/sqlc"
@@ -336,6 +337,40 @@ func TestGetMonthlyBudgetCreatesEmptyHouseholdBudgetWhenNoPriorBudget(t *testing
 	}
 }
 
+func TestGetMonthlyBudgetReturnsExistingBudgetAfterConcurrentCreate(t *testing.T) {
+	householdID := int64(7)
+	julyStart := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	julyEnd := pgtype.Date{Time: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+	repo := &fakeRepo{
+		householdBudgetByPeriodMisses: 1,
+		householdBudgetByPeriod: sqlc.Budget{
+			ID:          55,
+			HouseholdID: &householdID,
+			PeriodStart: julyStart,
+			PeriodEnd:   julyEnd,
+		},
+		createHouseholdBudgetErr: &pgconn.PgError{Code: "23505"},
+	}
+	svc := NewService(repo, &fakeTransactionService{})
+
+	budget, err := svc.GetMonthlyBudget(context.Background(), GetMonthlyBudgetRequest{
+		HouseholdID:     &householdID,
+		Year:            2026,
+		Month:           7,
+		CreateIfMissing: true,
+	})
+
+	if err != nil {
+		t.Fatalf("GetMonthlyBudget returned error: %v", err)
+	}
+	if budget.ID != 55 || budget.HouseholdID == nil || *budget.HouseholdID != householdID {
+		t.Fatalf("budget = %+v, want existing concurrently-created budget", budget)
+	}
+	if repo.lastCreateHouseholdBudget.HouseholdID != householdID {
+		t.Fatalf("create household id = %d, want %d", repo.lastCreateHouseholdBudget.HouseholdID, householdID)
+	}
+}
+
 func TestGetMonthlyBudgetCopiesLatestPriorHouseholdBudgetWhenMissing(t *testing.T) {
 	householdID := int64(7)
 	sourceID := int64(7)
@@ -556,7 +591,8 @@ func TestCreateBudgetLineResolvesCategoryCodes(t *testing.T) {
 			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: allocation, SortOrder: 3},
 		},
 	}
-	svc := NewService(repo, &fakeTransactionService{})
+	transactor := &fakeTransactor{repo: repo}
+	svc := NewServiceWithTransactor(repo, &fakeTransactionService{}, transactor)
 
 	line, err := svc.CreateBudgetLine(context.Background(), CreateBudgetLineRequest{
 		BudgetID:         12,
@@ -580,6 +616,9 @@ func TestCreateBudgetLineResolvesCategoryCodes(t *testing.T) {
 	if len(repo.createdBudgetLineCategories) != 1 || repo.createdBudgetLineCategories[0].CategoryID != 3 {
 		t.Fatalf("created mappings = %+v, want category 3", repo.createdBudgetLineCategories)
 	}
+	if transactor.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", transactor.calls)
+	}
 }
 
 func TestCreateBudgetLineRejectsReusedCategory(t *testing.T) {
@@ -590,7 +629,8 @@ func TestCreateBudgetLineRejectsReusedCategory(t *testing.T) {
 			{BudgetID: 12, BudgetLineID: 40, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
 		},
 	}
-	svc := NewService(repo, &fakeTransactionService{})
+	transactor := &fakeTransactor{repo: repo}
+	svc := NewServiceWithTransactor(repo, &fakeTransactionService{}, transactor)
 
 	_, err := svc.CreateBudgetLine(context.Background(), CreateBudgetLineRequest{
 		BudgetID:         12,
@@ -621,7 +661,8 @@ func TestUpdateBudgetLineReplacesOnlyThatLineCategories(t *testing.T) {
 		categoryByCode:    sqlc.Category{ID: 3, Code: "groceries", Name: "Groceries", IsActive: true},
 		updatedBudgetLine: sqlc.BudgetLine{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: newAllocation, SortOrder: 1},
 	}
-	svc := NewService(repo, &fakeTransactionService{})
+	transactor := &fakeTransactor{repo: repo}
+	svc := NewServiceWithTransactor(repo, &fakeTransactionService{}, transactor)
 
 	line, err := svc.UpdateBudgetLine(context.Background(), UpdateBudgetLineRequest{
 		LineID:           44,
@@ -644,6 +685,9 @@ func TestUpdateBudgetLineReplacesOnlyThatLineCategories(t *testing.T) {
 	if len(repo.createdBudgetLineCategories) != 1 || repo.createdBudgetLineCategories[0].BudgetLineID != 44 {
 		t.Fatalf("created mappings = %+v, want mapping for line 44", repo.createdBudgetLineCategories)
 	}
+	if transactor.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", transactor.calls)
+	}
 }
 
 func TestUpdateBudgetLineCanClearCategories(t *testing.T) {
@@ -658,7 +702,8 @@ func TestUpdateBudgetLineCanClearCategories(t *testing.T) {
 			{BudgetID: 12, BudgetLineID: 44, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
 		},
 	}
-	svc := NewService(repo, &fakeTransactionService{})
+	transactor := &fakeTransactor{repo: repo}
+	svc := NewServiceWithTransactor(repo, &fakeTransactionService{}, transactor)
 	emptyCodes := []string{}
 
 	line, err := svc.UpdateBudgetLine(context.Background(), UpdateBudgetLineRequest{
@@ -704,6 +749,18 @@ func TestGetBudgetReportDerivesActualsFromCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseBudgetNumeric returned error: %v", err)
 	}
+	groceriesActual, err := parseBudgetNumeric("570.25")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	zeroActual, err := parseBudgetNumeric("0.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	uncategorizedActual, err := parseBudgetNumeric("123.45")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
 	repo := &fakeRepo{
 		budgetByID: sqlc.Budget{
 			ID:          12,
@@ -715,13 +772,14 @@ func TestGetBudgetReportDerivesActualsFromCategories(t *testing.T) {
 			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: groceriesAllocation, SortOrder: 1},
 			{ID: 45, BudgetID: 12, Name: "Savings", AllocationAmount: savingsAllocation, SortOrder: 2},
 		},
+		budgetReportLines: []sqlc.ListBudgetReportLinesRow{
+			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: groceriesAllocation, ActualAmount: groceriesActual, SortOrder: 1},
+			{ID: 45, BudgetID: 12, Name: "Savings", AllocationAmount: savingsAllocation, ActualAmount: zeroActual, SortOrder: 2},
+		},
 		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
 			{BudgetID: 12, BudgetLineID: 44, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
 		},
-		budgetTransactions: []sqlc.ListBudgetTransactionsRow{
-			{CategoryID: 3, ActualAmount: 570.25},
-		},
-		uncategorizedBudgetTransactions: 123.45,
+		uncategorizedBudgetTransactions: uncategorizedActual,
 	}
 	svc := NewService(repo, &fakeTransactionService{})
 
@@ -745,17 +803,21 @@ func TestGetBudgetReportDerivesActualsFromCategories(t *testing.T) {
 	if report.Totals.UncategorizedActualAmount != "123.45" {
 		t.Fatalf("uncategorized = %q, want 123.45", report.Totals.UncategorizedActualAmount)
 	}
-	if repo.lastListBudgetTransactions.HouseholdID == nil || *repo.lastListBudgetTransactions.HouseholdID != householdID || repo.lastListBudgetTransactions.UserID != nil {
-		t.Fatalf("transaction params = %+v, want household scope", repo.lastListBudgetTransactions)
+	if repo.lastListBudgetReportLinesBudgetID != 12 {
+		t.Fatalf("report lines budget id = %d, want 12", repo.lastListBudgetReportLinesBudgetID)
 	}
-	if repo.lastSumUncategorizedBudgetTransactions.PeriodStart.Time != report.Budget.PeriodStart {
-		t.Fatalf("uncategorized params period start = %s, want %s", repo.lastSumUncategorizedBudgetTransactions.PeriodStart.Time, report.Budget.PeriodStart)
+	if repo.lastSumUncategorizedBudgetTransactions != 12 {
+		t.Fatalf("uncategorized budget id = %d, want 12", repo.lastSumUncategorizedBudgetTransactions)
 	}
 }
 
 func TestGetBudgetReportNegativeTransactionsReduceActuals(t *testing.T) {
 	householdID := int64(1)
 	allocation, err := parseBudgetNumeric("100.00")
+	if err != nil {
+		t.Fatalf("parseBudgetNumeric returned error: %v", err)
+	}
+	actual, err := parseBudgetNumeric("60.00")
 	if err != nil {
 		t.Fatalf("parseBudgetNumeric returned error: %v", err)
 	}
@@ -769,11 +831,11 @@ func TestGetBudgetReportNegativeTransactionsReduceActuals(t *testing.T) {
 		budgetLines: []sqlc.BudgetLine{
 			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: allocation, SortOrder: 1},
 		},
+		budgetReportLines: []sqlc.ListBudgetReportLinesRow{
+			{ID: 44, BudgetID: 12, Name: "Groceries", AllocationAmount: allocation, ActualAmount: actual, SortOrder: 1},
+		},
 		budgetLineCategories: []sqlc.ListBudgetLineCategoriesRow{
 			{BudgetID: 12, BudgetLineID: 44, CategoryID: 3, CategoryCode: "groceries", CategoryName: "Groceries"},
-		},
-		budgetTransactions: []sqlc.ListBudgetTransactionsRow{
-			{CategoryID: 3, ActualAmount: 60.00},
 		},
 	}
 	svc := NewService(repo, &fakeTransactionService{})

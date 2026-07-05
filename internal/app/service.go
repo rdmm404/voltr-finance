@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"rdmm404/voltr-finance/internal/database/sqlc"
@@ -71,8 +72,8 @@ type BudgetRepository interface {
 	DeleteBudgetLine(context.Context, int64) error
 	DeleteBudgetLineCategories(context.Context, int64) error
 	CreateBudgetLineCategory(context.Context, sqlc.CreateBudgetLineCategoryParams) error
-	ListBudgetTransactions(context.Context, sqlc.ListBudgetTransactionsParams) ([]sqlc.ListBudgetTransactionsRow, error)
-	SumUncategorizedBudgetTransactions(context.Context, sqlc.SumUncategorizedBudgetTransactionsParams) (float32, error)
+	ListBudgetReportLines(context.Context, int64) ([]sqlc.ListBudgetReportLinesRow, error)
+	SumUncategorizedBudgetTransactions(context.Context, int64) (pgtype.Numeric, error)
 }
 
 type TransactionService interface {

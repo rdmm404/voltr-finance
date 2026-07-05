@@ -1324,51 +1324,60 @@ func (q *Queries) ListBudgetLines(ctx context.Context, budgetID int64) ([]Budget
 	return items, nil
 }
 
-const listBudgetTransactions = `-- name: ListBudgetTransactions :many
+const listBudgetReportLines = `-- name: ListBudgetReportLines :many
 SELECT
-    t.category_id::BIGINT AS category_id,
-    SUM(t.amount)::REAL AS actual_amount
-FROM transaction t
-WHERE t.deleted_at IS NULL
-  AND t.category_id IS NOT NULL
-  AND t.transaction_date >= ($1::DATE::TIMESTAMP AT TIME ZONE 'UTC')
-  AND t.transaction_date < (($2::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
-  AND (
-      ($3::BIGINT IS NOT NULL AND t.household_id = $3::BIGINT)
-      OR
-      ($4::BIGINT IS NOT NULL AND t.author_id = $4::BIGINT)
-  )
-GROUP BY t.category_id
-ORDER BY t.category_id ASC
+    bl.id,
+    bl.budget_id,
+    bl.name,
+    bl.allocation_amount,
+    ROUND(COALESCE(SUM(t.amount), 0)::NUMERIC, 2) AS actual_amount,
+    bl.sort_order
+FROM budget b
+JOIN budget_line bl ON bl.budget_id = b.id
+LEFT JOIN budget_line_category blc
+    ON blc.budget_id = b.id
+   AND blc.budget_line_id = bl.id
+LEFT JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.category_id = blc.category_id
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+   )
+WHERE b.id = $1::BIGINT
+GROUP BY bl.id, bl.budget_id, bl.name, bl.allocation_amount, bl.sort_order
+ORDER BY bl.sort_order ASC, bl.id ASC
 `
 
-type ListBudgetTransactionsParams struct {
-	PeriodStart pgtype.Date `json:"periodStart"`
-	PeriodEnd   pgtype.Date `json:"periodEnd"`
-	HouseholdID *int64      `json:"householdId"`
-	UserID      *int64      `json:"userId"`
+type ListBudgetReportLinesRow struct {
+	ID               int64          `json:"id"`
+	BudgetID         int64          `json:"budgetId"`
+	Name             string         `json:"name"`
+	AllocationAmount pgtype.Numeric `json:"allocationAmount"`
+	ActualAmount     pgtype.Numeric `json:"actualAmount"`
+	SortOrder        int32          `json:"sortOrder"`
 }
 
-type ListBudgetTransactionsRow struct {
-	CategoryID   int64   `json:"categoryId"`
-	ActualAmount float32 `json:"actualAmount"`
-}
-
-func (q *Queries) ListBudgetTransactions(ctx context.Context, arg ListBudgetTransactionsParams) ([]ListBudgetTransactionsRow, error) {
-	rows, err := q.db.Query(ctx, listBudgetTransactions,
-		arg.PeriodStart,
-		arg.PeriodEnd,
-		arg.HouseholdID,
-		arg.UserID,
-	)
+func (q *Queries) ListBudgetReportLines(ctx context.Context, budgetID int64) ([]ListBudgetReportLinesRow, error) {
+	rows, err := q.db.Query(ctx, listBudgetReportLines, budgetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListBudgetTransactionsRow
+	var items []ListBudgetReportLinesRow
 	for rows.Next() {
-		var i ListBudgetTransactionsRow
-		if err := rows.Scan(&i.CategoryID, &i.ActualAmount); err != nil {
+		var i ListBudgetReportLinesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BudgetID,
+			&i.Name,
+			&i.AllocationAmount,
+			&i.ActualAmount,
+			&i.SortOrder,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1796,34 +1805,25 @@ func (q *Queries) SoftDeleteTransactionsById(ctx context.Context, arg SoftDelete
 }
 
 const sumUncategorizedBudgetTransactions = `-- name: SumUncategorizedBudgetTransactions :one
-SELECT COALESCE(SUM(t.amount), 0)::REAL AS actual_amount
-FROM transaction t
-WHERE t.deleted_at IS NULL
-  AND t.category_id IS NULL
-  AND t.transaction_date >= ($1::DATE::TIMESTAMP AT TIME ZONE 'UTC')
-  AND t.transaction_date < (($2::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
-  AND (
-      ($3::BIGINT IS NOT NULL AND t.household_id = $3::BIGINT)
-      OR
-      ($4::BIGINT IS NOT NULL AND t.author_id = $4::BIGINT)
-  )
+SELECT ROUND(COALESCE(SUM(t.amount), 0)::NUMERIC, 2) AS actual_amount
+FROM budget b
+LEFT JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.category_id IS NULL
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+   )
+WHERE b.id = $1::BIGINT
+GROUP BY b.id
 `
 
-type SumUncategorizedBudgetTransactionsParams struct {
-	PeriodStart pgtype.Date `json:"periodStart"`
-	PeriodEnd   pgtype.Date `json:"periodEnd"`
-	HouseholdID *int64      `json:"householdId"`
-	UserID      *int64      `json:"userId"`
-}
-
-func (q *Queries) SumUncategorizedBudgetTransactions(ctx context.Context, arg SumUncategorizedBudgetTransactionsParams) (float32, error) {
-	row := q.db.QueryRow(ctx, sumUncategorizedBudgetTransactions,
-		arg.PeriodStart,
-		arg.PeriodEnd,
-		arg.HouseholdID,
-		arg.UserID,
-	)
-	var actual_amount float32
+func (q *Queries) SumUncategorizedBudgetTransactions(ctx context.Context, budgetID int64) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, sumUncategorizedBudgetTransactions, budgetID)
+	var actual_amount pgtype.Numeric
 	err := row.Scan(&actual_amount)
 	return actual_amount, err
 }

@@ -116,35 +116,48 @@ SELECT COALESCE(MAX(sort_order), 0)::INTEGER AS sort_order
 FROM budget_line
 WHERE budget_id = sqlc.arg(budget_id)::BIGINT;
 
--- name: ListBudgetTransactions :many
+-- name: ListBudgetReportLines :many
 SELECT
-    t.category_id::BIGINT AS category_id,
-    SUM(t.amount)::REAL AS actual_amount
-FROM transaction t
-WHERE t.deleted_at IS NULL
-  AND t.category_id IS NOT NULL
-  AND t.transaction_date >= (sqlc.arg(period_start)::DATE::TIMESTAMP AT TIME ZONE 'UTC')
-  AND t.transaction_date < ((sqlc.arg(period_end)::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
-  AND (
-      (sqlc.narg(household_id)::BIGINT IS NOT NULL AND t.household_id = sqlc.narg(household_id)::BIGINT)
-      OR
-      (sqlc.narg(user_id)::BIGINT IS NOT NULL AND t.author_id = sqlc.narg(user_id)::BIGINT)
-  )
-GROUP BY t.category_id
-ORDER BY t.category_id ASC;
+    bl.id,
+    bl.budget_id,
+    bl.name,
+    bl.allocation_amount,
+    ROUND(COALESCE(SUM(t.amount), 0)::NUMERIC, 2) AS actual_amount,
+    bl.sort_order
+FROM budget b
+JOIN budget_line bl ON bl.budget_id = b.id
+LEFT JOIN budget_line_category blc
+    ON blc.budget_id = b.id
+   AND blc.budget_line_id = bl.id
+LEFT JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.category_id = blc.category_id
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+   )
+WHERE b.id = sqlc.arg(budget_id)::BIGINT
+GROUP BY bl.id, bl.budget_id, bl.name, bl.allocation_amount, bl.sort_order
+ORDER BY bl.sort_order ASC, bl.id ASC;
 
 -- name: SumUncategorizedBudgetTransactions :one
-SELECT COALESCE(SUM(t.amount), 0)::REAL AS actual_amount
-FROM transaction t
-WHERE t.deleted_at IS NULL
-  AND t.category_id IS NULL
-  AND t.transaction_date >= (sqlc.arg(period_start)::DATE::TIMESTAMP AT TIME ZONE 'UTC')
-  AND t.transaction_date < ((sqlc.arg(period_end)::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
-  AND (
-      (sqlc.narg(household_id)::BIGINT IS NOT NULL AND t.household_id = sqlc.narg(household_id)::BIGINT)
-      OR
-      (sqlc.narg(user_id)::BIGINT IS NOT NULL AND t.author_id = sqlc.narg(user_id)::BIGINT)
-  );
+SELECT ROUND(COALESCE(SUM(t.amount), 0)::NUMERIC, 2) AS actual_amount
+FROM budget b
+LEFT JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.category_id IS NULL
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+   )
+WHERE b.id = sqlc.arg(budget_id)::BIGINT
+GROUP BY b.id;
 
 -- WRITES
 
