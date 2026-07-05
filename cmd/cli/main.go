@@ -47,7 +47,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 
 	repo := sqlc.New(pool)
 	txSvc := transaction.NewTransactionService(pool, repo)
-	appSvc := app.NewService(repo, txSvc)
+	appSvc := app.NewServiceWithTransactor(repo, txSvc, app.NewSQLCTransactor(pool, repo))
 
 	return cli.Run(ctx, cliArgs, stdin, stdout, stderr, appSvc)
 }

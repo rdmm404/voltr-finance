@@ -3,6 +3,10 @@ package app
 import (
 	"context"
 	"database/sql"
+	"math/big"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/transaction"
@@ -31,6 +35,42 @@ type fakeRepo struct {
 	categoryByID                      sqlc.Category
 	categoryByCode                    sqlc.Category
 	listCategoriesResult              []sqlc.Category
+
+	householdBudgetByPeriod         sqlc.Budget
+	householdBudgetByPeriodMisses   int
+	userBudgetByPeriod              sqlc.Budget
+	userBudgetByPeriodMisses        int
+	budgetByID                      sqlc.Budget
+	latestPriorHousehold            sqlc.Budget
+	latestPriorUser                 sqlc.Budget
+	createdHouseholdBudget          sqlc.Budget
+	createdUserBudget               sqlc.Budget
+	budgetLines                     []sqlc.BudgetLine
+	budgetLineCategories            []sqlc.ListBudgetLineCategoriesRow
+	createdBudgetLines              []sqlc.CreateBudgetLineParams
+	createdBudgetLineRows           []sqlc.BudgetLine
+	createdBudgetLineCategories     []sqlc.CreateBudgetLineCategoryParams
+	budgetLineByID                  sqlc.BudgetLine
+	updatedBudgetLine               sqlc.BudgetLine
+	lastUpdateBudgetLine            sqlc.UpdateBudgetLineParams
+	maxSortOrder                    int32
+	deletedBudgetLineID             int64
+	deletedBudgetLineCategoryID     int64
+	budgetReportLines               []sqlc.ListBudgetReportLinesRow
+	uncategorizedBudgetTransactions pgtype.Numeric
+	createHouseholdBudgetErr        error
+	createUserBudgetErr             error
+
+	lastHouseholdBudgetPeriodStart         time.Time
+	lastUserBudgetPeriodStart              time.Time
+	lastCreateHouseholdBudget              sqlc.CreateHouseholdBudgetParams
+	lastCreateUserBudget                   sqlc.CreateUserBudgetParams
+	lastLatestPriorHouseholdBudget         sqlc.GetLatestPriorHouseholdBudgetParams
+	lastLatestPriorUserBudget              sqlc.GetLatestPriorUserBudgetParams
+	lastListBudgetLinesBudgetID            int64
+	lastListBudgetLineCategoriesBudgetID   int64
+	lastListBudgetReportLinesBudgetID      int64
+	lastSumUncategorizedBudgetTransactions int64
 }
 
 func (f *fakeRepo) CreateUser(_ context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
@@ -165,6 +205,245 @@ func (f *fakeRepo) DeactivateCategory(context.Context, string) (sqlc.Category, e
 	}
 	f.categoryByCode.IsActive = false
 	return f.categoryByCode, nil
+}
+
+func (f *fakeRepo) GetHouseholdBudgetByPeriod(_ context.Context, arg sqlc.GetHouseholdBudgetByPeriodParams) (sqlc.Budget, error) {
+	f.lastHouseholdBudgetPeriodStart = arg.PeriodStart.Time
+	if f.householdBudgetByPeriodMisses > 0 {
+		f.householdBudgetByPeriodMisses--
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	if f.householdBudgetByPeriod.ID == 0 {
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	return f.householdBudgetByPeriod, nil
+}
+
+func (f *fakeRepo) GetUserBudgetByPeriod(_ context.Context, arg sqlc.GetUserBudgetByPeriodParams) (sqlc.Budget, error) {
+	f.lastUserBudgetPeriodStart = arg.PeriodStart.Time
+	if f.userBudgetByPeriodMisses > 0 {
+		f.userBudgetByPeriodMisses--
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	if f.userBudgetByPeriod.ID == 0 {
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	return f.userBudgetByPeriod, nil
+}
+
+func (f *fakeRepo) GetBudgetById(context.Context, int64) (sqlc.Budget, error) {
+	if f.budgetByID.ID == 0 {
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	return f.budgetByID, nil
+}
+
+func (f *fakeRepo) GetLatestPriorHouseholdBudget(_ context.Context, arg sqlc.GetLatestPriorHouseholdBudgetParams) (sqlc.Budget, error) {
+	f.lastLatestPriorHouseholdBudget = arg
+	if f.latestPriorHousehold.ID == 0 {
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	return f.latestPriorHousehold, nil
+}
+
+func (f *fakeRepo) GetLatestPriorUserBudget(_ context.Context, arg sqlc.GetLatestPriorUserBudgetParams) (sqlc.Budget, error) {
+	f.lastLatestPriorUserBudget = arg
+	if f.latestPriorUser.ID == 0 {
+		return sqlc.Budget{}, sql.ErrNoRows
+	}
+	return f.latestPriorUser, nil
+}
+
+func (f *fakeRepo) ListBudgetLines(_ context.Context, budgetID int64) ([]sqlc.BudgetLine, error) {
+	f.lastListBudgetLinesBudgetID = budgetID
+	lines := make([]sqlc.BudgetLine, 0, len(f.budgetLines))
+	for _, line := range f.budgetLines {
+		if line.BudgetID == budgetID {
+			lines = append(lines, line)
+		}
+	}
+	return lines, nil
+}
+
+func (f *fakeRepo) ListBudgetLineCategories(_ context.Context, budgetID int64) ([]sqlc.ListBudgetLineCategoriesRow, error) {
+	f.lastListBudgetLineCategoriesBudgetID = budgetID
+	categories := make([]sqlc.ListBudgetLineCategoriesRow, 0, len(f.budgetLineCategories))
+	for _, category := range f.budgetLineCategories {
+		if category.BudgetID == budgetID {
+			categories = append(categories, category)
+		}
+	}
+	return categories, nil
+}
+
+func (f *fakeRepo) GetBudgetLineById(_ context.Context, id int64) (sqlc.BudgetLine, error) {
+	if f.budgetLineByID.ID == 0 || f.budgetLineByID.ID != id {
+		return sqlc.BudgetLine{}, sql.ErrNoRows
+	}
+	return f.budgetLineByID, nil
+}
+
+func (f *fakeRepo) GetMaxBudgetLineSortOrder(context.Context, int64) (int32, error) {
+	return f.maxSortOrder, nil
+}
+
+func (f *fakeRepo) CreateHouseholdBudget(_ context.Context, arg sqlc.CreateHouseholdBudgetParams) (sqlc.Budget, error) {
+	f.lastCreateHouseholdBudget = arg
+	if f.createHouseholdBudgetErr != nil {
+		return sqlc.Budget{}, f.createHouseholdBudgetErr
+	}
+	if f.createdHouseholdBudget.ID != 0 {
+		return f.createdHouseholdBudget, nil
+	}
+	return sqlc.Budget{
+		ID:             1,
+		HouseholdID:    &arg.HouseholdID,
+		PeriodStart:    arg.PeriodStart,
+		PeriodEnd:      arg.PeriodEnd,
+		SourceBudgetID: arg.SourceBudgetID,
+	}, nil
+}
+
+func (f *fakeRepo) CreateUserBudget(_ context.Context, arg sqlc.CreateUserBudgetParams) (sqlc.Budget, error) {
+	f.lastCreateUserBudget = arg
+	if f.createUserBudgetErr != nil {
+		return sqlc.Budget{}, f.createUserBudgetErr
+	}
+	if f.createdUserBudget.ID != 0 {
+		return f.createdUserBudget, nil
+	}
+	return sqlc.Budget{
+		ID:             1,
+		UserID:         &arg.UserID,
+		PeriodStart:    arg.PeriodStart,
+		PeriodEnd:      arg.PeriodEnd,
+		SourceBudgetID: arg.SourceBudgetID,
+	}, nil
+}
+
+func (f *fakeRepo) CreateBudgetLine(_ context.Context, arg sqlc.CreateBudgetLineParams) (sqlc.BudgetLine, error) {
+	f.createdBudgetLines = append(f.createdBudgetLines, arg)
+	if len(f.createdBudgetLineRows) >= len(f.createdBudgetLines) {
+		row := f.createdBudgetLineRows[len(f.createdBudgetLines)-1]
+		f.budgetLines = append(f.budgetLines, row)
+		return row, nil
+	}
+	row := sqlc.BudgetLine{
+		ID:               int64(len(f.createdBudgetLines)),
+		BudgetID:         arg.BudgetID,
+		Name:             arg.Name,
+		AllocationAmount: arg.AllocationAmount,
+		SortOrder:        arg.SortOrder,
+	}
+	f.budgetLines = append(f.budgetLines, row)
+	return row, nil
+}
+
+func (f *fakeRepo) UpdateBudgetLine(_ context.Context, arg sqlc.UpdateBudgetLineParams) (sqlc.BudgetLine, error) {
+	f.lastUpdateBudgetLine = arg
+	if f.updatedBudgetLine.ID != 0 {
+		return f.updatedBudgetLine, nil
+	}
+	if f.budgetLineByID.ID == 0 {
+		return sqlc.BudgetLine{}, sql.ErrNoRows
+	}
+	line := f.budgetLineByID
+	if arg.SetName {
+		line.Name = arg.Name
+	}
+	if arg.SetAllocationAmount {
+		line.AllocationAmount = arg.AllocationAmount
+	}
+	if arg.SetSortOrder {
+		line.SortOrder = arg.SortOrder
+	}
+	return line, nil
+}
+
+func (f *fakeRepo) DeleteBudgetLine(_ context.Context, id int64) error {
+	f.deletedBudgetLineID = id
+	return nil
+}
+
+func (f *fakeRepo) DeleteBudgetLineCategories(_ context.Context, id int64) error {
+	f.deletedBudgetLineCategoryID = id
+	filtered := f.budgetLineCategories[:0]
+	for _, category := range f.budgetLineCategories {
+		if category.BudgetLineID != id {
+			filtered = append(filtered, category)
+		}
+	}
+	f.budgetLineCategories = filtered
+	return nil
+}
+
+func (f *fakeRepo) CreateBudgetLineCategory(_ context.Context, arg sqlc.CreateBudgetLineCategoryParams) error {
+	f.createdBudgetLineCategories = append(f.createdBudgetLineCategories, arg)
+	categoryCode := ""
+	categoryName := ""
+	if f.categoryByID.ID == arg.CategoryID {
+		categoryCode = f.categoryByID.Code
+		categoryName = f.categoryByID.Name
+	}
+	if f.categoryByCode.ID == arg.CategoryID {
+		categoryCode = f.categoryByCode.Code
+		categoryName = f.categoryByCode.Name
+	}
+	for _, category := range f.budgetLineCategories {
+		if category.CategoryID == arg.CategoryID {
+			categoryCode = category.CategoryCode
+			categoryName = category.CategoryName
+			break
+		}
+	}
+	f.budgetLineCategories = append(f.budgetLineCategories, sqlc.ListBudgetLineCategoriesRow{
+		BudgetID:     arg.BudgetID,
+		BudgetLineID: arg.BudgetLineID,
+		CategoryID:   arg.CategoryID,
+		CategoryCode: categoryCode,
+		CategoryName: categoryName,
+	})
+	return nil
+}
+
+func (f *fakeRepo) ListBudgetReportLines(_ context.Context, budgetID int64) ([]sqlc.ListBudgetReportLinesRow, error) {
+	f.lastListBudgetReportLinesBudgetID = budgetID
+	if f.budgetReportLines != nil {
+		return f.budgetReportLines, nil
+	}
+	lines := make([]sqlc.ListBudgetReportLinesRow, 0, len(f.budgetLines))
+	for _, line := range f.budgetLines {
+		if line.BudgetID != budgetID {
+			continue
+		}
+		lines = append(lines, sqlc.ListBudgetReportLinesRow{
+			ID:               line.ID,
+			BudgetID:         line.BudgetID,
+			Name:             line.Name,
+			AllocationAmount: line.AllocationAmount,
+			ActualAmount:     pgtype.Numeric{Int: big.NewInt(0), Exp: -2, Valid: true},
+			SortOrder:        line.SortOrder,
+		})
+	}
+	return lines, nil
+}
+
+func (f *fakeRepo) SumUncategorizedBudgetTransactions(_ context.Context, budgetID int64) (pgtype.Numeric, error) {
+	f.lastSumUncategorizedBudgetTransactions = budgetID
+	if f.uncategorizedBudgetTransactions.Valid {
+		return f.uncategorizedBudgetTransactions, nil
+	}
+	return pgtype.Numeric{Int: big.NewInt(0), Exp: -2, Valid: true}, nil
+}
+
+type fakeTransactor struct {
+	repo  Repository
+	calls int
+}
+
+func (f *fakeTransactor) WithinTx(ctx context.Context, fn func(Repository) error) error {
+	f.calls++
+	return fn(f.repo)
 }
 
 type fakeTransactionService struct {

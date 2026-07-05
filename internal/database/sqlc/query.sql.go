@@ -11,6 +11,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createBudgetLine = `-- name: CreateBudgetLine :one
+INSERT INTO budget_line (budget_id, name, allocation_amount, sort_order)
+VALUES (
+    $1::BIGINT,
+    $2::VARCHAR,
+    $3::NUMERIC,
+    $4::INTEGER
+)
+RETURNING id, budget_id, name, allocation_amount, sort_order, created_at, updated_at
+`
+
+type CreateBudgetLineParams struct {
+	BudgetID         int64          `json:"budgetId"`
+	Name             string         `json:"name"`
+	AllocationAmount pgtype.Numeric `json:"allocationAmount"`
+	SortOrder        int32          `json:"sortOrder"`
+}
+
+func (q *Queries) CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (BudgetLine, error) {
+	row := q.db.QueryRow(ctx, createBudgetLine,
+		arg.BudgetID,
+		arg.Name,
+		arg.AllocationAmount,
+		arg.SortOrder,
+	)
+	var i BudgetLine
+	err := row.Scan(
+		&i.ID,
+		&i.BudgetID,
+		&i.Name,
+		&i.AllocationAmount,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createBudgetLineCategory = `-- name: CreateBudgetLineCategory :exec
+INSERT INTO budget_line_category (budget_id, budget_line_id, category_id)
+VALUES (
+    $1::BIGINT,
+    $2::BIGINT,
+    $3::BIGINT
+)
+`
+
+type CreateBudgetLineCategoryParams struct {
+	BudgetID     int64 `json:"budgetId"`
+	BudgetLineID int64 `json:"budgetLineId"`
+	CategoryID   int64 `json:"categoryId"`
+}
+
+func (q *Queries) CreateBudgetLineCategory(ctx context.Context, arg CreateBudgetLineCategoryParams) error {
+	_, err := q.db.Exec(ctx, createBudgetLineCategory, arg.BudgetID, arg.BudgetLineID, arg.CategoryID)
+	return err
+}
+
 const createCategory = `-- name: CreateCategory :one
 
 INSERT INTO category (code, name, description)
@@ -37,6 +95,48 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createHouseholdBudget = `-- name: CreateHouseholdBudget :one
+
+INSERT INTO budget (household_id, user_id, period_start, period_end, source_budget_id)
+VALUES (
+    $1::BIGINT,
+    NULL,
+    $2::DATE,
+    $3::DATE,
+    $4::BIGINT
+)
+RETURNING id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id
+`
+
+type CreateHouseholdBudgetParams struct {
+	HouseholdID    int64       `json:"householdId"`
+	PeriodStart    pgtype.Date `json:"periodStart"`
+	PeriodEnd      pgtype.Date `json:"periodEnd"`
+	SourceBudgetID *int64      `json:"sourceBudgetId"`
+}
+
+// WRITES
+func (q *Queries) CreateHouseholdBudget(ctx context.Context, arg CreateHouseholdBudgetParams) (Budget, error) {
+	row := q.db.QueryRow(ctx, createHouseholdBudget,
+		arg.HouseholdID,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.SourceBudgetID,
+	)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
 	)
 	return i, err
 }
@@ -195,6 +295,46 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const createUserBudget = `-- name: CreateUserBudget :one
+INSERT INTO budget (household_id, user_id, period_start, period_end, source_budget_id)
+VALUES (
+    NULL,
+    $1::BIGINT,
+    $2::DATE,
+    $3::DATE,
+    $4::BIGINT
+)
+RETURNING id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id
+`
+
+type CreateUserBudgetParams struct {
+	UserID         int64       `json:"userId"`
+	PeriodStart    pgtype.Date `json:"periodStart"`
+	PeriodEnd      pgtype.Date `json:"periodEnd"`
+	SourceBudgetID *int64      `json:"sourceBudgetId"`
+}
+
+func (q *Queries) CreateUserBudget(ctx context.Context, arg CreateUserBudgetParams) (Budget, error) {
+	row := q.db.QueryRow(ctx, createUserBudget,
+		arg.UserID,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.SourceBudgetID,
+	)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
+	)
+	return i, err
+}
+
 const deactivateCategory = `-- name: DeactivateCategory :one
 UPDATE category
 SET is_active = false,
@@ -216,6 +356,26 @@ func (q *Queries) DeactivateCategory(ctx context.Context, code string) (Category
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteBudgetLine = `-- name: DeleteBudgetLine :exec
+DELETE FROM budget_line
+WHERE id = $1::BIGINT
+`
+
+func (q *Queries) DeleteBudgetLine(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteBudgetLine, id)
+	return err
+}
+
+const deleteBudgetLineCategories = `-- name: DeleteBudgetLineCategories :exec
+DELETE FROM budget_line_category
+WHERE budget_line_id = $1::BIGINT
+`
+
+func (q *Queries) DeleteBudgetLineCategories(ctx context.Context, budgetLineID int64) error {
+	_, err := q.db.Exec(ctx, deleteBudgetLineCategories, budgetLineID)
+	return err
 }
 
 const getActiveCategoryByCode = `-- name: GetActiveCategoryByCode :one
@@ -281,6 +441,47 @@ func (q *Queries) GetActiveSessionBySourceId(ctx context.Context, sourceID strin
 	return i, err
 }
 
+const getBudgetById = `-- name: GetBudgetById :one
+SELECT id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id FROM budget
+WHERE id = $1::BIGINT
+`
+
+func (q *Queries) GetBudgetById(ctx context.Context, id int64) (Budget, error) {
+	row := q.db.QueryRow(ctx, getBudgetById, id)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
+	)
+	return i, err
+}
+
+const getBudgetLineById = `-- name: GetBudgetLineById :one
+SELECT id, budget_id, name, allocation_amount, sort_order, created_at, updated_at FROM budget_line
+WHERE id = $1::BIGINT
+`
+
+func (q *Queries) GetBudgetLineById(ctx context.Context, id int64) (BudgetLine, error) {
+	row := q.db.QueryRow(ctx, getBudgetLineById, id)
+	var i BudgetLine
+	err := row.Scan(
+		&i.ID,
+		&i.BudgetID,
+		&i.Name,
+		&i.AllocationAmount,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getCategoryByCode = `-- name: GetCategoryByCode :one
 SELECT id, code, name, description, is_active, created_at, updated_at FROM category
 WHERE code = $1
@@ -317,6 +518,39 @@ func (q *Queries) GetCategoryById(ctx context.Context, id int64) (Category, erro
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getHouseholdBudgetByPeriod = `-- name: GetHouseholdBudgetByPeriod :one
+
+SELECT id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id FROM budget
+WHERE household_id = $1::BIGINT
+  AND user_id IS NULL
+  AND period_start = $2::DATE
+  AND period_end = $3::DATE
+`
+
+type GetHouseholdBudgetByPeriodParams struct {
+	HouseholdID int64       `json:"householdId"`
+	PeriodStart pgtype.Date `json:"periodStart"`
+	PeriodEnd   pgtype.Date `json:"periodEnd"`
+}
+
+// ******************* budget *******************
+// READS
+func (q *Queries) GetHouseholdBudgetByPeriod(ctx context.Context, arg GetHouseholdBudgetByPeriodParams) (Budget, error) {
+	row := q.db.QueryRow(ctx, getHouseholdBudgetByPeriod, arg.HouseholdID, arg.PeriodStart, arg.PeriodEnd)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
 	)
 	return i, err
 }
@@ -417,6 +651,79 @@ func (q *Queries) GetIdByTransactionId(ctx context.Context, transactionID string
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getLatestPriorHouseholdBudget = `-- name: GetLatestPriorHouseholdBudget :one
+SELECT id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id FROM budget
+WHERE household_id = $1::BIGINT
+  AND user_id IS NULL
+  AND period_start < $2::DATE
+ORDER BY period_start DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestPriorHouseholdBudgetParams struct {
+	HouseholdID int64       `json:"householdId"`
+	PeriodStart pgtype.Date `json:"periodStart"`
+}
+
+func (q *Queries) GetLatestPriorHouseholdBudget(ctx context.Context, arg GetLatestPriorHouseholdBudgetParams) (Budget, error) {
+	row := q.db.QueryRow(ctx, getLatestPriorHouseholdBudget, arg.HouseholdID, arg.PeriodStart)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
+	)
+	return i, err
+}
+
+const getLatestPriorUserBudget = `-- name: GetLatestPriorUserBudget :one
+SELECT id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id FROM budget
+WHERE user_id = $1::BIGINT
+  AND household_id IS NULL
+  AND period_start < $2::DATE
+ORDER BY period_start DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestPriorUserBudgetParams struct {
+	UserID      int64       `json:"userId"`
+	PeriodStart pgtype.Date `json:"periodStart"`
+}
+
+func (q *Queries) GetLatestPriorUserBudget(ctx context.Context, arg GetLatestPriorUserBudgetParams) (Budget, error) {
+	row := q.db.QueryRow(ctx, getLatestPriorUserBudget, arg.UserID, arg.PeriodStart)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
+	)
+	return i, err
+}
+
+const getMaxBudgetLineSortOrder = `-- name: GetMaxBudgetLineSortOrder :one
+SELECT COALESCE(MAX(sort_order), 0)::INTEGER AS sort_order
+FROM budget_line
+WHERE budget_id = $1::BIGINT
+`
+
+func (q *Queries) GetMaxBudgetLineSortOrder(ctx context.Context, budgetID int64) (int32, error) {
+	row := q.db.QueryRow(ctx, getMaxBudgetLineSortOrder, budgetID)
+	var sort_order int32
+	err := row.Scan(&sort_order)
+	return sort_order, err
 }
 
 const getTableAndColumnMetadata = `-- name: GetTableAndColumnMetadata :many
@@ -743,6 +1050,36 @@ func (q *Queries) GetTransactionsByIdWithDetails(ctx context.Context, arg GetTra
 	return items, nil
 }
 
+const getUserBudgetByPeriod = `-- name: GetUserBudgetByPeriod :one
+SELECT id, user_id, household_id, created_at, updated_at, period_start, period_end, source_budget_id FROM budget
+WHERE user_id = $1::BIGINT
+  AND household_id IS NULL
+  AND period_start = $2::DATE
+  AND period_end = $3::DATE
+`
+
+type GetUserBudgetByPeriodParams struct {
+	UserID      int64       `json:"userId"`
+	PeriodStart pgtype.Date `json:"periodStart"`
+	PeriodEnd   pgtype.Date `json:"periodEnd"`
+}
+
+func (q *Queries) GetUserBudgetByPeriod(ctx context.Context, arg GetUserBudgetByPeriodParams) (Budget, error) {
+	row := q.db.QueryRow(ctx, getUserBudgetByPeriod, arg.UserID, arg.PeriodStart, arg.PeriodEnd)
+	var i Budget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.HouseholdID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+		&i.SourceBudgetID,
+	)
+	return i, err
+}
+
 const getUserByDiscordAndHouseholdId = `-- name: GetUserByDiscordAndHouseholdId :one
 SELECT u.id, u.discord_id, u.name, u.created_at, u.updated_at, u.telegram_id, u.phone_number, u.whatsapp_id FROM users u
 JOIN household_user hu on hu.user_id = u.id
@@ -904,6 +1241,151 @@ func (q *Queries) GetUserDetailsByDiscordId(ctx context.Context, discordID *stri
 		&i.Household.UpdatedAt,
 	)
 	return i, err
+}
+
+const listBudgetLineCategories = `-- name: ListBudgetLineCategories :many
+SELECT
+    blc.budget_id,
+    blc.budget_line_id,
+    blc.category_id,
+    c.code AS category_code,
+    c.name AS category_name
+FROM budget_line_category blc
+JOIN category c ON c.id = blc.category_id
+WHERE blc.budget_id = $1::BIGINT
+ORDER BY blc.budget_line_id ASC, c.name ASC, c.id ASC
+`
+
+type ListBudgetLineCategoriesRow struct {
+	BudgetID     int64  `json:"budgetId"`
+	BudgetLineID int64  `json:"budgetLineId"`
+	CategoryID   int64  `json:"categoryId"`
+	CategoryCode string `json:"categoryCode"`
+	CategoryName string `json:"categoryName"`
+}
+
+func (q *Queries) ListBudgetLineCategories(ctx context.Context, budgetID int64) ([]ListBudgetLineCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listBudgetLineCategories, budgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBudgetLineCategoriesRow
+	for rows.Next() {
+		var i ListBudgetLineCategoriesRow
+		if err := rows.Scan(
+			&i.BudgetID,
+			&i.BudgetLineID,
+			&i.CategoryID,
+			&i.CategoryCode,
+			&i.CategoryName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBudgetLines = `-- name: ListBudgetLines :many
+SELECT id, budget_id, name, allocation_amount, sort_order, created_at, updated_at FROM budget_line
+WHERE budget_id = $1::BIGINT
+ORDER BY sort_order ASC, id ASC
+`
+
+func (q *Queries) ListBudgetLines(ctx context.Context, budgetID int64) ([]BudgetLine, error) {
+	rows, err := q.db.Query(ctx, listBudgetLines, budgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BudgetLine
+	for rows.Next() {
+		var i BudgetLine
+		if err := rows.Scan(
+			&i.ID,
+			&i.BudgetID,
+			&i.Name,
+			&i.AllocationAmount,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBudgetReportLines = `-- name: ListBudgetReportLines :many
+SELECT
+    bl.id,
+    bl.budget_id,
+    bl.name,
+    bl.allocation_amount,
+    ROUND(COALESCE(SUM(t.amount), 0)::NUMERIC, 2) AS actual_amount,
+    bl.sort_order
+FROM budget b
+JOIN budget_line bl ON bl.budget_id = b.id
+LEFT JOIN budget_line_category blc
+    ON blc.budget_id = b.id
+   AND blc.budget_line_id = bl.id
+LEFT JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.category_id = blc.category_id
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+   )
+WHERE b.id = $1::BIGINT
+GROUP BY bl.id, bl.budget_id, bl.name, bl.allocation_amount, bl.sort_order
+ORDER BY bl.sort_order ASC, bl.id ASC
+`
+
+type ListBudgetReportLinesRow struct {
+	ID               int64          `json:"id"`
+	BudgetID         int64          `json:"budgetId"`
+	Name             string         `json:"name"`
+	AllocationAmount pgtype.Numeric `json:"allocationAmount"`
+	ActualAmount     pgtype.Numeric `json:"actualAmount"`
+	SortOrder        int32          `json:"sortOrder"`
+}
+
+func (q *Queries) ListBudgetReportLines(ctx context.Context, budgetID int64) ([]ListBudgetReportLinesRow, error) {
+	rows, err := q.db.Query(ctx, listBudgetReportLines, budgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBudgetReportLinesRow
+	for rows.Next() {
+		var i ListBudgetReportLinesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BudgetID,
+			&i.Name,
+			&i.AllocationAmount,
+			&i.ActualAmount,
+			&i.SortOrder,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listCategories = `-- name: ListCategories :many
@@ -1320,6 +1802,83 @@ func (q *Queries) SoftDeleteTransactionsById(ctx context.Context, arg SoftDelete
 		return nil, err
 	}
 	return items, nil
+}
+
+const sumUncategorizedBudgetTransactions = `-- name: SumUncategorizedBudgetTransactions :one
+SELECT ROUND(COALESCE(SUM(t.amount), 0)::NUMERIC, 2) AS actual_amount
+FROM budget b
+LEFT JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.category_id IS NULL
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id)
+   )
+WHERE b.id = $1::BIGINT
+GROUP BY b.id
+`
+
+func (q *Queries) SumUncategorizedBudgetTransactions(ctx context.Context, budgetID int64) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, sumUncategorizedBudgetTransactions, budgetID)
+	var actual_amount pgtype.Numeric
+	err := row.Scan(&actual_amount)
+	return actual_amount, err
+}
+
+const updateBudgetLine = `-- name: UpdateBudgetLine :one
+UPDATE budget_line
+SET
+    name = CASE
+        WHEN $1::bool THEN $2::VARCHAR
+        ELSE name
+    END,
+    allocation_amount = CASE
+        WHEN $3::bool THEN $4::NUMERIC
+        ELSE allocation_amount
+    END,
+    sort_order = CASE
+        WHEN $5::bool THEN $6::INTEGER
+        ELSE sort_order
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $7::BIGINT
+RETURNING id, budget_id, name, allocation_amount, sort_order, created_at, updated_at
+`
+
+type UpdateBudgetLineParams struct {
+	SetName             bool           `json:"setName"`
+	Name                string         `json:"name"`
+	SetAllocationAmount bool           `json:"setAllocationAmount"`
+	AllocationAmount    pgtype.Numeric `json:"allocationAmount"`
+	SetSortOrder        bool           `json:"setSortOrder"`
+	SortOrder           int32          `json:"sortOrder"`
+	ID                  int64          `json:"id"`
+}
+
+func (q *Queries) UpdateBudgetLine(ctx context.Context, arg UpdateBudgetLineParams) (BudgetLine, error) {
+	row := q.db.QueryRow(ctx, updateBudgetLine,
+		arg.SetName,
+		arg.Name,
+		arg.SetAllocationAmount,
+		arg.AllocationAmount,
+		arg.SetSortOrder,
+		arg.SortOrder,
+		arg.ID,
+	)
+	var i BudgetLine
+	err := row.Scan(
+		&i.ID,
+		&i.BudgetID,
+		&i.Name,
+		&i.AllocationAmount,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateCategory = `-- name: UpdateCategory :one

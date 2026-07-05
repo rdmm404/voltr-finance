@@ -15,10 +15,29 @@ type Budget struct {
 	// Optional reference to a specific user for personal budgets.
 	UserID *int64 `json:"userId"`
 	// Optional reference to a household for shared group budgets.
-	HouseholdID *int64             `json:"householdId"`
-	Type        string             `json:"type"`
-	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
-	UpdatedAt   pgtype.Timestamptz `json:"updatedAt"`
+	HouseholdID    *int64             `json:"householdId"`
+	CreatedAt      pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt      pgtype.Timestamptz `json:"updatedAt"`
+	PeriodStart    pgtype.Date        `json:"periodStart"`
+	PeriodEnd      pgtype.Date        `json:"periodEnd"`
+	SourceBudgetID *int64             `json:"sourceBudgetId"`
+}
+
+type BudgetLine struct {
+	ID               int64              `json:"id"`
+	BudgetID         int64              `json:"budgetId"`
+	Name             string             `json:"name"`
+	AllocationAmount pgtype.Numeric     `json:"allocationAmount"`
+	SortOrder        int32              `json:"sortOrder"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
+}
+
+type BudgetLineCategory struct {
+	BudgetID     int64              `json:"budgetId"`
+	BudgetLineID int64              `json:"budgetLineId"`
+	CategoryID   int64              `json:"categoryId"`
+	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
 }
 
 type Category struct {

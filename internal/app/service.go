@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"rdmm404/voltr-finance/internal/database/sqlc"
 	"rdmm404/voltr-finance/internal/transaction"
 )
@@ -13,6 +17,7 @@ type Repository interface {
 	HouseholdRepository
 	TransactionRepository
 	CategoryRepository
+	BudgetRepository
 }
 
 type UserRepository interface {
@@ -50,6 +55,27 @@ type CategoryRepository interface {
 	DeactivateCategory(context.Context, string) (sqlc.Category, error)
 }
 
+type BudgetRepository interface {
+	GetHouseholdBudgetByPeriod(context.Context, sqlc.GetHouseholdBudgetByPeriodParams) (sqlc.Budget, error)
+	GetUserBudgetByPeriod(context.Context, sqlc.GetUserBudgetByPeriodParams) (sqlc.Budget, error)
+	GetBudgetById(context.Context, int64) (sqlc.Budget, error)
+	GetLatestPriorHouseholdBudget(context.Context, sqlc.GetLatestPriorHouseholdBudgetParams) (sqlc.Budget, error)
+	GetLatestPriorUserBudget(context.Context, sqlc.GetLatestPriorUserBudgetParams) (sqlc.Budget, error)
+	ListBudgetLines(context.Context, int64) ([]sqlc.BudgetLine, error)
+	ListBudgetLineCategories(context.Context, int64) ([]sqlc.ListBudgetLineCategoriesRow, error)
+	GetBudgetLineById(context.Context, int64) (sqlc.BudgetLine, error)
+	GetMaxBudgetLineSortOrder(context.Context, int64) (int32, error)
+	CreateHouseholdBudget(context.Context, sqlc.CreateHouseholdBudgetParams) (sqlc.Budget, error)
+	CreateUserBudget(context.Context, sqlc.CreateUserBudgetParams) (sqlc.Budget, error)
+	CreateBudgetLine(context.Context, sqlc.CreateBudgetLineParams) (sqlc.BudgetLine, error)
+	UpdateBudgetLine(context.Context, sqlc.UpdateBudgetLineParams) (sqlc.BudgetLine, error)
+	DeleteBudgetLine(context.Context, int64) error
+	DeleteBudgetLineCategories(context.Context, int64) error
+	CreateBudgetLineCategory(context.Context, sqlc.CreateBudgetLineCategoryParams) error
+	ListBudgetReportLines(context.Context, int64) ([]sqlc.ListBudgetReportLinesRow, error)
+	SumUncategorizedBudgetTransactions(context.Context, int64) (pgtype.Numeric, error)
+}
+
 type TransactionService interface {
 	GetTransactionsById(context.Context, []int64) (map[int64]sqlc.Transaction, error)
 	SaveTransactions(context.Context, []sqlc.CreateTransactionParams) transaction.TransactionResult
@@ -58,13 +84,47 @@ type TransactionService interface {
 	RestoreTransactionsById(context.Context, []int64, int64) transaction.TransactionResult
 }
 
+type Transactor interface {
+	WithinTx(ctx context.Context, fn func(Repository) error) error
+}
+
+type SQLCTransactor struct {
+	pool    *pgxpool.Pool
+	queries *sqlc.Queries
+}
+
+func NewSQLCTransactor(pool *pgxpool.Pool, queries *sqlc.Queries) *SQLCTransactor {
+	return &SQLCTransactor{pool: pool, queries: queries}
+}
+
+func (t *SQLCTransactor) WithinTx(ctx context.Context, fn func(Repository) error) error {
+	tx, err := t.pool.Begin(ctx)
+	if err != nil {
+		return mapBudgetError(err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := fn(t.queries.WithTx(tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return mapBudgetError(err)
+	}
+	return nil
+}
+
 type Service struct {
 	repo         Repository
 	transactions TransactionService
+	transactor   Transactor
 }
 
 func NewService(repo Repository, transactions TransactionService) *Service {
 	return &Service{repo: repo, transactions: transactions}
+}
+
+func NewServiceWithTransactor(repo Repository, transactions TransactionService, transactor Transactor) *Service {
+	return &Service{repo: repo, transactions: transactions, transactor: transactor}
 }
 
 func mapUserError(err error) error {

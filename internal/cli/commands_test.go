@@ -179,6 +179,90 @@ func TestKongHouseholdsGetByName(t *testing.T) {
 	}
 }
 
+func TestKongBudgetsGetHouseholdCreate(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"budgets", "get",
+		"--household-id", "1",
+		"--month", "2026-05",
+		"--create",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.getMonthlyBudget.HouseholdID == nil || *svc.getMonthlyBudget.HouseholdID != 1 {
+		t.Fatalf("HouseholdID = %v, want 1", svc.getMonthlyBudget.HouseholdID)
+	}
+	if svc.getMonthlyBudget.Year != 2026 || svc.getMonthlyBudget.Month != 5 || !svc.getMonthlyBudget.CreateIfMissing {
+		t.Fatalf("getMonthlyBudget = %+v, want May 2026 create", svc.getMonthlyBudget)
+	}
+}
+
+func TestKongBudgetsReport(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"budgets", "report", "12",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.getBudgetReportID != 12 {
+		t.Fatalf("report id = %d, want 12", svc.getBudgetReportID)
+	}
+}
+
+func TestKongBudgetLinesAdd(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"budgets", "lines", "add",
+		"--budget-id", "12",
+		"--name", "Groceries",
+		"--amount", "800.00",
+		"--categories", "groceries,costco",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.createBudgetLine.BudgetID != 12 || svc.createBudgetLine.Name != "Groceries" {
+		t.Fatalf("createBudgetLine = %+v, want budget 12 groceries", svc.createBudgetLine)
+	}
+	if len(svc.createBudgetLine.CategoryCodes) != 2 || svc.createBudgetLine.CategoryCodes[1] != "costco" {
+		t.Fatalf("CategoryCodes = %v, want groceries,costco", svc.createBudgetLine.CategoryCodes)
+	}
+}
+
+func TestKongBudgetLinesUpdateUsesPositionalLineID(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"budgets", "lines", "update", "44",
+		"--amount", "900.00",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.updateBudgetLine.LineID != 44 || svc.updateBudgetLine.AllocationAmount == nil || *svc.updateBudgetLine.AllocationAmount != "900.00" {
+		t.Fatalf("updateBudgetLine = %+v, want line 44 amount 900.00", svc.updateBudgetLine)
+	}
+}
+
+func TestKongBudgetLinesDeleteUsesPositionalLineID(t *testing.T) {
+	svc := &fakeAppService{}
+	code := Run(context.Background(), []string{
+		"budgets", "lines", "delete", "44",
+	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if svc.deleteBudgetLineID != 44 {
+		t.Fatalf("deleteBudgetLineID = %d, want 44", svc.deleteBudgetLineID)
+	}
+}
+
 func TestKongSubcommandHelpDoesNotPanicWithoutService(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
@@ -302,6 +386,11 @@ type fakeAppService struct {
 	listCategories         app.ListCategoriesRequest
 	updateCategory         app.UpdateCategoryRequest
 	deactivateCategoryCode string
+	getMonthlyBudget       app.GetMonthlyBudgetRequest
+	createBudgetLine       app.CreateBudgetLineRequest
+	updateBudgetLine       app.UpdateBudgetLineRequest
+	deleteBudgetLineID     int64
+	getBudgetReportID      int64
 }
 
 func (f *fakeAppService) CreateTransaction(_ context.Context, req app.CreateTransactionRequest) app.WriteResult {
@@ -407,4 +496,33 @@ func (f *fakeAppService) UpdateCategory(_ context.Context, req app.UpdateCategor
 func (f *fakeAppService) DeactivateCategory(_ context.Context, code string) (app.CategoryDTO, error) {
 	f.deactivateCategoryCode = code
 	return app.CategoryDTO{ID: 1, Code: code, Name: "Groceries", IsActive: false}, nil
+}
+
+func (f *fakeAppService) GetMonthlyBudget(_ context.Context, req app.GetMonthlyBudgetRequest) (app.BudgetDTO, error) {
+	f.getMonthlyBudget = req
+	return app.BudgetDTO{ID: 12}, nil
+}
+
+func (f *fakeAppService) CreateBudgetLine(_ context.Context, req app.CreateBudgetLineRequest) (app.BudgetLineDTO, error) {
+	f.createBudgetLine = req
+	return app.BudgetLineDTO{ID: 44, BudgetID: req.BudgetID, Name: req.Name, AllocationAmount: req.AllocationAmount}, nil
+}
+
+func (f *fakeAppService) UpdateBudgetLine(_ context.Context, req app.UpdateBudgetLineRequest) (app.BudgetLineDTO, error) {
+	f.updateBudgetLine = req
+	amount := ""
+	if req.AllocationAmount != nil {
+		amount = *req.AllocationAmount
+	}
+	return app.BudgetLineDTO{ID: req.LineID, AllocationAmount: amount}, nil
+}
+
+func (f *fakeAppService) DeleteBudgetLine(_ context.Context, id int64) error {
+	f.deleteBudgetLineID = id
+	return nil
+}
+
+func (f *fakeAppService) GetBudgetReport(_ context.Context, id int64) (app.BudgetReportDTO, error) {
+	f.getBudgetReportID = id
+	return app.BudgetReportDTO{}, nil
 }
