@@ -1,6 +1,6 @@
 # Voltr Finance CLI
 
-`voltr-finance` is a host-installed CLI for direct Postgres-backed finance operations.
+`voltr-finance` is a host-installed CLI for direct Postgres-backed finance operations. Commands emit JSON unless a command explicitly supports another format.
 
 ## Install
 
@@ -37,76 +37,268 @@ Sample `config.json`:
 
 The connection uses the `transactions` search path. `poolSize` defaults to `5` when omitted or zero.
 
+Examples below use:
+
+```bash
+VOLTR="/tmp/voltr-finance --config /tmp/voltr-finance.json"
+```
+
 ## Transactions
+
+Transaction author selectors are `--author-id`, `--author-discord-id`, `--author-telegram-id`, `--author-phone-number`, and `--author-whatsapp-id`. Creates require exactly one author selector. Updates require exactly one only when changing the author.
 
 Create a transaction:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions create \
+$VOLTR transactions create \
   --amount 42.50 \
   --transaction-date 2026-05-05T14:30:00-04:00 \
   --description "Groceries" \
   --notes "Costco" \
+  --category groceries \
   --author-telegram-id "123456789" \
   --household-id 1
+```
+
+For negative amounts, use `--amount=-12.34` so the value is not parsed as a flag.
+
+Create transactions in bulk from a file, or omit `--input` to read from stdin:
+
+```bash
+$VOLTR transactions create-bulk --input /tmp/transactions-create.json
+```
+
+Expected JSON shape:
+
+```json
+{
+  "transactions": [
+    {
+      "amount": 42.5,
+      "transactionDate": "2026-05-05T14:30:00-04:00",
+      "description": "Groceries",
+      "notes": "Costco",
+      "categoryCode": "groceries",
+      "householdId": 1,
+      "author": { "TelegramID": "123456789" }
+    }
+  ]
+}
+```
+
+Get transactions by ID:
+
+```bash
+$VOLTR transactions get --ids 101,102,103
+$VOLTR transactions get --ids 101 --format compact
+$VOLTR transactions get --ids 101 --include-deleted
 ```
 
 List matching transactions as JSON:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions list \
+$VOLTR transactions list \
   --from-date 2026-05-01T00:00:00-04:00 \
   --to-date 2026-05-31T23:59:59-04:00 \
   --search "Groceries" \
   --sort transaction_date \
-  --order desc
+  --order desc \
+  --limit 100 \
+  --offset 0
 ```
 
 List matching transactions as CSV:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions list \
+$VOLTR transactions list \
   --format csv \
   --household-id 1
+```
+
+Useful list filters:
+
+- `--author-id INT-64`
+- `--household-id INT-64`
+- `--from-date RFC3339`
+- `--to-date RFC3339`
+- `--search STRING`
+- `--include-deleted`
+- `--only-deleted`
+
+Sort fields are `transaction_date`, `created_at`, `amount`, and `id`. Sort order is `asc` or `desc`.
+
+Update one transaction:
+
+```bash
+$VOLTR transactions update \
+  --id 101 \
+  --amount 45.00 \
+  --description "Updated groceries" \
+  --category groceries
+```
+
+Clear nullable fields:
+
+```bash
+$VOLTR transactions update \
+  --id 101 \
+  --clear-description \
+  --clear-notes \
+  --clear-category \
+  --clear-household-id
+```
+
+Update transactions in bulk from a file, or omit `--input` to read from stdin:
+
+```bash
+$VOLTR transactions update-bulk --input /tmp/transactions-update.json
+```
+
+Expected JSON shape:
+
+```json
+{
+  "transactions": [
+    {
+      "id": 101,
+      "amount": 45.0,
+      "categoryCode": "groceries"
+    }
+  ]
+}
 ```
 
 Soft-delete transactions:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions delete \
+$VOLTR transactions delete \
   --ids 123,124 \
   --reason "duplicate import" \
   --deleted-by-user-id 1
 ```
 
-## Users
-
-Resolve a user by provider identity:
+Restore soft-deleted transactions:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json users resolve \
+$VOLTR transactions restore \
+  --ids 123,124 \
+  --restored-by-user-id 1
+```
+
+## Users
+
+Create a user:
+
+```bash
+$VOLTR users create \
+  --name "Rafael" \
   --telegram-id "123456789"
 ```
 
-Other supported identity selectors are `--author-id`, `--discord-id`, `--phone-number`, and `--whatsapp-id`.
+Supported external identity flags are `--discord-id`, `--telegram-id`, `--phone-number`, and `--whatsapp-id`.
+
+Update a user:
+
+```bash
+$VOLTR users update \
+  --id 4 \
+  --name "Rafael M" \
+  --discord-id "987654321"
+```
+
+Clear external identities:
+
+```bash
+$VOLTR users update \
+  --id 4 \
+  --clear-discord-id \
+  --clear-telegram-id \
+  --clear-phone-number \
+  --clear-whatsapp-id
+```
+
+Get or list users:
+
+```bash
+$VOLTR users get --id 4
+$VOLTR users list
+```
+
+Resolve a user by exactly one identity selector:
+
+```bash
+$VOLTR users resolve --telegram-id "123456789"
+$VOLTR users resolve --author-id 4
+```
+
+Other supported resolve selectors are `--discord-id`, `--phone-number`, and `--whatsapp-id`.
 
 ## Households
 
-Look up a household by name:
+Look up a household by exactly one selector:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json households get \
-  --name "Home"
+$VOLTR households get --name "Home"
+$VOLTR households get --id 1
+$VOLTR households get --guild-id "1234567890"
 ```
 
-The returned `id` can be passed to transaction commands as `--household-id`.
+List households and household users:
+
+```bash
+$VOLTR households list
+$VOLTR households users --household-id 1
+```
+
+A household `id` can be passed to transaction commands as `--household-id` and to household budget commands as `--household-id`.
+
+## Categories
+
+Create a category. If `--code` is omitted, the app generates a lowercase slug from the name.
+
+```bash
+$VOLTR categories create "Groceries" \
+  --code groceries \
+  --description "Food and household supplies"
+```
+
+List active categories, or include inactive ones:
+
+```bash
+$VOLTR categories list
+$VOLTR categories list --include-inactive
+```
+
+Rename a category by code:
+
+```bash
+$VOLTR categories rename groceries "Groceries and Supplies"
+```
+
+Deactivate a category by code:
+
+```bash
+$VOLTR categories deactivate groceries
+```
+
+Category codes can be passed to transaction commands as `--category` and to budget line commands as comma-separated `--categories` values.
 
 ## Budgets
+
+Budgets are monthly and owned by exactly one household or user. `--month` uses `YYYY-MM`.
+
+Get an existing household monthly budget:
+
+```bash
+$VOLTR budgets get \
+  --household-id 1 \
+  --month 2026-05
+```
 
 Get or create a household monthly budget. When `--create` is provided and the month does not exist, the app copies the latest prior budget for the same owner. If no prior budget exists, it creates an empty budget.
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json budgets get \
+$VOLTR budgets get \
   --household-id 1 \
   --month 2026-05 \
   --create
@@ -115,40 +307,48 @@ Get or create a household monthly budget. When `--create` is provided and the mo
 Get or create a personal monthly budget:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json budgets get \
+$VOLTR budgets get \
   --user-id 4 \
   --month 2026-05 \
   --create
 ```
 
-Add a budget line. Category inputs use category codes:
+Add a budget line. Amounts are decimal strings with at most two decimal places. Category inputs use comma-separated category codes. A category can appear on only one line within the same budget.
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json budgets lines add \
+$VOLTR budgets lines add \
   --budget-id 12 \
   --name "Groceries" \
   --amount 800.00 \
-  --categories groceries,costco
+  --categories groceries,costco \
+  --sort-order 10
 ```
 
 Update a budget line by line ID:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json budgets lines update 44 \
-  --amount 900.00
+$VOLTR budgets lines update 44 \
+  --name "Food" \
+  --amount 900.00 \
+  --categories groceries,restaurants \
+  --sort-order 20
 ```
+
+Passing `--categories` on update replaces the line's category mappings. Passing `--categories ""` clears them.
 
 Delete a budget line by line ID:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json budgets lines delete 44
+$VOLTR budgets lines delete 44
 ```
 
 Show budget actuals:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json budgets report 12
+$VOLTR budgets report 12
 ```
+
+The report returns budget metadata, report lines, and totals. Line actuals are derived from categorized transactions in the budget period. Transactions without categories are reported separately in `totals.uncategorizedActualAmount`.
 
 ## Nanobot Mapping
 
@@ -157,7 +357,7 @@ Map Nanobot sender metadata to exactly one CLI identity flag.
 Discord:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions create \
+$VOLTR transactions create \
   --amount 12.99 \
   --transaction-date 2026-05-05T14:30:00-04:00 \
   --description "Discord purchase" \
@@ -168,7 +368,7 @@ Discord:
 Telegram:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json users resolve \
+$VOLTR users resolve \
   --telegram-id "${metadata_user_id:-$sender_id}"
 ```
 
@@ -177,7 +377,7 @@ When Nanobot falls back to sender IDs like `123456789|rafael`, the application n
 WhatsApp phone number:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions create \
+$VOLTR transactions create \
   --amount 18.00 \
   --transaction-date 2026-05-05T14:30:00-04:00 \
   --description "WhatsApp phone sender" \
@@ -188,7 +388,7 @@ WhatsApp phone number:
 WhatsApp LID/JID:
 
 ```bash
-/tmp/voltr-finance --config /tmp/voltr-finance.json transactions create \
+$VOLTR transactions create \
   --amount 18.00 \
   --transaction-date 2026-05-05T14:30:00-04:00 \
   --description "WhatsApp JID sender" \
