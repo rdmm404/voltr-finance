@@ -32,10 +32,10 @@
 
 ## 4. HTTP Server Foundation
 
-- [ ] 4.1 Implement strict standard-library JSON decoding and encoding helpers, path/query parsing, empty-array normalization, and the stable top-level error envelope.
-- [ ] 4.2 Implement centralized application-error-to-HTTP mapping for validation, not-found, conflict, and internal failures without leaking infrastructure details.
-- [ ] 4.3 Implement bearer API-key middleware using constant-time comparison, generic unauthorized responses, and tests proving keys are not returned or logged.
-- [ ] 4.4 Implement the standard-library server router, unauthenticated liveness route, authenticated `/v1` boundary, server timeouts, and method/not-found behavior.
+- [x] 4.1 Implement strict standard-library JSON decoding and encoding helpers, path/query parsing, empty-array normalization, and the stable top-level error envelope.
+- [x] 4.2 Implement centralized application-error-to-HTTP mapping for validation, not-found, conflict, and internal failures without leaking infrastructure details.
+- [x] 4.3 Implement bearer API-key middleware using constant-time comparison, generic unauthorized responses, and tests proving keys are not returned or logged.
+- [x] 4.4 Implement the standard-library server router, unauthenticated liveness route, authenticated `/v1` boundary, server timeouts, and method/not-found behavior.
 
 ## 5. Finance REST Handlers
 
