@@ -291,6 +291,66 @@ func TestDeleteTransactionsReturnsDeletedIDs(t *testing.T) {
 	}
 }
 
+func TestBulkCreatePreservesOriginalErrorIndexesAndDeterministicIDs(t *testing.T) {
+	repo := &fakeRepo{userByID: sqlc.User{ID: 7, Name: "Rafael"}}
+	txSvc := &fakeTransactionService{saveResult: transaction.TransactionResult{
+		Success: map[int64]*sqlc.Transaction{103: {ID: 103}, 101: {ID: 101}},
+		Errors:  []transaction.TransactionError{{Index: 1, Err: transaction.ErrDuplicateTransaction}},
+	}}
+	result := NewService(repo, txSvc).CreateTransactions(context.Background(), BulkCreateTransactionsRequest{
+		Transactions: []CreateTransactionRequest{
+			{Amount: 10, TransactionDate: time.Now(), Author: IdentitySelector{AuthorID: intPtr(7)}, HouseholdID: intPtr(1)},
+			{Amount: 20, TransactionDate: time.Now(), HouseholdID: intPtr(1)},
+			{Amount: 30, TransactionDate: time.Now(), Author: IdentitySelector{AuthorID: intPtr(7)}, HouseholdID: intPtr(1)},
+			{Amount: 40, TransactionDate: time.Now(), Author: IdentitySelector{AuthorID: intPtr(7)}, HouseholdID: intPtr(1)},
+		},
+	})
+
+	if len(result.Errors) != 2 || result.Errors[0].Index != 1 || result.Errors[1].Index != 2 {
+		t.Fatalf("Errors = %+v, want indexes 1 and 2 in ascending order", result.Errors)
+	}
+	if got, want := result.CreatedIDs, []int64{101, 103}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("CreatedIDs = %v, want %v", got, want)
+	}
+}
+
+func TestDeleteTransactionsReportsMissingIDsByOriginalIndex(t *testing.T) {
+	txSvc := &fakeTransactionService{deleteResult: transaction.TransactionResult{
+		Success: map[int64]*sqlc.Transaction{103: {ID: 103}, 101: {ID: 101}},
+		Errors:  []transaction.TransactionError{{Index: 1, ID: 999, Err: transaction.ErrTransactionNotFound}},
+	}}
+	result := NewService(&fakeRepo{}, txSvc).DeleteTransactions(context.Background(), DeleteTransactionsRequest{
+		IDs: []int64{103, 999, 101}, DeletedByUserID: 7,
+	})
+
+	if got, want := result.DeletedIDs, []int64{103, 101}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("DeletedIDs = %v, want input order %v", got, want)
+	}
+	if len(result.Errors) != 1 || result.Errors[0].Index != 1 || result.Errors[0].ID != 999 || result.Errors[0].Code != CodeTransactionNotFound {
+		t.Fatalf("Errors = %+v, want missing id 999 at index 1", result.Errors)
+	}
+}
+
+func TestRestoreTransactionsReportsMissingIDsAndOrdersErrors(t *testing.T) {
+	txSvc := &fakeTransactionService{restoreResult: transaction.TransactionResult{
+		Success: map[int64]*sqlc.Transaction{202: {ID: 202}},
+		Errors: []transaction.TransactionError{
+			{Index: 2, ID: 404, Err: transaction.ErrTransactionNotFound},
+			{Index: 0, ID: 303, Err: transaction.ErrTransactionNotFound},
+		},
+	}}
+	result := NewService(&fakeRepo{}, txSvc).RestoreTransactions(context.Background(), RestoreTransactionsRequest{
+		IDs: []int64{303, 202, 404}, RestoredByUserID: 7,
+	})
+
+	if len(result.RestoredIDs) != 1 || result.RestoredIDs[0] != 202 {
+		t.Fatalf("RestoredIDs = %v, want [202]", result.RestoredIDs)
+	}
+	if len(result.Errors) != 2 || result.Errors[0].Index != 0 || result.Errors[1].Index != 2 {
+		t.Fatalf("Errors = %+v, want indexes 0 and 2 in ascending order", result.Errors)
+	}
+}
+
 func intPtr(value int64) *int64 {
 	return &value
 }

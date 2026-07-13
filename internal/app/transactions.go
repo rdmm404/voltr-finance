@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"rdmm404/voltr-finance/internal/database/sqlc"
@@ -125,10 +126,9 @@ func (s *Service) CreateTransactions(ctx context.Context, req BulkCreateTransact
 	}
 
 	txResult := s.transactions.SaveTransactions(ctx, params)
-	for id := range txResult.Success {
-		result.CreatedIDs = append(result.CreatedIDs, id)
-	}
+	result.CreatedIDs = sortedTransactionIDs(txResult.Success)
 	result.Errors = append(result.Errors, mapTransactionErrors(txResult.Errors, indexMap)...)
+	sortWriteErrors(result.Errors)
 	return result
 }
 
@@ -152,10 +152,9 @@ func (s *Service) UpdateTransactions(ctx context.Context, req BulkUpdateTransact
 	}
 
 	txResult := s.transactions.UpdateTransactionsById(ctx, params)
-	for id := range txResult.Success {
-		result.UpdatedIDs = append(result.UpdatedIDs, id)
-	}
+	result.UpdatedIDs = sortedTransactionIDs(txResult.Success)
 	result.Errors = append(result.Errors, mapTransactionErrors(txResult.Errors, indexMap)...)
+	sortWriteErrors(result.Errors)
 	return result
 }
 
@@ -223,11 +222,9 @@ func (s *Service) DeleteTransactions(ctx context.Context, req DeleteTransactions
 		return WriteResult{Errors: []WriteError{writeError(0, 0, NewError(CodeValidationError, "deleted by user id is required", nil))}}
 	}
 	txResult := s.transactions.SoftDeleteTransactionsById(ctx, req.IDs, req.DeletedByUserID, req.Reason)
-	result := WriteResult{}
-	for id := range txResult.Success {
-		result.DeletedIDs = append(result.DeletedIDs, id)
-	}
+	result := WriteResult{DeletedIDs: successfulInputIDs(req.IDs, txResult.Success)}
 	result.Errors = append(result.Errors, mapTransactionErrors(txResult.Errors, nil)...)
+	sortWriteErrors(result.Errors)
 	return result
 }
 
@@ -239,11 +236,9 @@ func (s *Service) RestoreTransactions(ctx context.Context, req RestoreTransactio
 		return WriteResult{Errors: []WriteError{writeError(0, 0, NewError(CodeValidationError, "restored by user id is required", nil))}}
 	}
 	txResult := s.transactions.RestoreTransactionsById(ctx, req.IDs, req.RestoredByUserID)
-	result := WriteResult{}
-	for id := range txResult.Success {
-		result.RestoredIDs = append(result.RestoredIDs, id)
-	}
+	result := WriteResult{RestoredIDs: successfulInputIDs(req.IDs, txResult.Success)}
 	result.Errors = append(result.Errors, mapTransactionErrors(txResult.Errors, nil)...)
+	sortWriteErrors(result.Errors)
 	return result
 }
 
@@ -387,6 +382,29 @@ func mapTransactionErrors(errors []transaction.TransactionError, indexMap []int)
 		writeErrors = append(writeErrors, writeError(index, item.ID, mapTransactionError(item.Err)))
 	}
 	return writeErrors
+}
+
+func sortedTransactionIDs(success map[int64]*sqlc.Transaction) []int64 {
+	ids := make([]int64, 0, len(success))
+	for id := range success {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
+}
+
+func successfulInputIDs(ids []int64, success map[int64]*sqlc.Transaction) []int64 {
+	result := make([]int64, 0, len(success))
+	for _, id := range ids {
+		if _, ok := success[id]; ok {
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
+func sortWriteErrors(items []WriteError) {
+	sort.SliceStable(items, func(i, j int) bool { return items[i].Index < items[j].Index })
 }
 
 func writeError(index int, id int64, err error) WriteError {

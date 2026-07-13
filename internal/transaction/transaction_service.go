@@ -151,13 +151,16 @@ func (ts *TransactionService) SoftDeleteTransactionsById(ctx context.Context, id
 		Ids:             ids,
 	})
 	if err != nil {
-		result.Errors = append(result.Errors, TransactionError{Err: handleTransactionDbError(err)})
+		for i, id := range ids {
+			result.Errors = append(result.Errors, TransactionError{Index: i, ID: id, Err: handleTransactionDbError(err)})
+		}
 		return result
 	}
 	for i := range transactions {
 		trans := transactions[i]
 		result.Success[trans.ID] = &trans
 	}
+	appendMissingTransactionErrors(&result, ids)
 	return result
 }
 
@@ -166,14 +169,25 @@ func (ts *TransactionService) RestoreTransactionsById(ctx context.Context, ids [
 	result := TransactionResult{Success: make(map[int64]*sqlc.Transaction)}
 	transactions, err := ts.repository.RestoreTransactionsById(ctx, ids)
 	if err != nil {
-		result.Errors = append(result.Errors, TransactionError{Err: handleTransactionDbError(err)})
+		for i, id := range ids {
+			result.Errors = append(result.Errors, TransactionError{Index: i, ID: id, Err: handleTransactionDbError(err)})
+		}
 		return result
 	}
 	for i := range transactions {
 		trans := transactions[i]
 		result.Success[trans.ID] = &trans
 	}
+	appendMissingTransactionErrors(&result, ids)
 	return result
+}
+
+func appendMissingTransactionErrors(result *TransactionResult, ids []int64) {
+	for i, id := range ids {
+		if _, ok := result.Success[id]; !ok {
+			result.Errors = append(result.Errors, TransactionError{Index: i, ID: id, Err: ErrTransactionNotFound})
+		}
+	}
 }
 
 func handleTransactionDbError(err error) error {
