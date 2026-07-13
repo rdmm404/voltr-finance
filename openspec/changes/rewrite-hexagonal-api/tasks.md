@@ -117,4 +117,4 @@
 - [x] 13.3 Move line creation/update, category resolution/replacement, and automatic sort locking behind cohesive PostgreSQL adapter operations.
 - [x] 13.4 Move report input loading behind one repeatable-read `LoadReportSnapshot` adapter operation.
 - [x] 13.5 Rewrite budget unit tests around the higher-level port and retain validation, category-code, report, conflict-recovery, and empty-collection coverage.
-- [ ] 13.6 Update composition/integration wiring, remove the obsolete transactor, and run local plus CI verification.
+- [x] 13.6 Update composition/integration wiring, remove the obsolete transactor, and run local plus CI verification.
