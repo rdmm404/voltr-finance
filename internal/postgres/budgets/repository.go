@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,59 +18,258 @@ import (
 	"rdmm404/voltr-finance/internal/postgres"
 )
 
-type Repository struct{ queries *sqlc.Queries }
+// Repository owns all PostgreSQL mechanics needed by the cohesive budget port.
+type Repository struct{ pool *pgxpool.Pool }
 
-func NewRepository(queries *sqlc.Queries) *Repository { return &Repository{queries: queries} }
+func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
 func (r *Repository) FindMonthly(ctx context.Context, owner appbudgets.Owner, start, end time.Time) (appbudgets.Budget, error) {
+	return withTransaction(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *sqlc.Queries) (appbudgets.Budget, error) {
+		budget, err := findMonthly(ctx, q, owner, start, end)
+		if err != nil {
+			return appbudgets.Budget{}, err
+		}
+		return loadBudget(ctx, q, budget)
+	})
+}
+
+func (r *Repository) CreateMonthlyFromTemplate(ctx context.Context, input appbudgets.CreateMonthlyFromTemplateInput) (appbudgets.Budget, error) {
+	return withTransaction(ctx, r.pool, pgx.TxOptions{}, func(q *sqlc.Queries) (appbudgets.Budget, error) {
+		prior, err := findLatestPrior(ctx, q, input.Owner, input.PeriodStart)
+		if err != nil && !apperrors.IsKind(err, apperrors.KindNotFound) {
+			return appbudgets.Budget{}, err
+		}
+		var sourceID *int64
+		if err == nil {
+			sourceID = &prior.ID
+		}
+		created, err := createBudget(ctx, q, input.Owner, input.PeriodStart, input.PeriodEnd, sourceID)
+		if err != nil {
+			return appbudgets.Budget{}, err
+		}
+		if sourceID != nil {
+			if err := copyStructure(ctx, q, prior.ID, created.ID); err != nil {
+				return appbudgets.Budget{}, err
+			}
+		}
+		return loadBudget(ctx, q, created)
+	})
+}
+
+func (r *Repository) CreateLineWithCategories(ctx context.Context, input appbudgets.CreateLineInput) (appbudgets.Line, error) {
+	return withTransaction(ctx, r.pool, pgx.TxOptions{}, func(q *sqlc.Queries) (appbudgets.Line, error) {
+		if _, err := q.GetBudgetById(ctx, input.BudgetID); err != nil {
+			return appbudgets.Line{}, mapBudgetError(err)
+		}
+		categoryIDs, err := resolveCategoryIDs(ctx, q, input.CategoryIDs, input.CategoryCodes)
+		if err != nil {
+			return appbudgets.Line{}, err
+		}
+		sortOrder := input.SortOrder
+		if sortOrder == nil {
+			if _, err := q.LockBudgetForUpdate(ctx, input.BudgetID); err != nil {
+				return appbudgets.Line{}, mapBudgetError(err)
+			}
+			max, err := q.GetMaxBudgetLineSortOrder(ctx, input.BudgetID)
+			if err != nil {
+				return appbudgets.Line{}, mapBudgetError(err)
+			}
+			next := max + 1
+			sortOrder = &next
+		}
+		created, err := createLine(ctx, q, input.BudgetID, input.Name, input.AllocationAmount, *sortOrder)
+		if err != nil {
+			return appbudgets.Line{}, err
+		}
+		if err := replaceCategories(ctx, q, input.BudgetID, created.ID, categoryIDs); err != nil {
+			return appbudgets.Line{}, err
+		}
+		return loadLine(ctx, q, created)
+	})
+}
+
+func (r *Repository) UpdateLineWithCategories(ctx context.Context, input appbudgets.UpdateLineInput) (appbudgets.Line, error) {
+	return withTransaction(ctx, r.pool, pgx.TxOptions{}, func(q *sqlc.Queries) (appbudgets.Line, error) {
+		row, err := q.GetBudgetLineById(ctx, input.LineID)
+		if err != nil {
+			return appbudgets.Line{}, mapLineError(err)
+		}
+		existing, err := mapLine(row)
+		if err != nil {
+			return appbudgets.Line{}, err
+		}
+		changeCategories := input.CategoryIDs != nil || input.CategoryCodes != nil
+		var categoryIDs []int64
+		if changeCategories {
+			var ids []int64
+			var codes []string
+			if input.CategoryIDs != nil {
+				ids = *input.CategoryIDs
+			}
+			if input.CategoryCodes != nil {
+				codes = *input.CategoryCodes
+			}
+			categoryIDs, err = resolveCategoryIDs(ctx, q, ids, codes)
+			if err != nil {
+				return appbudgets.Line{}, err
+			}
+		}
+		updated, err := updateLine(ctx, q, input)
+		if err != nil {
+			return appbudgets.Line{}, err
+		}
+		if changeCategories {
+			if err := replaceCategories(ctx, q, existing.BudgetID, existing.ID, categoryIDs); err != nil {
+				return appbudgets.Line{}, err
+			}
+		}
+		return loadLine(ctx, q, updated)
+	})
+}
+
+func (r *Repository) DeleteLine(ctx context.Context, id int64) error {
+	q := sqlc.New(r.pool)
+	if _, err := q.GetBudgetLineById(ctx, id); err != nil {
+		return mapLineError(err)
+	}
+	return mapLineError(q.DeleteBudgetLine(ctx, id))
+}
+
+func (r *Repository) LoadReportSnapshot(ctx context.Context, budgetID int64) (appbudgets.ReportSnapshot, error) {
+	return withTransaction(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *sqlc.Queries) (appbudgets.ReportSnapshot, error) {
+		budgetRow, err := q.GetBudgetById(ctx, budgetID)
+		if err != nil {
+			return appbudgets.ReportSnapshot{}, mapBudgetError(err)
+		}
+		rows, err := listReportLines(ctx, q, budgetID)
+		if err != nil {
+			return appbudgets.ReportSnapshot{}, err
+		}
+		mappings, err := listLineCategories(ctx, q, budgetID)
+		if err != nil {
+			return appbudgets.ReportSnapshot{}, err
+		}
+		categories := make(map[int64][]appbudgets.Category)
+		for _, mapping := range mappings {
+			categories[mapping.lineID] = append(categories[mapping.lineID], mapping.category)
+		}
+		for i := range rows {
+			rows[i].Categories = nonNilCategories(categories[rows[i].ID])
+		}
+		uncategorized, err := sumUncategorized(ctx, q, budgetID)
+		if err != nil {
+			return appbudgets.ReportSnapshot{}, err
+		}
+		unmapped, err := listUnmappedTransactions(ctx, q, budgetID)
+		if err != nil {
+			return appbudgets.ReportSnapshot{}, err
+		}
+		return appbudgets.ReportSnapshot{Budget: mapBudget(budgetRow), Lines: rows, UnmappedTransactions: unmapped, UncategorizedAmount: uncategorized}, nil
+	})
+}
+
+func findMonthly(ctx context.Context, q *sqlc.Queries, owner appbudgets.Owner, start, end time.Time) (appbudgets.Budget, error) {
 	var row sqlc.Budget
 	var err error
 	if owner.HouseholdID != nil {
-		row, err = r.queries.GetHouseholdBudgetByPeriod(ctx, sqlc.GetHouseholdBudgetByPeriodParams{HouseholdID: *owner.HouseholdID, PeriodStart: date(start), PeriodEnd: date(end)})
+		row, err = q.GetHouseholdBudgetByPeriod(ctx, sqlc.GetHouseholdBudgetByPeriodParams{HouseholdID: *owner.HouseholdID, PeriodStart: date(start), PeriodEnd: date(end)})
 	} else if owner.UserID != nil {
-		row, err = r.queries.GetUserBudgetByPeriod(ctx, sqlc.GetUserBudgetByPeriodParams{UserID: *owner.UserID, PeriodStart: date(start), PeriodEnd: date(end)})
+		row, err = q.GetUserBudgetByPeriod(ctx, sqlc.GetUserBudgetByPeriodParams{UserID: *owner.UserID, PeriodStart: date(start), PeriodEnd: date(end)})
 	} else {
 		return appbudgets.Budget{}, apperrors.Validation("budget owner is required")
 	}
 	return mapBudget(row), mapBudgetError(err)
 }
 
-func (r *Repository) FindLatestPrior(ctx context.Context, owner appbudgets.Owner, start time.Time) (appbudgets.Budget, error) {
+func findLatestPrior(ctx context.Context, q *sqlc.Queries, owner appbudgets.Owner, start time.Time) (appbudgets.Budget, error) {
 	var row sqlc.Budget
 	var err error
 	if owner.HouseholdID != nil {
-		row, err = r.queries.GetLatestPriorHouseholdBudget(ctx, sqlc.GetLatestPriorHouseholdBudgetParams{HouseholdID: *owner.HouseholdID, PeriodStart: date(start)})
+		row, err = q.GetLatestPriorHouseholdBudget(ctx, sqlc.GetLatestPriorHouseholdBudgetParams{HouseholdID: *owner.HouseholdID, PeriodStart: date(start)})
 	} else if owner.UserID != nil {
-		row, err = r.queries.GetLatestPriorUserBudget(ctx, sqlc.GetLatestPriorUserBudgetParams{UserID: *owner.UserID, PeriodStart: date(start)})
+		row, err = q.GetLatestPriorUserBudget(ctx, sqlc.GetLatestPriorUserBudgetParams{UserID: *owner.UserID, PeriodStart: date(start)})
 	} else {
 		return appbudgets.Budget{}, apperrors.Validation("budget owner is required")
 	}
 	return mapBudget(row), mapBudgetError(err)
 }
 
-func (r *Repository) GetBudget(ctx context.Context, id int64) (appbudgets.Budget, error) {
-	row, err := r.queries.GetBudgetById(ctx, id)
-	return mapBudget(row), mapBudgetError(err)
-}
-func (r *Repository) LockBudget(ctx context.Context, id int64) error {
-	_, err := r.queries.LockBudgetForUpdate(ctx, id)
-	return mapBudgetError(err)
-}
-func (r *Repository) CreateBudget(ctx context.Context, input appbudgets.CreateBudget) (appbudgets.Budget, error) {
+func createBudget(ctx context.Context, q *sqlc.Queries, owner appbudgets.Owner, start, end time.Time, sourceID *int64) (appbudgets.Budget, error) {
 	var row sqlc.Budget
 	var err error
-	if input.Owner.HouseholdID != nil {
-		row, err = r.queries.CreateHouseholdBudget(ctx, sqlc.CreateHouseholdBudgetParams{HouseholdID: *input.Owner.HouseholdID, PeriodStart: date(input.PeriodStart), PeriodEnd: date(input.PeriodEnd), SourceBudgetID: input.SourceBudgetID})
-	} else if input.Owner.UserID != nil {
-		row, err = r.queries.CreateUserBudget(ctx, sqlc.CreateUserBudgetParams{UserID: *input.Owner.UserID, PeriodStart: date(input.PeriodStart), PeriodEnd: date(input.PeriodEnd), SourceBudgetID: input.SourceBudgetID})
+	if owner.HouseholdID != nil {
+		row, err = q.CreateHouseholdBudget(ctx, sqlc.CreateHouseholdBudgetParams{HouseholdID: *owner.HouseholdID, PeriodStart: date(start), PeriodEnd: date(end), SourceBudgetID: sourceID})
+	} else if owner.UserID != nil {
+		row, err = q.CreateUserBudget(ctx, sqlc.CreateUserBudgetParams{UserID: *owner.UserID, PeriodStart: date(start), PeriodEnd: date(end), SourceBudgetID: sourceID})
 	} else {
 		return appbudgets.Budget{}, apperrors.Validation("budget owner is required")
 	}
 	return mapBudget(row), mapBudgetError(err)
 }
 
-func (r *Repository) ListLines(ctx context.Context, budgetID int64) ([]appbudgets.Line, error) {
-	rows, err := r.queries.ListBudgetLines(ctx, budgetID)
+func copyStructure(ctx context.Context, q *sqlc.Queries, sourceID, targetID int64) error {
+	lines, err := listLines(ctx, q, sourceID)
+	if err != nil {
+		return err
+	}
+	mappings, err := listLineCategories(ctx, q, sourceID)
+	if err != nil {
+		return err
+	}
+	byLine := make(map[int64][]int64)
+	for _, mapping := range mappings {
+		byLine[mapping.lineID] = append(byLine[mapping.lineID], mapping.category.ID)
+	}
+	for _, source := range lines {
+		created, err := createLine(ctx, q, targetID, source.Name, source.AllocationAmount, source.SortOrder)
+		if err != nil {
+			return err
+		}
+		for _, categoryID := range byLine[source.ID] {
+			if err := createLineCategory(ctx, q, targetID, created.ID, categoryID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func loadBudget(ctx context.Context, q *sqlc.Queries, budget appbudgets.Budget) (appbudgets.Budget, error) {
+	lines, err := listLines(ctx, q, budget.ID)
+	if err != nil {
+		return appbudgets.Budget{}, err
+	}
+	mappings, err := listLineCategories(ctx, q, budget.ID)
+	if err != nil {
+		return appbudgets.Budget{}, err
+	}
+	categories := make(map[int64][]appbudgets.Category)
+	for _, mapping := range mappings {
+		categories[mapping.lineID] = append(categories[mapping.lineID], mapping.category)
+	}
+	for i := range lines {
+		lines[i].Categories = nonNilCategories(categories[lines[i].ID])
+	}
+	budget.Lines = nonNilLines(lines)
+	return budget, nil
+}
+
+func loadLine(ctx context.Context, q *sqlc.Queries, line appbudgets.Line) (appbudgets.Line, error) {
+	mappings, err := listLineCategories(ctx, q, line.BudgetID)
+	if err != nil {
+		return appbudgets.Line{}, err
+	}
+	line.Categories = []appbudgets.Category{}
+	for _, mapping := range mappings {
+		if mapping.lineID == line.ID {
+			line.Categories = append(line.Categories, mapping.category)
+		}
+	}
+	return line, nil
+}
+
+func listLines(ctx context.Context, q *sqlc.Queries, budgetID int64) ([]appbudgets.Line, error) {
+	rows, err := q.ListBudgetLines(ctx, budgetID)
 	if err != nil {
 		return nil, mapBudgetError(err)
 	}
@@ -83,44 +283,37 @@ func (r *Repository) ListLines(ctx context.Context, budgetID int64) ([]appbudget
 	}
 	return items, nil
 }
-func (r *Repository) ListLineCategories(ctx context.Context, budgetID int64) ([]appbudgets.LineCategory, error) {
-	rows, err := r.queries.ListBudgetLineCategories(ctx, budgetID)
+
+type lineCategory struct {
+	lineID   int64
+	category appbudgets.Category
+}
+
+func listLineCategories(ctx context.Context, q *sqlc.Queries, budgetID int64) ([]lineCategory, error) {
+	rows, err := q.ListBudgetLineCategories(ctx, budgetID)
 	if err != nil {
 		return nil, mapBudgetError(err)
 	}
-	items := make([]appbudgets.LineCategory, 0, len(rows))
+	items := make([]lineCategory, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, appbudgets.LineCategory{BudgetID: row.BudgetID, LineID: row.BudgetLineID, Category: appbudgets.Category{ID: row.CategoryID, Code: row.CategoryCode, Name: row.CategoryName}})
+		items = append(items, lineCategory{lineID: row.BudgetLineID, category: appbudgets.Category{ID: row.CategoryID, Code: row.CategoryCode, Name: row.CategoryName}})
 	}
 	return items, nil
 }
-func (r *Repository) GetLine(ctx context.Context, id int64) (appbudgets.Line, error) {
-	row, err := r.queries.GetBudgetLineById(ctx, id)
-	if err != nil {
-		return appbudgets.Line{}, mapLineError(err)
-	}
-	return mapLine(row)
-}
-func (r *Repository) MaxSortOrder(ctx context.Context, budgetID int64) (int32, error) {
-	value, err := r.queries.GetMaxBudgetLineSortOrder(ctx, budgetID)
-	return value, mapBudgetError(err)
-}
-func (r *Repository) CreateLine(ctx context.Context, input appbudgets.CreateLineInput) (appbudgets.Line, error) {
-	amount, err := numeric(input.AllocationAmount)
+
+func createLine(ctx context.Context, q *sqlc.Queries, budgetID int64, name, amount string, sortOrder int32) (appbudgets.Line, error) {
+	numericAmount, err := numeric(amount)
 	if err != nil {
 		return appbudgets.Line{}, apperrors.Internal(err)
 	}
-	order := int32(0)
-	if input.SortOrder != nil {
-		order = *input.SortOrder
-	}
-	row, err := r.queries.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{BudgetID: input.BudgetID, Name: input.Name, AllocationAmount: amount, SortOrder: order})
+	row, err := q.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{BudgetID: budgetID, Name: name, AllocationAmount: numericAmount, SortOrder: sortOrder})
 	if err != nil {
 		return appbudgets.Line{}, mapLineError(err)
 	}
 	return mapLine(row)
 }
-func (r *Repository) UpdateLine(ctx context.Context, id int64, input appbudgets.LineUpdate) (appbudgets.Line, error) {
+
+func updateLine(ctx context.Context, q *sqlc.Queries, input appbudgets.UpdateLineInput) (appbudgets.Line, error) {
 	name := ""
 	if input.Name != nil {
 		name = *input.Name
@@ -137,35 +330,57 @@ func (r *Repository) UpdateLine(ctx context.Context, id int64, input appbudgets.
 	if input.SortOrder != nil {
 		order = *input.SortOrder
 	}
-	row, err := r.queries.UpdateBudgetLine(ctx, sqlc.UpdateBudgetLineParams{SetName: input.Name != nil, Name: name, SetAllocationAmount: input.AllocationAmount != nil, AllocationAmount: amount, SetSortOrder: input.SortOrder != nil, SortOrder: order, ID: id})
+	row, err := q.UpdateBudgetLine(ctx, sqlc.UpdateBudgetLineParams{SetName: input.Name != nil, Name: name, SetAllocationAmount: input.AllocationAmount != nil, AllocationAmount: amount, SetSortOrder: input.SortOrder != nil, SortOrder: order, ID: input.LineID})
 	if err != nil {
 		return appbudgets.Line{}, mapLineError(err)
 	}
 	return mapLine(row)
 }
-func (r *Repository) DeleteLine(ctx context.Context, id int64) error {
-	if _, err := r.queries.GetBudgetLineById(ctx, id); err != nil {
-		return mapLineError(err)
+
+func resolveCategoryIDs(ctx context.Context, q *sqlc.Queries, ids []int64, codes []string) ([]int64, error) {
+	seen := make(map[int64]struct{})
+	resolved := make([]int64, 0, len(ids)+len(codes))
+	appendCategory := func(row sqlc.Category, err error) error {
+		if err != nil {
+			return mapCategoryError(err)
+		}
+		if _, ok := seen[row.ID]; !ok {
+			seen[row.ID] = struct{}{}
+			resolved = append(resolved, row.ID)
+		}
+		return nil
 	}
-	return mapLineError(r.queries.DeleteBudgetLine(ctx, id))
-}
-func (r *Repository) DeleteLineCategories(ctx context.Context, lineID int64) error {
-	return mapLineError(r.queries.DeleteBudgetLineCategories(ctx, lineID))
-}
-func (r *Repository) CreateLineCategory(ctx context.Context, budgetID, lineID, categoryID int64) error {
-	return mapLineCategoryError(r.queries.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{BudgetID: budgetID, BudgetLineID: lineID, CategoryID: categoryID}))
-}
-func (r *Repository) GetActiveCategoryByID(ctx context.Context, id int64) (appbudgets.Category, error) {
-	row, err := r.queries.GetActiveCategoryById(ctx, id)
-	return mapCategory(row), mapCategoryError(err)
-}
-func (r *Repository) GetActiveCategoryByCode(ctx context.Context, code string) (appbudgets.Category, error) {
-	row, err := r.queries.GetActiveCategoryByCode(ctx, code)
-	return mapCategory(row), mapCategoryError(err)
+	for _, id := range ids {
+		if err := appendCategory(q.GetActiveCategoryById(ctx, id)); err != nil {
+			return nil, err
+		}
+	}
+	for _, code := range codes {
+		if err := appendCategory(q.GetActiveCategoryByCode(ctx, strings.TrimSpace(code))); err != nil {
+			return nil, err
+		}
+	}
+	return resolved, nil
 }
 
-func (r *Repository) ListReportLines(ctx context.Context, budgetID int64) ([]appbudgets.ReportLineData, error) {
-	rows, err := r.queries.ListBudgetReportLines(ctx, budgetID)
+func replaceCategories(ctx context.Context, q *sqlc.Queries, budgetID, lineID int64, categoryIDs []int64) error {
+	if err := q.DeleteBudgetLineCategories(ctx, lineID); err != nil {
+		return mapLineError(err)
+	}
+	for _, categoryID := range categoryIDs {
+		if err := createLineCategory(ctx, q, budgetID, lineID, categoryID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createLineCategory(ctx context.Context, q *sqlc.Queries, budgetID, lineID, categoryID int64) error {
+	return mapLineCategoryError(q.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{BudgetID: budgetID, BudgetLineID: lineID, CategoryID: categoryID}))
+}
+
+func listReportLines(ctx context.Context, q *sqlc.Queries, budgetID int64) ([]appbudgets.ReportLineData, error) {
+	rows, err := q.ListBudgetReportLines(ctx, budgetID)
 	if err != nil {
 		return nil, mapBudgetError(err)
 	}
@@ -183,8 +398,9 @@ func (r *Repository) ListReportLines(ctx context.Context, budgetID int64) ([]app
 	}
 	return items, nil
 }
-func (r *Repository) ListUnmappedTransactions(ctx context.Context, budgetID int64) ([]appbudgets.UnmappedTransaction, error) {
-	rows, err := r.queries.ListUnmappedBudgetTransactions(ctx, budgetID)
+
+func listUnmappedTransactions(ctx context.Context, q *sqlc.Queries, budgetID int64) ([]appbudgets.UnmappedTransaction, error) {
+	rows, err := q.ListUnmappedBudgetTransactions(ctx, budgetID)
 	if err != nil {
 		return nil, mapBudgetError(err)
 	}
@@ -209,14 +425,32 @@ func (r *Repository) ListUnmappedTransactions(ctx context.Context, budgetID int6
 	}
 	return items, nil
 }
-func (r *Repository) SumUncategorized(ctx context.Context, budgetID int64) (string, error) {
-	value, err := r.queries.SumUncategorizedBudgetTransactions(ctx, budgetID)
+
+func sumUncategorized(ctx context.Context, q *sqlc.Queries, budgetID int64) (string, error) {
+	value, err := q.SumUncategorizedBudgetTransactions(ctx, budgetID)
 	if err != nil {
 		return "", mapBudgetError(err)
 	}
 	result, err := numericString(value)
 	if err != nil {
 		return "", apperrors.Internal(err)
+	}
+	return result, nil
+}
+
+func withTransaction[T any](ctx context.Context, pool *pgxpool.Pool, options pgx.TxOptions, operation func(*sqlc.Queries) (T, error)) (T, error) {
+	var zero T
+	tx, err := pool.BeginTx(ctx, options)
+	if err != nil {
+		return zero, mapBudgetError(err)
+	}
+	defer tx.Rollback(ctx)
+	result, err := operation(sqlc.New(tx))
+	if err != nil {
+		return zero, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return zero, mapBudgetError(err)
 	}
 	return result, nil
 }
@@ -230,9 +464,6 @@ func mapLine(row sqlc.BudgetLine) (appbudgets.Line, error) {
 		return appbudgets.Line{}, apperrors.Internal(err)
 	}
 	return appbudgets.Line{ID: row.ID, BudgetID: row.BudgetID, Name: row.Name, AllocationAmount: amount, SortOrder: row.SortOrder}, nil
-}
-func mapCategory(row sqlc.Category) appbudgets.Category {
-	return appbudgets.Category{ID: row.ID, Code: row.Code, Name: row.Name}
 }
 func date(value time.Time) pgtype.Date { return pgtype.Date{Time: value, Valid: true} }
 func numeric(value string) (pgtype.Numeric, error) {
@@ -272,29 +503,17 @@ func mapLineCategoryError(err error) error {
 func mapCategoryError(err error) error {
 	return postgres.MapError(err, postgres.ErrorMapping{NotFoundCode: apperrors.CodeCategoryNotFound, NotFoundMessage: "category not found", ConflictCode: apperrors.CodeBudgetConflict, ConflictMessage: "category violates a budget invariant"})
 }
-
-// Transactor ensures budget creation/copy and line/category replacement use the
-// same sqlc query set on one PostgreSQL transaction.
-type Transactor struct{ pool *pgxpool.Pool }
-
-func NewTransactor(pool *pgxpool.Pool) *Transactor { return &Transactor{pool: pool} }
-func (t *Transactor) WithinTransaction(ctx context.Context, callback func(appbudgets.Repository) error) error {
-	return t.withOptions(ctx, pgx.TxOptions{}, callback)
-}
-func (t *Transactor) WithinSnapshot(ctx context.Context, callback func(appbudgets.Repository) error) error {
-	return t.withOptions(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, callback)
-}
-func (t *Transactor) withOptions(ctx context.Context, options pgx.TxOptions, callback func(appbudgets.Repository) error) error {
-	tx, err := t.pool.BeginTx(ctx, options)
-	if err != nil {
-		return mapBudgetError(err)
+func nonNilCategories(items []appbudgets.Category) []appbudgets.Category {
+	if items == nil {
+		return []appbudgets.Category{}
 	}
-	defer tx.Rollback(ctx)
-	if err := callback(NewRepository(sqlc.New(tx))); err != nil {
-		return err
+	return items
+}
+func nonNilLines(items []appbudgets.Line) []appbudgets.Line {
+	if items == nil {
+		return []appbudgets.Line{}
 	}
-	return mapBudgetError(tx.Commit(ctx))
+	return items
 }
 
 var _ appbudgets.Repository = (*Repository)(nil)
-var _ appbudgets.Transactor = (*Transactor)(nil)

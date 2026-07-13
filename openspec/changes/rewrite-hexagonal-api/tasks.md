@@ -109,3 +109,12 @@
 - [x] 12.4 Replace nil-service `OPTIONS` composition probes with authenticated handler-to-service flows for every feature family.
 - [x] 12.5 Add GitHub CI for unit, race, vet, production builds, and migrated PostgreSQL integration tests.
 - [x] 12.6 Refresh the PR description and review comment wording, then rerun all local verification including opt-in PostgreSQL integration.
+
+## 13. Higher-level Budget Persistence Boundary
+
+- [x] 13.1 Replace the low-level budget repository and application-facing transactor with cohesive application-owned repository operations.
+- [x] 13.2 Move monthly template creation/copy and aggregate loading into one atomic PostgreSQL adapter operation.
+- [x] 13.3 Move line creation/update, category resolution/replacement, and automatic sort locking behind cohesive PostgreSQL adapter operations.
+- [x] 13.4 Move report input loading behind one repeatable-read `LoadReportSnapshot` adapter operation.
+- [x] 13.5 Rewrite budget unit tests around the higher-level port and retain validation, category-code, report, conflict-recovery, and empty-collection coverage.
+- [ ] 13.6 Update composition/integration wiring, remove the obsolete transactor, and run local plus CI verification.

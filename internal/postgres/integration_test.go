@@ -155,8 +155,8 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 		t.Fatalf("missing delete error=%v", err)
 	}
 
-	budgetRepo := postgresbudgets.NewRepository(queries)
-	budgetService := appbudgets.NewService(budgetRepo, postgresbudgets.NewTransactor(pool))
+	budgetRepo := postgresbudgets.NewRepository(pool)
+	budgetService := appbudgets.NewService(budgetRepo)
 	now := transaction.TransactionDate
 	monthly := appbudgets.MonthlyInput{Owner: appbudgets.Owner{HouseholdID: &householdID}, Year: now.Year(), Month: int(now.Month())}
 	ensured, err := budgetService.EnsureMonthly(ctx, monthly)
@@ -164,9 +164,14 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 		t.Fatalf("ensure budget=%+v error=%v", ensured, err)
 	}
 	t.Cleanup(func() { pool.Exec(context.Background(), `DELETE FROM budget WHERE id=$1`, ensured.Budget.ID) })
-	line, err := budgetService.CreateLine(ctx, appbudgets.CreateLineInput{BudgetID: ensured.Budget.ID, Name: "Food", AllocationAmount: "100.00", CategoryIDs: []int64{category.ID}})
-	if err != nil || len(line.Categories) != 1 {
+	line, err := budgetService.CreateLine(ctx, appbudgets.CreateLineInput{BudgetID: ensured.Budget.ID, Name: "Food", AllocationAmount: "100.00", CategoryCodes: []string{category.Code}})
+	if err != nil || len(line.Categories) != 1 || line.Categories[0].Code != category.Code {
 		t.Fatalf("create line=%+v error=%v", line, err)
+	}
+	categoryCodes := []string{category.Code}
+	line, err = budgetService.UpdateLine(ctx, appbudgets.UpdateLineInput{LineID: line.ID, CategoryCodes: &categoryCodes})
+	if err != nil || len(line.Categories) != 1 || line.Categories[0].Code != category.Code {
+		t.Fatalf("replace line categories=%+v error=%v", line, err)
 	}
 	if _, err := budgetService.CreateLine(ctx, appbudgets.CreateLineInput{BudgetID: ensured.Budget.ID, Name: "Duplicate mapping", AllocationAmount: "1.00", CategoryIDs: []int64{category.ID}}); !apperrors.IsKind(err, apperrors.KindConflict) || apperrors.MessageOf(err) != "category already mapped to another budget line" {
 		t.Fatalf("category mapping conflict=%v", err)

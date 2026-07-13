@@ -77,7 +77,7 @@ func run(ctx context.Context, cfg config) error {
 		identityResolver{users: userService},
 		categoryResolver{categories: categoryService},
 	)
-	budgetService := appbudgets.NewService(budgetpostgres.NewRepository(queries), budgetpostgres.NewTransactor(pool))
+	budgetService := appbudgets.NewService(budgetpostgres.NewRepository(pool))
 
 	httpServer, err := server.New(cfg.API, transactionService, userService, householdService, categoryService, budgetService)
 	if err != nil {
