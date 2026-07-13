@@ -1,21 +1,27 @@
 services:
-  bot:
-    container_name: app-voltr-finance
+  api:
+    container_name: voltr-api
     build:
       context: .
       dockerfile: Dockerfile
       target: final
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/service_account
-      - ENVIRONMENT=prd
+      VOLTR_API_ADDRESS: ":8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      ENVIRONMENT: prd
     env_file:
       - .env
+    ports:
+      - "8080:8080"
     networks:
       - postgres-network
-    secrets:
-      - service_account
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   migrate:
     image: ghcr.io/amacneil/dbmate
     command: ["up"]
@@ -27,11 +33,7 @@ services:
       - postgres-network
     profiles:
       - migrate
-volumes:
-  db_data:
+
 networks:
   postgres-network:
     external: true
-secrets:
-  service_account:
-    file: ./.secrets/service-account.key.json

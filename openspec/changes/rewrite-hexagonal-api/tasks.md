@@ -67,11 +67,11 @@
 
 ## 8. API Composition and Deployment
 
-- [ ] 8.1 Create `cmd/api` as the composition root that validates API/database configuration, wires feature services to Postgres adapters and HTTP handlers, and fails startup on an empty API key.
-- [ ] 8.2 Add signal-aware API server startup and graceful shutdown that stops HTTP acceptance and closes the database pool cleanly.
-- [ ] 8.3 Update the Dockerfile build/final targets to produce the API server and continue producing the standalone API-backed CLI.
-- [ ] 8.4 Update development and production Compose configuration, environment examples, health checks, and exposed ports for the API runtime.
-- [ ] 8.5 Rewrite CLI and deployment documentation for the REST endpoints, bearer authentication, API configuration, HTTPS expectation, partial-success responses, and monthly-budget semantics.
+- [x] 8.1 Create `cmd/api` as the composition root that validates API/database configuration, wires feature services to Postgres adapters and HTTP handlers, and fails startup on an empty API key.
+- [x] 8.2 Add signal-aware API server startup and graceful shutdown that stops HTTP acceptance and closes the database pool cleanly.
+- [x] 8.3 Update the Dockerfile build/final targets to produce the API server and continue producing the standalone API-backed CLI.
+- [x] 8.4 Update development and production Compose configuration, environment examples, health checks, and exposed ports for the API runtime.
+- [x] 8.5 Rewrite CLI and deployment documentation for the REST endpoints, bearer authentication, API configuration, HTTPS expectation, partial-success responses, and monthly-budget semantics.
 
 ## 9. Runtime Cleanup
 
