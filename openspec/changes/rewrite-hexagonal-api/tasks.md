@@ -82,8 +82,8 @@
 
 ## 10. Verification and Release Readiness
 
-- [ ] 10.1 Add an architecture test or static import check proving application feature packages do not import HTTP, API client, CLI, database, transaction, pgx, or sqlc packages.
-- [ ] 10.2 Add a dependency check proving the CLI production import graph contains no Postgres, pgx, sqlc, or server application wiring.
-- [ ] 10.3 Run formatting, unit tests, race-enabled tests, API/CLI integration tests, and production builds for both `cmd/api` and `cmd/cli`.
-- [ ] 10.4 Perform a local Postgres smoke test covering authentication, every REST feature family, bulk partial success, monthly budget read/ensure, budget reporting, and CLI rendering.
-- [ ] 10.5 Confirm deployment rollback requires only the previous binaries and configuration because this change introduces no destructive database migration.
+- [x] 10.1 Add an architecture test or static import check proving application feature packages do not import HTTP, API client, CLI, database, transaction, pgx, or sqlc packages.
+- [x] 10.2 Add a dependency check proving the CLI production import graph contains no Postgres, pgx, sqlc, or server application wiring.
+- [x] 10.3 Run formatting, unit tests, race-enabled tests, API/CLI integration tests, and production builds for both `cmd/api` and `cmd/cli`.
+- [x] 10.4 Perform a local Postgres smoke test covering authentication, every REST feature family, bulk partial success, monthly budget read/ensure, budget reporting, and CLI rendering.
+- [x] 10.5 Confirm deployment rollback requires only the previous binaries and configuration because this change introduces no destructive database migration.
