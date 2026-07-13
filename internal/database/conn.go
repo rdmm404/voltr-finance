@@ -78,14 +78,3 @@ func NewPool(ctx context.Context, config Config) (*pgxpool.Pool, error) {
 	}
 	return pgxpool.NewWithConfig(ctx, poolConfig)
 }
-
-// NewPoolFromURL is retained for CLI configuration files that already store a
-// complete connection URL. New servers should use the validated Config path.
-func NewPoolFromURL(ctx context.Context, connectionURL string) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig(connectionURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse database URL: %w", err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = defaultSearchPath
-	return pgxpool.NewWithConfig(ctx, config)
-}

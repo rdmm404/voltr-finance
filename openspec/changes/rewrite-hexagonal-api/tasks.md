@@ -75,10 +75,10 @@
 
 ## 9. Runtime Cleanup
 
-- [ ] 9.1 Remove the old Discord/Genkit composition entrypoint, `internal/bot`, `internal/ai`, agent development wiring, and Discord/agent-only runtime configuration.
-- [ ] 9.2 Remove obsolete direct-database CLI wiring and the superseded monolithic application/transaction packages after all callers and tests have migrated.
-- [ ] 9.3 Run `go mod tidy` and verify DiscordGo, Genkit, cloud storage, JSON-schema tooling, and unused transitive dependencies are removed while finance hashing and CLI dependencies remain.
-- [ ] 9.4 Verify no database migration, historical table, Discord identity column, guild identifier, or stored data was removed as part of code cleanup.
+- [x] 9.1 Remove the old Discord/Genkit composition entrypoint, `internal/bot`, `internal/ai`, agent development wiring, and Discord/agent-only runtime configuration.
+- [x] 9.2 Remove obsolete direct-database CLI wiring and the superseded monolithic application/transaction packages after all callers and tests have migrated.
+- [x] 9.3 Run `go mod tidy` and verify DiscordGo, Genkit, cloud storage, JSON-schema tooling, and unused transitive dependencies are removed while finance hashing and CLI dependencies remain.
+- [x] 9.4 Verify no database migration, historical table, Discord identity column, guild identifier, or stored data was removed as part of code cleanup.
 
 ## 10. Verification and Release Readiness
 
