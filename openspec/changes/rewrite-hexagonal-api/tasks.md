@@ -108,4 +108,4 @@
 - [x] 12.3 Add explicit budget category-code resolution and replacement characterization coverage.
 - [x] 12.4 Replace nil-service `OPTIONS` composition probes with authenticated handler-to-service flows for every feature family.
 - [x] 12.5 Add GitHub CI for unit, race, vet, production builds, and migrated PostgreSQL integration tests.
-- [ ] 12.6 Refresh the PR description and review comment wording, then rerun all local verification including opt-in PostgreSQL integration.
+- [x] 12.6 Refresh the PR description and review comment wording, then rerun all local verification including opt-in PostgreSQL integration.
