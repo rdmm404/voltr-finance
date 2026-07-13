@@ -21,10 +21,26 @@ func main() {
 	slog.SetLogLoggerLevel(config.LOG_LEVEL.ToSlog())
 	ctx := context.Background()
 
-	db := database.Init(ctx)
+	databaseConfig, err := database.ConfigFromStrings(config.DB_USER, config.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME, config.DB_POOL_SIZE)
+	if err != nil {
+		slog.Error("Invalid database configuration", "error", err)
+		os.Exit(1)
+	}
+	db, err := database.NewPool(ctx, databaseConfig)
+	if err != nil {
+		slog.Error("Failed to create database pool", "error", err)
+		os.Exit(1)
+	}
 	defer db.Close()
 
-	readOnlyDB := database.InitReadOnly(ctx)
+	readOnlyConfig := databaseConfig
+	readOnlyConfig.User = config.DB_RO_USER
+	readOnlyConfig.Password = config.DB_RO_PASSWORD
+	readOnlyDB, err := database.NewPool(ctx, readOnlyConfig)
+	if err != nil {
+		slog.Error("Failed to create read-only database pool", "error", err)
+		os.Exit(1)
+	}
 	defer readOnlyDB.Close()
 
 	repository := sqlc.New(db)

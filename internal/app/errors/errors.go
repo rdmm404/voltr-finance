@@ -19,7 +19,9 @@ type Code string
 const (
 	CodeValidation           Code = "validation_error"
 	CodeUserNotFound         Code = "user_not_found"
+	CodeUserConflict         Code = "user_conflict"
 	CodeHouseholdNotFound    Code = "household_not_found"
+	CodeHouseholdConflict    Code = "household_conflict"
 	CodeCategoryNotFound     Code = "category_not_found"
 	CodeCategoryConflict     Code = "category_conflict"
 	CodeTransactionNotFound  Code = "transaction_not_found"

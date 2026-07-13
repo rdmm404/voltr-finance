@@ -21,14 +21,14 @@
 
 ## 3. Postgres and sqlc Adapters
 
-- [ ] 3.1 Refactor database configuration and connection construction into validated, non-global server configuration while retaining bounded pool settings and the transactions search path.
-- [ ] 3.2 Implement common Postgres error translation and application-owned transaction callback support backed by pgx and transaction-scoped sqlc queries.
-- [ ] 3.3 Implement and test the sqlc-backed users repository adapter with translation between generated and application models.
-- [ ] 3.4 Implement and test the sqlc-backed households repository adapter.
-- [ ] 3.5 Implement and test the sqlc-backed categories repository adapter, including unique-conflict and not-found translation.
-- [ ] 3.6 Implement and test the sqlc-backed transactions repository adapter, preserving hashes, filtering, soft deletion, restoration, and item attribution.
-- [ ] 3.7 Implement and test the sqlc-backed budgets repository adapter, including transactional line/category changes and monthly-budget copying.
-- [ ] 3.8 Verify that existing SQL and schema continue to satisfy budget-report scoping and unmapped-transaction behavior without modifying historical migrations.
+- [x] 3.1 Refactor database configuration and connection construction into validated, non-global server configuration while retaining bounded pool settings and the transactions search path.
+- [x] 3.2 Implement common Postgres error translation and application-owned transaction callback support backed by pgx and transaction-scoped sqlc queries.
+- [x] 3.3 Implement and test the sqlc-backed users repository adapter with translation between generated and application models.
+- [x] 3.4 Implement and test the sqlc-backed households repository adapter.
+- [x] 3.5 Implement and test the sqlc-backed categories repository adapter, including unique-conflict and not-found translation.
+- [x] 3.6 Implement and test the sqlc-backed transactions repository adapter, preserving hashes, filtering, soft deletion, restoration, and item attribution.
+- [x] 3.7 Implement and test the sqlc-backed budgets repository adapter, including transactional line/category changes and monthly-budget copying.
+- [x] 3.8 Verify that existing SQL and schema continue to satisfy budget-report scoping and unmapped-transaction behavior without modifying historical migrations.
 
 ## 4. HTTP Server Foundation
 

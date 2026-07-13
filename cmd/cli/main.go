@@ -38,7 +38,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		return 2
 	}
 
-	pool, err := database.NewPool(ctx, cfg.Database.ConnString())
+	pool, err := database.NewPoolFromURL(ctx, cfg.Database.ConnString())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
