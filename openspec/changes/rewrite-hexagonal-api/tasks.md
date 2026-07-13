@@ -50,10 +50,10 @@
 
 ## 6. REST Client
 
-- [ ] 6.1 Implement the base standard-library REST client with normalized base URLs, request timeouts, bearer credentials, strict response decoding, and typed transport/API errors.
-- [ ] 6.2 Implement and test transaction client methods, including all bulk result envelopes and list/query encoding.
-- [ ] 6.3 Implement and test user, household, and category client methods and selector/query encoding.
-- [ ] 6.4 Implement and test budget monthly read/ensure, line mutation, and report client methods.
+- [x] 6.1 Implement the base standard-library REST client with normalized base URLs, request timeouts, bearer credentials, strict response decoding, and typed transport/API errors.
+- [x] 6.2 Implement and test transaction client methods, including all bulk result envelopes and list/query encoding.
+- [x] 6.3 Implement and test user, household, and category client methods and selector/query encoding.
+- [x] 6.4 Implement and test budget monthly read/ensure, line mutation, and report client methods.
 
 ## 7. API-Backed CLI
 
