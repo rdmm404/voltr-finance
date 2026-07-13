@@ -7,17 +7,17 @@
 
 ## 2. Application Center
 
-- [ ] 2.1 Introduce shared infrastructure-independent application error codes and helpers for validation, not-found, conflict, and internal failures.
-- [ ] 2.2 Create the `internal/app/users` feature models, ports, service, and unit tests, preserving all supported external identity selectors.
-- [ ] 2.3 Create the `internal/app/households` feature models, ports, service, and unit tests for list, ID lookup, external resolution, and household users.
-- [ ] 2.4 Create the `internal/app/categories` feature models, ports, service, error mapping contract, and unit tests for create, list, lookup, update, and deactivate behavior.
-- [ ] 2.5 Create the `internal/app/transactions` models and application-owned ports, moving transaction validation and hash behavior out of sqlc-shaped types.
-- [ ] 2.6 Implement and unit-test single transaction create, read, list, update, soft-delete, and restore use cases in the transactions feature.
-- [ ] 2.7 Implement and unit-test deterministic partial-success transaction batches with one indexed result per input, including duplicate inputs, missing IDs, and unattributable infrastructure failures.
-- [ ] 2.8 Create the `internal/app/budgets` models, ports, and application-owned transaction boundary without pgx, pgtype, or sqlc imports.
-- [ ] 2.9 Implement and unit-test separate monthly-budget read and idempotent ensure use cases, including prior-budget structure copying and concurrent creation recovery.
-- [ ] 2.10 Implement and unit-test budget-line create, update, delete, category replacement, and invariant enforcement use cases.
-- [ ] 2.11 Implement and unit-test budget report assembly against the existing `budget-reporting` requirements.
+- [x] 2.1 Introduce shared infrastructure-independent application error codes and helpers for validation, not-found, conflict, and internal failures.
+- [x] 2.2 Create the `internal/app/users` feature models, ports, service, and unit tests, preserving all supported external identity selectors.
+- [x] 2.3 Create the `internal/app/households` feature models, ports, service, and unit tests for list, ID lookup, external resolution, and household users.
+- [x] 2.4 Create the `internal/app/categories` feature models, ports, service, error mapping contract, and unit tests for create, list, lookup, update, and deactivate behavior.
+- [x] 2.5 Create the `internal/app/transactions` models and application-owned ports, moving transaction validation and hash behavior out of sqlc-shaped types.
+- [x] 2.6 Implement and unit-test single transaction create, read, list, update, soft-delete, and restore use cases in the transactions feature.
+- [x] 2.7 Implement and unit-test deterministic partial-success transaction batches with one indexed result per input, including duplicate inputs, missing IDs, and unattributable infrastructure failures.
+- [x] 2.8 Create the `internal/app/budgets` models, ports, and application-owned transaction boundary without pgx, pgtype, or sqlc imports.
+- [x] 2.9 Implement and unit-test separate monthly-budget read and idempotent ensure use cases, including prior-budget structure copying and concurrent creation recovery.
+- [x] 2.10 Implement and unit-test budget-line create, update, delete, category replacement, and invariant enforcement use cases.
+- [x] 2.11 Implement and unit-test budget report assembly against the existing `budget-reporting` requirements.
 
 ## 3. Postgres and sqlc Adapters
 
