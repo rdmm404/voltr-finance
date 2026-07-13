@@ -245,6 +245,33 @@ func TestLineChangesUseTransactionAndEnforceCategoryInvariant(t *testing.T) {
 	}
 }
 
+func TestLineCategoryCodesResolveDeduplicateAndReplace(t *testing.T) {
+	repo := newFakeRepository()
+	repo.budgets[12] = Budget{ID: 12}
+	repo.categories[3] = Category{ID: 3, Code: "food", Name: "Food"}
+	repo.categories[4] = Category{ID: 4, Code: "rent", Name: "Rent"}
+	service := NewService(repo, &fakeTransactor{repo: repo})
+
+	line, err := service.CreateLine(context.Background(), CreateLineInput{
+		BudgetID: 12, Name: "Essentials", AllocationAmount: "100",
+		CategoryIDs: []int64{3}, CategoryCodes: []string{" food ", "rent"},
+	})
+	if err != nil || len(line.Categories) != 2 || line.Categories[0].ID != 3 || line.Categories[1].ID != 4 {
+		t.Fatalf("created=%+v error=%v", line, err)
+	}
+
+	codes := []string{"rent"}
+	updated, err := service.UpdateLine(context.Background(), UpdateLineInput{LineID: line.ID, CategoryCodes: &codes})
+	if err != nil || len(updated.Categories) != 1 || updated.Categories[0].Code != "rent" {
+		t.Fatalf("updated=%+v error=%v", updated, err)
+	}
+
+	missing := []string{"missing"}
+	if _, err := service.UpdateLine(context.Background(), UpdateLineInput{LineID: line.ID, CategoryCodes: &missing}); !apperrors.IsKind(err, apperrors.KindNotFound) {
+		t.Fatalf("missing category error=%v", err)
+	}
+}
+
 func TestMonthlyValidation(t *testing.T) {
 	householdID, userID := int64(1), int64(2)
 	for name, input := range map[string]MonthlyInput{

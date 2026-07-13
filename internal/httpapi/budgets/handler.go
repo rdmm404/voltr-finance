@@ -9,7 +9,7 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type service interface {
+type Service interface {
 	GetMonthly(context.Context, appbudgets.MonthlyInput) (appbudgets.Budget, error)
 	EnsureMonthly(context.Context, appbudgets.MonthlyInput) (appbudgets.EnsureResult, error)
 	CreateLine(context.Context, appbudgets.CreateLineInput) (appbudgets.Line, error)
@@ -19,11 +19,11 @@ type service interface {
 }
 
 type Handler struct {
-	service service
+	service Service
 	support *httpapi.HandlerSupport
 }
 
-func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+func New(service Service, support ...*httpapi.HandlerSupport) *Handler {
 	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
 }
 

@@ -33,10 +33,11 @@ const (
 )
 
 type Error struct {
-	Kind    Kind
-	Code    Code
-	Message string
-	Cause   error
+	Kind      Kind
+	Code      Code
+	Message   string
+	Operation string
+	Cause     error
 }
 
 func (e *Error) Error() string {
@@ -109,8 +110,29 @@ func WrapInternal(operation string, err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := As(err); ok {
-		return err
+	if appErr, ok := As(err); ok {
+		if appErr.Kind != KindInternal || appErr.Operation != "" {
+			return err
+		}
+		return &Error{Kind: appErr.Kind, Code: appErr.Code, Message: appErr.Message, Operation: operation, Cause: appErr.Cause}
 	}
-	return Internal(fmt.Errorf("%s: %w", operation, err))
+	return &Error{Kind: KindInternal, Code: CodeInternal, Message: "internal error", Operation: operation, Cause: err}
+}
+
+// Diagnostic returns server-safe failure context. It intentionally reports the
+// cause's Go type rather than its message, which may contain SQL or secrets.
+func Diagnostic(err error) (operation, causeType string) {
+	appErr, ok := As(err)
+	if !ok {
+		return "handle request", fmt.Sprintf("%T", err)
+	}
+	operation = appErr.Operation
+	if operation == "" {
+		operation = "handle request"
+	}
+	cause := appErr.Cause
+	if cause == nil {
+		cause = err
+	}
+	return operation, fmt.Sprintf("%T", cause)
 }

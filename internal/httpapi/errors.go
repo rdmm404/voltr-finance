@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -43,7 +42,8 @@ func WriteApplicationError(w http.ResponseWriter, request *http.Request, logger 
 		if logger == nil {
 			logger = slog.Default()
 		}
-		logger.Error("request failed", "method", request.Method, "path", request.URL.Path, "code", response.Error.Code, "error_type", fmt.Sprintf("%T", err))
+		operation, causeType := apperrors.Diagnostic(err)
+		logger.Error("request failed", "method", request.Method, "path", request.URL.Path, "code", response.Error.Code, "operation", operation, "cause_type", causeType)
 	}
 	WriteJSON(w, status, response)
 }

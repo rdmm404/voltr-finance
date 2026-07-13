@@ -5,11 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	appbudgets "rdmm404/voltr-finance/internal/app/budgets"
-	appcategories "rdmm404/voltr-finance/internal/app/categories"
-	apphouseholds "rdmm404/voltr-finance/internal/app/households"
-	apptransactions "rdmm404/voltr-finance/internal/app/transactions"
-	appusers "rdmm404/voltr-finance/internal/app/users"
 	"rdmm404/voltr-finance/internal/httpapi"
 	budgethttp "rdmm404/voltr-finance/internal/httpapi/budgets"
 	categoryhttp "rdmm404/voltr-finance/internal/httpapi/categories"
@@ -21,11 +16,11 @@ import (
 // New wires feature handlers into the shared authenticated HTTP server.
 func New(
 	config httpapi.Config,
-	transactionService *apptransactions.Service,
-	userService *appusers.Service,
-	householdService *apphouseholds.Service,
-	categoryService *appcategories.Service,
-	budgetService *appbudgets.Service,
+	transactionService transactionhttp.Service,
+	userService userhttp.Service,
+	householdService householdhttp.Service,
+	categoryService categoryhttp.Service,
+	budgetService budgethttp.Service,
 ) (*http.Server, error) {
 	support := httpapi.NewHandlerSupport(slog.Default())
 	return httpapi.NewServer(config, func(router *httpapi.Router) {

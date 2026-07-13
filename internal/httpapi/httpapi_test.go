@@ -63,9 +63,13 @@ func TestApplicationErrorsMapWithoutLeakingInternalDetails(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
 	recorder := httptest.NewRecorder()
-	WriteApplicationError(recorder, httptest.NewRequest(http.MethodGet, "/v1/test", nil), logger, errors.New("driver detail"))
+	internal := apperrors.WrapInternal("load budget report", errors.New("driver detail"))
+	WriteApplicationError(recorder, httptest.NewRequest(http.MethodGet, "/v1/test", nil), logger, internal)
 	if strings.Contains(recorder.Body.String(), "driver detail") || strings.Contains(logs.String(), "driver detail") {
 		t.Fatalf("detail leaked response=%q logs=%q", recorder.Body.String(), logs.String())
+	}
+	if !strings.Contains(logs.String(), "operation=\"load budget report\"") || !strings.Contains(logs.String(), "cause_type=*errors.errorString") {
+		t.Fatalf("diagnostic context missing: %q", logs.String())
 	}
 }
 

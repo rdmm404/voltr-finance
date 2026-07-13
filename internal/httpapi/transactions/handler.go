@@ -15,7 +15,7 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type service interface {
+type Service interface {
 	Create(context.Context, apptransactions.CreateInput) (apptransactions.Transaction, error)
 	CreateBatch(context.Context, []apptransactions.CreateInput) apptransactions.BulkResult
 	Get(context.Context, int64, bool) (apptransactions.Transaction, error)
@@ -28,11 +28,11 @@ type service interface {
 }
 
 type Handler struct {
-	service service
+	service Service
 	support *httpapi.HandlerSupport
 }
 
-func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+func New(service Service, support ...*httpapi.HandlerSupport) *Handler {
 	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
 }
 

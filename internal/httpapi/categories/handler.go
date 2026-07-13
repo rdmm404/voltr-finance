@@ -9,7 +9,7 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type service interface {
+type Service interface {
 	Create(context.Context, appcategories.CreateInput) (appcategories.Category, error)
 	List(context.Context, bool) ([]appcategories.Category, error)
 	GetByCode(context.Context, string) (appcategories.Category, error)
@@ -18,11 +18,11 @@ type service interface {
 }
 
 type Handler struct {
-	service service
+	service Service
 	support *httpapi.HandlerSupport
 }
 
-func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+func New(service Service, support ...*httpapi.HandlerSupport) *Handler {
 	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
 }
 

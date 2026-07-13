@@ -100,3 +100,12 @@
 - [x] 11.8 Split CLI commands and clients by feature, remove permissive embedded-interface test doubles, and cover every command through the authenticated REST client.
 - [x] 11.9 Restore focused budget validation/report characterization, add concurrency integration cases, and collapse duplicate transaction bulk loops.
 - [x] 11.10 Run formatting, unit, race, vet, build, architecture, and PostgreSQL integration verification for the review changes.
+
+## 12. Review Follow-up Corrections
+
+- [x] 12.1 Record that the low-level budget repository/transactor finding was intentionally declined rather than resolved.
+- [x] 12.2 Add safe, actionable operation and diagnostic classification to production internal-error logs without exposing causes to clients.
+- [x] 12.3 Add explicit budget category-code resolution and replacement characterization coverage.
+- [x] 12.4 Replace nil-service `OPTIONS` composition probes with authenticated handler-to-service flows for every feature family.
+- [x] 12.5 Add GitHub CI for unit, race, vet, production builds, and migrated PostgreSQL integration tests.
+- [ ] 12.6 Refresh the PR description and review comment wording, then rerun all local verification including opt-in PostgreSQL integration.

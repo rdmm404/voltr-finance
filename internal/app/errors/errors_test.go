@@ -15,4 +15,10 @@ func TestErrorKindsAndSafeNormalization(t *testing.T) {
 	if !IsKind(internal, KindInternal) || MessageOf(internal) != "internal error" || !stderrors.Is(internal, cause) {
 		t.Fatalf("internal error = %#v", internal)
 	}
+
+	wrapped := WrapInternal("load budget report", internal)
+	operation, causeType := Diagnostic(wrapped)
+	if operation != "load budget report" || causeType != "*errors.errorString" || !stderrors.Is(wrapped, cause) {
+		t.Fatalf("diagnostic operation=%q causeType=%q error=%#v", operation, causeType, wrapped)
+	}
 }

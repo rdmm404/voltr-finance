@@ -9,18 +9,18 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type service interface {
+type Service interface {
 	List(context.Context) ([]apphouseholds.Household, error)
 	Get(context.Context, int64) (apphouseholds.Household, error)
 	Resolve(context.Context, apphouseholds.Selector) (apphouseholds.Household, error)
 	ListUsers(context.Context, int64) ([]apphouseholds.User, error)
 }
 type Handler struct {
-	service service
+	service Service
 	support *httpapi.HandlerSupport
 }
 
-func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+func New(service Service, support ...*httpapi.HandlerSupport) *Handler {
 	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
 }
 func (h *Handler) Register(router *httpapi.Router) {
