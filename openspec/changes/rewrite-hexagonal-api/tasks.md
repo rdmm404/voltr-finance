@@ -39,14 +39,14 @@
 
 ## 5. Finance REST Handlers
 
-- [ ] 5.1 Implement and test transaction create, read, filtered list, and single-update handlers with explicit wire-to-application mapping.
-- [ ] 5.2 Implement and test transaction bulk create/update, bulk soft-delete, and bulk restore handlers with HTTP 200 indexed partial-success envelopes.
-- [ ] 5.3 Implement and test user create, list, get, update, and exactly-one-selector resolution handlers.
-- [ ] 5.4 Implement and test household list, ID lookup, external resolution, and household-user handlers.
-- [ ] 5.5 Implement and test category create, list, code lookup, update, and deactivation-through-DELETE handlers.
-- [ ] 5.6 Implement and test read-only monthly-budget GET and idempotent monthly-budget ensure POST handlers, including 200-versus-201 responses.
-- [ ] 5.7 Implement and test budget-line create/update/delete and budget-report handlers while retaining existing report requirements.
-- [ ] 5.8 Add end-to-end `httptest` coverage for authenticated success, malformed and unknown-field requests, missing resources, conflicts, internal errors, and empty collections across all feature routes.
+- [x] 5.1 Implement and test transaction create, read, filtered list, and single-update handlers with explicit wire-to-application mapping.
+- [x] 5.2 Implement and test transaction bulk create/update, bulk soft-delete, and bulk restore handlers with HTTP 200 indexed partial-success envelopes.
+- [x] 5.3 Implement and test user create, list, get, update, and exactly-one-selector resolution handlers.
+- [x] 5.4 Implement and test household list, ID lookup, external resolution, and household-user handlers.
+- [x] 5.5 Implement and test category create, list, code lookup, update, and deactivation-through-DELETE handlers.
+- [x] 5.6 Implement and test read-only monthly-budget GET and idempotent monthly-budget ensure POST handlers, including 200-versus-201 responses.
+- [x] 5.7 Implement and test budget-line create/update/delete and budget-report handlers while retaining existing report requirements.
+- [x] 5.8 Add end-to-end `httptest` coverage for authenticated success, malformed and unknown-field requests, missing resources, conflicts, internal errors, and empty collections across all feature routes.
 
 ## 6. REST Client
 

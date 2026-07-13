@@ -200,6 +200,18 @@ func (s *Service) Get(ctx context.Context, id int64, includeDeleted bool) (Trans
 	return item, apperrors.WrapInternal("get transaction", err)
 }
 
+func (s *Service) GetMany(ctx context.Context, ids []int64, includeDeleted bool) ([]Transaction, error) {
+	items := make([]Transaction, 0, len(ids))
+	for _, id := range ids {
+		item, err := s.Get(ctx, id, includeDeleted)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func (s *Service) List(ctx context.Context, filter ListFilter) ([]Transaction, error) {
 	if filter.Sort == "" {
 		filter.Sort = "transaction_date"

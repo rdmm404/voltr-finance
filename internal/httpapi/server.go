@@ -23,11 +23,28 @@ func NewRouter() *Router {
 func (r *Router) Handle(method, path string, handler http.Handler) {
 	method = strings.ToUpper(method)
 	r.mux.Handle(method+" "+path, handler)
-	if _, exists := r.methods[path]; !exists {
-		r.methods[path] = map[string]struct{}{}
-		r.paths.HandleFunc(path, func(http.ResponseWriter, *http.Request) {})
+	shape := routeShape(path)
+	if _, exists := r.methods[shape]; !exists {
+		r.methods[shape] = map[string]struct{}{}
+		r.paths.HandleFunc(shape, func(http.ResponseWriter, *http.Request) {})
 	}
-	r.methods[path][method] = struct{}{}
+	r.methods[shape][method] = struct{}{}
+}
+
+// routeShape lets different methods use semantic wildcard names for the same
+// path shape (for example, GET /categories/{code} and PATCH /categories/{id}).
+func routeShape(path string) string {
+	parts := strings.Split(path, "/")
+	for index, part := range parts {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") && part != "{$}" {
+			if strings.HasSuffix(part, "...}") {
+				parts[index] = "{wildcard...}"
+			} else {
+				parts[index] = "{wildcard}"
+			}
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 func (r *Router) HandleFunc(method, path string, handler http.HandlerFunc) {
