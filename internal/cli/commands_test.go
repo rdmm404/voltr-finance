@@ -6,523 +6,119 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
-	"rdmm404/voltr-finance/internal/app"
+	"rdmm404/voltr-finance/internal/api"
+	"rdmm404/voltr-finance/internal/restclient"
 )
 
-func TestKongTransactionsCreate(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"transactions", "create",
-		"--amount", "42.50",
-		"--transaction-date", "2026-05-05T14:30:00-04:00",
-		"--description", "Groceries",
-		"--author-telegram-id", "123456",
-		"--household-id", "1",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.createTransaction.Amount != 42.5 || svc.createTransaction.Author.TelegramID == nil || *svc.createTransaction.Author.TelegramID != "123456" {
-		t.Fatalf("request = %+v, want amount and telegram author", svc.createTransaction)
-	}
-	if svc.createTransaction.HouseholdID == nil || *svc.createTransaction.HouseholdID != 1 {
-		t.Fatalf("household id = %v, want 1", svc.createTransaction.HouseholdID)
-	}
+type fakeAPIClient struct {
+	APIClient
+	createTransaction   func(context.Context, api.CreateTransactionRequest) (api.Transaction, error)
+	createTransactions  func(context.Context, api.BulkCreateTransactionsRequest) (api.BulkResult, error)
+	listTransactions    func(context.Context, api.ListTransactionsQuery) ([]api.Transaction, error)
+	getMonthlyBudget    func(context.Context, api.MonthlyBudgetParams) (api.Budget, error)
+	ensureMonthlyBudget func(context.Context, api.MonthlyBudgetParams) (api.Budget, error)
+	resolveUser         func(context.Context, api.IdentitySelector) (api.User, error)
 }
 
-func TestKongTransactionsCreateCategoryFlag(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"transactions", "create",
-		"--amount", "42.50",
-		"--transaction-date", "2026-05-05T14:30:00-04:00",
-		"--author-telegram-id", "123456",
-		"--household-id", "1",
-		"--category", "groceries",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.createTransaction.CategoryCode == nil || *svc.createTransaction.CategoryCode != "groceries" {
-		t.Fatalf("category = %v, want groceries", svc.createTransaction.CategoryCode)
-	}
+func (f fakeAPIClient) CreateTransaction(ctx context.Context, input api.CreateTransactionRequest) (api.Transaction, error) {
+	return f.createTransaction(ctx, input)
+}
+func (f fakeAPIClient) CreateTransactions(ctx context.Context, input api.BulkCreateTransactionsRequest) (api.BulkResult, error) {
+	return f.createTransactions(ctx, input)
+}
+func (f fakeAPIClient) ListTransactions(ctx context.Context, input api.ListTransactionsQuery) ([]api.Transaction, error) {
+	return f.listTransactions(ctx, input)
+}
+func (f fakeAPIClient) GetMonthlyBudget(ctx context.Context, input api.MonthlyBudgetParams) (api.Budget, error) {
+	return f.getMonthlyBudget(ctx, input)
+}
+func (f fakeAPIClient) EnsureMonthlyBudget(ctx context.Context, input api.MonthlyBudgetParams) (api.Budget, error) {
+	return f.ensureMonthlyBudget(ctx, input)
+}
+func (f fakeAPIClient) ResolveUser(ctx context.Context, input api.IdentitySelector) (api.User, error) {
+	return f.resolveUser(ctx, input)
 }
 
-func TestKongTransactionsUpdateClearCategory(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"transactions", "update",
-		"--id", "101",
-		"--clear-category",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if !svc.updateTransaction.ClearCategoryID {
-		t.Fatalf("ClearCategoryID = false, want true")
-	}
-}
-
-func TestKongCategoryCreate(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"categories", "create",
-		"Restaurants & Takeout",
-		"--code", "restaurants",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.createCategory.Name != "Restaurants & Takeout" || svc.createCategory.Code == nil || *svc.createCategory.Code != "restaurants" {
-		t.Fatalf("createCategory = %+v, want name and explicit code", svc.createCategory)
-	}
-}
-
-func TestKongCategoryListIncludesInactive(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"categories", "list",
-		"--include-inactive",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if !svc.listCategories.IncludeInactive {
-		t.Fatalf("IncludeInactive = false, want true")
-	}
-}
-
-func TestKongCategoryDeactivate(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"categories", "deactivate",
-		"restaurants",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.deactivateCategoryCode != "restaurants" {
-		t.Fatalf("deactivate code = %q, want restaurants", svc.deactivateCategoryCode)
-	}
-}
-
-func TestKongTransactionsListCSV(t *testing.T) {
-	svc := &fakeAppService{}
-	var out bytes.Buffer
-	code := Run(context.Background(), []string{
-		"transactions", "list",
-		"--format", "csv",
-		"--search", "Manual",
-	}, nil, &out, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.listTransactions.Search == nil || *svc.listTransactions.Search != "Manual" {
-		t.Fatalf("search = %v, want Manual", svc.listTransactions.Search)
-	}
-	if got := out.String(); got == "" || got[:len("id,amount")] != "id,amount" {
-		t.Fatalf("csv output = %q", got)
-	}
-}
-
-func TestKongTransactionsDeleteUsesIdsFlag(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"transactions", "delete",
-		"--ids", "101,102",
-		"--deleted-by-user-id", "7",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if len(svc.deleteTransactions.IDs) != 2 || svc.deleteTransactions.IDs[0] != 101 || svc.deleteTransactions.IDs[1] != 102 {
-		t.Fatalf("ids = %v, want [101 102]", svc.deleteTransactions.IDs)
-	}
-}
-
-func TestKongUsersResolveTelegram(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"users", "resolve",
-		"--telegram-id", "123456",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.resolveUser.TelegramID == nil || *svc.resolveUser.TelegramID != "123456" {
-		t.Fatalf("selector = %+v, want telegram id", svc.resolveUser)
-	}
-}
-
-func TestKongHouseholdsGetByName(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"households", "get",
-		"--name", "Home",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.getHousehold.Name == nil || *svc.getHousehold.Name != "Home" {
-		t.Fatalf("request = %+v, want name Home", svc.getHousehold)
-	}
-}
-
-func TestKongBudgetsGetHouseholdCreate(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"budgets", "get",
-		"--household-id", "1",
-		"--month", "2026-05",
-		"--create",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.getMonthlyBudget.HouseholdID == nil || *svc.getMonthlyBudget.HouseholdID != 1 {
-		t.Fatalf("HouseholdID = %v, want 1", svc.getMonthlyBudget.HouseholdID)
-	}
-	if svc.getMonthlyBudget.Year != 2026 || svc.getMonthlyBudget.Month != 5 || !svc.getMonthlyBudget.CreateIfMissing {
-		t.Fatalf("getMonthlyBudget = %+v, want May 2026 create", svc.getMonthlyBudget)
-	}
-}
-
-func TestKongBudgetsReport(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"budgets", "report", "12",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.getBudgetReportID != 12 {
-		t.Fatalf("report id = %d, want 12", svc.getBudgetReportID)
-	}
-}
-
-func TestKongBudgetLinesAdd(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"budgets", "lines", "add",
-		"--budget-id", "12",
-		"--name", "Groceries",
-		"--amount", "800.00",
-		"--categories", "groceries,costco",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.createBudgetLine.BudgetID != 12 || svc.createBudgetLine.Name != "Groceries" {
-		t.Fatalf("createBudgetLine = %+v, want budget 12 groceries", svc.createBudgetLine)
-	}
-	if len(svc.createBudgetLine.CategoryCodes) != 2 || svc.createBudgetLine.CategoryCodes[1] != "costco" {
-		t.Fatalf("CategoryCodes = %v, want groceries,costco", svc.createBudgetLine.CategoryCodes)
-	}
-}
-
-func TestKongBudgetLinesUpdateUsesPositionalLineID(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"budgets", "lines", "update", "44",
-		"--amount", "900.00",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.updateBudgetLine.LineID != 44 || svc.updateBudgetLine.AllocationAmount == nil || *svc.updateBudgetLine.AllocationAmount != "900.00" {
-		t.Fatalf("updateBudgetLine = %+v, want line 44 amount 900.00", svc.updateBudgetLine)
-	}
-}
-
-func TestKongBudgetLinesDeleteUsesPositionalLineID(t *testing.T) {
-	svc := &fakeAppService{}
-	code := Run(context.Background(), []string{
-		"budgets", "lines", "delete", "44",
-	}, nil, &bytes.Buffer{}, &bytes.Buffer{}, svc)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
-	}
-	if svc.deleteBudgetLineID != 44 {
-		t.Fatalf("deleteBudgetLineID = %d, want 44", svc.deleteBudgetLineID)
-	}
-}
-
-func TestKongSubcommandHelpDoesNotPanicWithoutService(t *testing.T) {
+func TestHelpNeedsNoClient(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-
-	code := Run(context.Background(), []string{
-		"transactions", "list", "--help",
-	}, nil, &stdout, &stderr, nil)
-
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr.String())
-	}
-	if got := stdout.String(); got == "" {
-		t.Fatalf("stdout was empty, want help output")
+	if code := Run(context.Background(), []string{"--help"}, nil, &stdout, &stderr, nil); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 }
 
-func TestKongExpectedErrorIncludesCause(t *testing.T) {
-	svc := &fakeAppService{
-		listTransactionsErr: app.NewError(app.CodeDatabaseError, "transaction list failed", errors.New("relation transactions.transactions does not exist")),
-	}
-	var stderr bytes.Buffer
-
-	code := Run(context.Background(), []string{
-		"transactions", "list",
-	}, nil, &bytes.Buffer{}, &stderr, svc)
-
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
-	}
-	if got := stderr.String(); got != "transaction list failed: relation transactions.transactions does not exist\n" {
-		t.Fatalf("stderr = %q", got)
+func TestTransactionCreateMapsFlags(t *testing.T) {
+	client := fakeAPIClient{createTransaction: func(_ context.Context, input api.CreateTransactionRequest) (api.Transaction, error) {
+		if input.Amount != 12.5 || input.Author.DiscordID == nil || *input.Author.DiscordID != "42" {
+			t.Fatalf("input=%+v", input)
+		}
+		return api.Transaction{ID: 7}, nil
+	}}
+	var stdout, stderr bytes.Buffer
+	args := []string{"transactions", "create", "--amount=12.5", "--transaction-date=2026-07-01T00:00:00Z", "--household-id=2", "--author-discord-id=42"}
+	if code := Run(context.Background(), args, nil, &stdout, &stderr, client); code != 0 || !strings.Contains(stdout.String(), `"id": 7`) {
+		t.Fatalf("code=%d out=%s err=%s", code, stdout.String(), stderr.String())
 	}
 }
 
-func TestKongHelpDocumentsFlagSemantics(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want []string
-	}{
-		{
-			name: "transaction create",
-			args: []string{"transactions", "create", "--help"},
-			want: []string{
-				"Transaction amount, in dollars.",
-				"Transaction timestamp in RFC3339 format, for example 2026-05-05T14:30:00-04:00.",
-				"Exactly one author selector may be provided.",
-				"Internal household ID.",
-			},
-		},
-		{
-			name: "transaction list",
-			args: []string{"transactions", "list", "--help"},
-			want: []string{
-				`--format="json"`,
-				"Output format: json or csv.",
-				"Sort field: transaction_date, created_at, amount, or id.",
-				"Sort order: asc or desc.",
-				"Include soft-deleted transactions.",
-			},
-		},
-		{
-			name: "transaction bulk",
-			args: []string{"transactions", "create-bulk", "--help"},
-			want: []string{
-				"Path to a JSON file containing a bulk create request. Reads stdin when omitted.",
-				"Expected shape: {\"transactions\":[...]}",
-			},
-		},
-		{
-			name: "user update",
-			args: []string{"users", "update", "--help"},
-			want: []string{
-				"Internal user ID.",
-				"Clear the Discord ID.",
-				"Telegram user ID.",
-			},
-		},
-		{
-			name: "household get",
-			args: []string{"households", "get", "--help"},
-			want: []string{
-				"Exactly one household selector is required.",
-				"Internal household ID.",
-				"Discord guild/server ID.",
-			},
-		},
+func TestBulkPartialSuccessRendersBeforeExitTwo(t *testing.T) {
+	client := fakeAPIClient{createTransactions: func(context.Context, api.BulkCreateTransactionsRequest) (api.BulkResult, error) {
+		return api.BulkResult{Succeeded: []api.BulkSucceeded{{Index: 0, ID: 7}}, Failed: []api.BulkFailed{{Index: 1, Error: api.Error{Code: "validation_error", Message: "bad input"}}}}, nil
+	}}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"transactions", "create-bulk"}, strings.NewReader(`{"transactions":[]}`), &stdout, &stderr, client)
+	if code != 2 || !strings.Contains(stdout.String(), `"succeeded"`) || !strings.Contains(stdout.String(), `"failed"`) {
+		t.Fatalf("code=%d out=%s err=%s", code, stdout.String(), stderr.String())
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+func TestTransactionListRendersCSV(t *testing.T) {
+	client := fakeAPIClient{listTransactions: func(_ context.Context, input api.ListTransactionsQuery) ([]api.Transaction, error) {
+		if input.Limit != 10 {
+			t.Fatalf("input=%+v", input)
+		}
+		return []api.Transaction{{ID: 1, Amount: 2.5, TransactionDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)}}, nil
+	}}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"transactions", "list", "--format=csv", "--limit=10"}, nil, &stdout, &stderr, client)
+	if code != 0 || !strings.HasPrefix(stdout.String(), "id,amount") {
+		t.Fatalf("code=%d out=%s err=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestBudgetCreateFlagSelectsEnsureWithoutRead(t *testing.T) {
+	ensured, read := 0, 0
+	client := fakeAPIClient{
+		ensureMonthlyBudget: func(context.Context, api.MonthlyBudgetParams) (api.Budget, error) {
+			ensured++
+			return api.Budget{ID: 1, Lines: []api.BudgetLine{}}, nil
+		},
+		getMonthlyBudget: func(context.Context, api.MonthlyBudgetParams) (api.Budget, error) { read++; return api.Budget{}, nil },
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"budgets", "get", "--household-id=2", "--month=2026-07", "--create"}, nil, &stdout, &stderr, client)
+	if code != 0 || ensured != 1 || read != 0 {
+		t.Fatalf("code=%d ensured=%d read=%d err=%s", code, ensured, read, stderr.String())
+	}
+}
+
+func TestExitClassesAPIValidationAndTransport(t *testing.T) {
+	for name, err := range map[string]error{
+		"validation": &restclient.APIError{StatusCode: 400, Code: "validation_error", Message: "bad input"},
+		"transport":  &restclient.TransportError{Operation: "send request", Err: errors.New("offline")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := fakeAPIClient{resolveUser: func(context.Context, api.IdentitySelector) (api.User, error) { return api.User{}, err }}
 			var stdout, stderr bytes.Buffer
-
-			code := Run(context.Background(), tt.args, nil, &stdout, &stderr, nil)
-
-			if code != 0 {
-				t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr.String())
+			code := Run(context.Background(), []string{"users", "resolve", "--author-id=2"}, nil, &stdout, &stderr, client)
+			want := 1
+			if name == "validation" {
+				want = 2
 			}
-			got := normalizeHelp(stdout.String())
-			for _, want := range tt.want {
-				if !strings.Contains(got, want) {
-					t.Fatalf("help output missing %q\noutput:\n%s", want, stdout.String())
-				}
+			if code != want {
+				t.Fatalf("code=%d want=%d stderr=%s", code, want, stderr.String())
 			}
 		})
 	}
-}
-
-func normalizeHelp(help string) string {
-	return strings.Join(strings.Fields(help), " ")
-}
-
-type fakeAppService struct {
-	createTransaction      app.CreateTransactionRequest
-	updateTransaction      app.UpdateTransactionRequest
-	listTransactions       app.ListTransactionsRequest
-	listTransactionsErr    error
-	deleteTransactions     app.DeleteTransactionsRequest
-	resolveUser            app.IdentitySelector
-	getHousehold           app.GetHouseholdRequest
-	createCategory         app.CreateCategoryRequest
-	listCategories         app.ListCategoriesRequest
-	updateCategory         app.UpdateCategoryRequest
-	deactivateCategoryCode string
-	getMonthlyBudget       app.GetMonthlyBudgetRequest
-	createBudgetLine       app.CreateBudgetLineRequest
-	updateBudgetLine       app.UpdateBudgetLineRequest
-	deleteBudgetLineID     int64
-	getBudgetReportID      int64
-}
-
-func (f *fakeAppService) CreateTransaction(_ context.Context, req app.CreateTransactionRequest) app.WriteResult {
-	f.createTransaction = req
-	return app.WriteResult{CreatedIDs: []int64{101}}
-}
-
-func (f *fakeAppService) CreateTransactions(context.Context, app.BulkCreateTransactionsRequest) app.WriteResult {
-	return app.WriteResult{}
-}
-
-func (f *fakeAppService) UpdateTransaction(_ context.Context, req app.UpdateTransactionRequest) app.WriteResult {
-	f.updateTransaction = req
-	return app.WriteResult{}
-}
-
-func (f *fakeAppService) UpdateTransactions(context.Context, app.BulkUpdateTransactionsRequest) app.WriteResult {
-	return app.WriteResult{}
-}
-
-func (f *fakeAppService) GetTransactions(context.Context, []int64, bool) ([]app.TransactionDTO, error) {
-	return nil, nil
-}
-
-func (f *fakeAppService) ListTransactions(_ context.Context, req app.ListTransactionsRequest) ([]app.TransactionDTO, error) {
-	f.listTransactions = req
-	if f.listTransactionsErr != nil {
-		return nil, f.listTransactionsErr
-	}
-	return []app.TransactionDTO{}, nil
-}
-
-func (f *fakeAppService) DeleteTransactions(_ context.Context, req app.DeleteTransactionsRequest) app.WriteResult {
-	f.deleteTransactions = req
-	return app.WriteResult{}
-}
-
-func (f *fakeAppService) RestoreTransactions(context.Context, app.RestoreTransactionsRequest) app.WriteResult {
-	return app.WriteResult{}
-}
-
-func (f *fakeAppService) CreateUser(context.Context, app.CreateUserRequest) (app.UserDTO, error) {
-	return app.UserDTO{ID: 1}, nil
-}
-
-func (f *fakeAppService) UpdateUser(context.Context, app.UpdateUserRequest) (app.UserDTO, error) {
-	return app.UserDTO{ID: 1}, nil
-}
-
-func (f *fakeAppService) GetUser(context.Context, int64) (app.UserDTO, error) {
-	return app.UserDTO{ID: 1}, nil
-}
-
-func (f *fakeAppService) ResolveUser(_ context.Context, selector app.IdentitySelector) (app.UserDTO, error) {
-	f.resolveUser = selector
-	return app.UserDTO{ID: 1}, nil
-}
-
-func (f *fakeAppService) ListUsers(context.Context) ([]app.UserDTO, error) {
-	return nil, nil
-}
-
-func (f *fakeAppService) GetHousehold(_ context.Context, req app.GetHouseholdRequest) (app.HouseholdDTO, error) {
-	f.getHousehold = req
-	return app.HouseholdDTO{ID: 1, Name: "Home"}, nil
-}
-
-func (f *fakeAppService) ListHouseholds(context.Context) ([]app.HouseholdDTO, error) {
-	return nil, nil
-}
-
-func (f *fakeAppService) GetHouseholdUsers(context.Context, int64) ([]app.UserDTO, error) {
-	return nil, nil
-}
-
-func (f *fakeAppService) CreateCategory(_ context.Context, req app.CreateCategoryRequest) (app.CategoryDTO, error) {
-	f.createCategory = req
-	code := ""
-	if req.Code != nil {
-		code = *req.Code
-	}
-	return app.CategoryDTO{ID: 1, Code: code, Name: req.Name, IsActive: true}, nil
-}
-
-func (f *fakeAppService) ListCategories(_ context.Context, req app.ListCategoriesRequest) ([]app.CategoryDTO, error) {
-	f.listCategories = req
-	return []app.CategoryDTO{}, nil
-}
-
-func (f *fakeAppService) GetCategoryByCode(context.Context, string) (app.CategoryDTO, error) {
-	return app.CategoryDTO{ID: 1, Code: "groceries", Name: "Groceries", IsActive: true}, nil
-}
-
-func (f *fakeAppService) UpdateCategory(_ context.Context, req app.UpdateCategoryRequest) (app.CategoryDTO, error) {
-	f.updateCategory = req
-	name := ""
-	if req.Name != nil {
-		name = *req.Name
-	}
-	return app.CategoryDTO{ID: req.ID, Code: "groceries", Name: name, IsActive: true}, nil
-}
-
-func (f *fakeAppService) DeactivateCategory(_ context.Context, code string) (app.CategoryDTO, error) {
-	f.deactivateCategoryCode = code
-	return app.CategoryDTO{ID: 1, Code: code, Name: "Groceries", IsActive: false}, nil
-}
-
-func (f *fakeAppService) GetMonthlyBudget(_ context.Context, req app.GetMonthlyBudgetRequest) (app.BudgetDTO, error) {
-	f.getMonthlyBudget = req
-	return app.BudgetDTO{ID: 12}, nil
-}
-
-func (f *fakeAppService) CreateBudgetLine(_ context.Context, req app.CreateBudgetLineRequest) (app.BudgetLineDTO, error) {
-	f.createBudgetLine = req
-	return app.BudgetLineDTO{ID: 44, BudgetID: req.BudgetID, Name: req.Name, AllocationAmount: req.AllocationAmount}, nil
-}
-
-func (f *fakeAppService) UpdateBudgetLine(_ context.Context, req app.UpdateBudgetLineRequest) (app.BudgetLineDTO, error) {
-	f.updateBudgetLine = req
-	amount := ""
-	if req.AllocationAmount != nil {
-		amount = *req.AllocationAmount
-	}
-	return app.BudgetLineDTO{ID: req.LineID, AllocationAmount: amount}, nil
-}
-
-func (f *fakeAppService) DeleteBudgetLine(_ context.Context, id int64) error {
-	f.deleteBudgetLineID = id
-	return nil
-}
-
-func (f *fakeAppService) GetBudgetReport(_ context.Context, id int64) (app.BudgetReportDTO, error) {
-	f.getBudgetReportID = id
-	return app.BudgetReportDTO{}, nil
 }

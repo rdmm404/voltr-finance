@@ -11,43 +11,48 @@ import (
 	"strings"
 	"time"
 
-	"rdmm404/voltr-finance/internal/app"
+	"rdmm404/voltr-finance/internal/api"
+	"rdmm404/voltr-finance/internal/restclient"
 
 	"github.com/alecthomas/kong"
 )
 
-type AppService interface {
-	CreateTransaction(context.Context, app.CreateTransactionRequest) app.WriteResult
-	CreateTransactions(context.Context, app.BulkCreateTransactionsRequest) app.WriteResult
-	UpdateTransaction(context.Context, app.UpdateTransactionRequest) app.WriteResult
-	UpdateTransactions(context.Context, app.BulkUpdateTransactionsRequest) app.WriteResult
-	GetTransactions(context.Context, []int64, bool) ([]app.TransactionDTO, error)
-	ListTransactions(context.Context, app.ListTransactionsRequest) ([]app.TransactionDTO, error)
-	DeleteTransactions(context.Context, app.DeleteTransactionsRequest) app.WriteResult
-	RestoreTransactions(context.Context, app.RestoreTransactionsRequest) app.WriteResult
+type APIClient interface {
+	CreateTransaction(context.Context, api.CreateTransactionRequest) (api.Transaction, error)
+	CreateTransactions(context.Context, api.BulkCreateTransactionsRequest) (api.BulkResult, error)
+	GetTransaction(context.Context, int64, bool) (api.Transaction, error)
+	ListTransactions(context.Context, api.ListTransactionsQuery) ([]api.Transaction, error)
+	UpdateTransaction(context.Context, int64, api.UpdateTransactionRequest) (api.Transaction, error)
+	UpdateTransactions(context.Context, api.BulkUpdateTransactionsRequest) (api.BulkResult, error)
+	DeleteTransactions(context.Context, api.DeleteTransactionsRequest) (api.BulkResult, error)
+	RestoreTransactions(context.Context, api.RestoreTransactionsRequest) (api.BulkResult, error)
 
-	CreateUser(context.Context, app.CreateUserRequest) (app.UserDTO, error)
-	UpdateUser(context.Context, app.UpdateUserRequest) (app.UserDTO, error)
-	GetUser(context.Context, int64) (app.UserDTO, error)
-	ResolveUser(context.Context, app.IdentitySelector) (app.UserDTO, error)
-	ListUsers(context.Context) ([]app.UserDTO, error)
+	CreateUser(context.Context, api.CreateUserRequest) (api.User, error)
+	UpdateUser(context.Context, int64, api.UpdateUserRequest) (api.User, error)
+	GetUser(context.Context, int64) (api.User, error)
+	ResolveUser(context.Context, api.IdentitySelector) (api.User, error)
+	ListUsers(context.Context) ([]api.User, error)
 
-	GetHousehold(context.Context, app.GetHouseholdRequest) (app.HouseholdDTO, error)
-	ListHouseholds(context.Context) ([]app.HouseholdDTO, error)
-	GetHouseholdUsers(context.Context, int64) ([]app.UserDTO, error)
+	GetHousehold(context.Context, int64) (api.Household, error)
+	ResolveHousehold(context.Context, api.ResolveHouseholdQuery) (api.Household, error)
+	ListHouseholds(context.Context) ([]api.Household, error)
+	ListHouseholdUsers(context.Context, int64) ([]api.User, error)
 
-	CreateCategory(context.Context, app.CreateCategoryRequest) (app.CategoryDTO, error)
-	ListCategories(context.Context, app.ListCategoriesRequest) ([]app.CategoryDTO, error)
-	GetCategoryByCode(context.Context, string) (app.CategoryDTO, error)
-	UpdateCategory(context.Context, app.UpdateCategoryRequest) (app.CategoryDTO, error)
-	DeactivateCategory(context.Context, string) (app.CategoryDTO, error)
+	CreateCategory(context.Context, api.CreateCategoryRequest) (api.Category, error)
+	ListCategories(context.Context, api.ListCategoriesQuery) ([]api.Category, error)
+	GetCategory(context.Context, string) (api.Category, error)
+	UpdateCategory(context.Context, int64, api.UpdateCategoryRequest) (api.Category, error)
+	DeactivateCategory(context.Context, string) (api.Category, error)
 
-	GetMonthlyBudget(context.Context, app.GetMonthlyBudgetRequest) (app.BudgetDTO, error)
-	CreateBudgetLine(context.Context, app.CreateBudgetLineRequest) (app.BudgetLineDTO, error)
-	UpdateBudgetLine(context.Context, app.UpdateBudgetLineRequest) (app.BudgetLineDTO, error)
+	GetMonthlyBudget(context.Context, api.MonthlyBudgetParams) (api.Budget, error)
+	EnsureMonthlyBudget(context.Context, api.MonthlyBudgetParams) (api.Budget, error)
+	CreateBudgetLine(context.Context, int64, api.CreateBudgetLineRequest) (api.BudgetLine, error)
+	UpdateBudgetLine(context.Context, int64, api.UpdateBudgetLineRequest) (api.BudgetLine, error)
 	DeleteBudgetLine(context.Context, int64) error
-	GetBudgetReport(context.Context, int64) (app.BudgetReportDTO, error)
+	GetBudgetReport(context.Context, int64) (api.BudgetReport, error)
 }
+
+var _ APIClient = (*restclient.Client)(nil)
 
 type CLI struct {
 	Transactions TransactionsCmd `cmd:"" help:"Manage transactions."`
@@ -62,10 +67,10 @@ type runContext struct {
 	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
-	svc    AppService
+	svc    APIClient
 }
 
-func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, svc AppService) int {
+func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, client APIClient) int {
 	if stdin == nil {
 		stdin = os.Stdin
 	}
@@ -86,7 +91,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	if isHelpArgs(args) {
 		return 0
 	}
-	if err := kctx.Run(&runContext{Context: ctx, stdin: stdin, stdout: stdout, stderr: stderr, svc: svc}); err != nil {
+	if err := kctx.Run(&runContext{Context: ctx, stdin: stdin, stdout: stdout, stderr: stderr, svc: client}); err != nil {
 		if isExpectedError(err) {
 			fmt.Fprintln(stderr, expectedErrorMessage(err))
 			return 2
@@ -123,16 +128,15 @@ type TransactionCreateCmd struct {
 }
 
 func (c *TransactionCreateCmd) Run(ctx *runContext) error {
-	result := ctx.svc.CreateTransaction(ctx.Context, app.CreateTransactionRequest{
-		Amount:          c.Amount,
-		TransactionDate: c.TransactionDate,
-		Description:     c.Description,
-		Notes:           c.Notes,
-		CategoryCode:    c.Category,
-		HouseholdID:     c.HouseholdID,
-		Author:          identity(c.AuthorID, c.AuthorDiscordID, c.AuthorTelegramID, c.AuthorPhoneNumber, c.AuthorWhatsappID),
+	transaction, err := ctx.svc.CreateTransaction(ctx.Context, api.CreateTransactionRequest{
+		Amount: c.Amount, TransactionDate: c.TransactionDate, Description: c.Description, Notes: c.Notes,
+		CategoryCode: c.Category, HouseholdID: c.HouseholdID,
+		Author: identity(c.AuthorID, c.AuthorDiscordID, c.AuthorTelegramID, c.AuthorPhoneNumber, c.AuthorWhatsappID),
 	})
-	return renderWriteResult(ctx.stdout, result)
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, transaction)
 }
 
 type TransactionCreateBulkCmd struct {
@@ -140,11 +144,15 @@ type TransactionCreateBulkCmd struct {
 }
 
 func (c *TransactionCreateBulkCmd) Run(ctx *runContext) error {
-	var req app.BulkCreateTransactionsRequest
+	var req api.BulkCreateTransactionsRequest
 	if err := decodeJSONInput(ctx.stdin, c.Input, &req); err != nil {
 		return err
 	}
-	return renderWriteResult(ctx.stdout, ctx.svc.CreateTransactions(ctx.Context, req))
+	result, err := ctx.svc.CreateTransactions(ctx.Context, req)
+	if err != nil {
+		return err
+	}
+	return renderBulkResult(ctx.stdout, result)
 }
 
 type TransactionUpdateCmd struct {
@@ -168,8 +176,7 @@ type TransactionUpdateCmd struct {
 
 func (c *TransactionUpdateCmd) Run(ctx *runContext) error {
 	selector := identity(c.AuthorID, c.AuthorDiscordID, c.AuthorTelegramID, c.AuthorPhoneNumber, c.AuthorWhatsappID)
-	req := app.UpdateTransactionRequest{
-		ID:               c.ID,
+	req := api.UpdateTransactionRequest{
 		Amount:           c.Amount,
 		TransactionDate:  c.TransactionDate,
 		Description:      c.Description,
@@ -181,10 +188,14 @@ func (c *TransactionUpdateCmd) Run(ctx *runContext) error {
 		ClearCategoryID:  c.ClearCategory,
 		ClearHouseholdID: c.ClearHouseholdID,
 	}
-	if selector != (app.IdentitySelector{}) {
+	if selector != (api.IdentitySelector{}) {
 		req.Author = &selector
 	}
-	return renderWriteResult(ctx.stdout, ctx.svc.UpdateTransaction(ctx.Context, req))
+	transaction, err := ctx.svc.UpdateTransaction(ctx.Context, c.ID, req)
+	if err != nil {
+		return err
+	}
+	return RenderJSON(ctx.stdout, transaction)
 }
 
 type TransactionUpdateBulkCmd struct {
@@ -192,11 +203,15 @@ type TransactionUpdateBulkCmd struct {
 }
 
 func (c *TransactionUpdateBulkCmd) Run(ctx *runContext) error {
-	var req app.BulkUpdateTransactionsRequest
+	var req api.BulkUpdateTransactionsRequest
 	if err := decodeJSONInput(ctx.stdin, c.Input, &req); err != nil {
 		return err
 	}
-	return renderWriteResult(ctx.stdout, ctx.svc.UpdateTransactions(ctx.Context, req))
+	result, err := ctx.svc.UpdateTransactions(ctx.Context, req)
+	if err != nil {
+		return err
+	}
+	return renderBulkResult(ctx.stdout, result)
 }
 
 type TransactionGetCmd struct {
@@ -210,7 +225,7 @@ func (c *TransactionGetCmd) Run(ctx *runContext) error {
 	if err != nil {
 		return err
 	}
-	txs, err := ctx.svc.GetTransactions(ctx.Context, ids, c.IncludeDeleted)
+	txs, err := ctx.svc.ListTransactions(ctx.Context, api.ListTransactionsQuery{IDs: ids, IncludeDeleted: c.IncludeDeleted})
 	if err != nil {
 		return err
 	}
@@ -236,7 +251,7 @@ type TransactionListCmd struct {
 }
 
 func (c *TransactionListCmd) Run(ctx *runContext) error {
-	txs, err := ctx.svc.ListTransactions(ctx.Context, app.ListTransactionsRequest{
+	txs, err := ctx.svc.ListTransactions(ctx.Context, api.ListTransactionsQuery{
 		AuthorID:       c.AuthorID,
 		HouseholdID:    c.HouseholdID,
 		FromDate:       c.FromDate,
@@ -269,11 +284,11 @@ func (c *TransactionDeleteCmd) Run(ctx *runContext) error {
 	if err != nil {
 		return err
 	}
-	return renderWriteResult(ctx.stdout, ctx.svc.DeleteTransactions(ctx.Context, app.DeleteTransactionsRequest{
-		IDs:             ids,
-		DeletedByUserID: c.DeletedByUserID,
-		Reason:          c.Reason,
-	}))
+	result, err := ctx.svc.DeleteTransactions(ctx.Context, api.DeleteTransactionsRequest{IDs: ids, DeletedByUserID: c.DeletedByUserID, Reason: c.Reason})
+	if err != nil {
+		return err
+	}
+	return renderBulkResult(ctx.stdout, result)
 }
 
 type TransactionRestoreCmd struct {
@@ -286,10 +301,11 @@ func (c *TransactionRestoreCmd) Run(ctx *runContext) error {
 	if err != nil {
 		return err
 	}
-	return renderWriteResult(ctx.stdout, ctx.svc.RestoreTransactions(ctx.Context, app.RestoreTransactionsRequest{
-		IDs:              ids,
-		RestoredByUserID: c.RestoredByUserID,
-	}))
+	result, err := ctx.svc.RestoreTransactions(ctx.Context, api.RestoreTransactionsRequest{IDs: ids, RestoredByUserID: c.RestoredByUserID})
+	if err != nil {
+		return err
+	}
+	return renderBulkResult(ctx.stdout, result)
 }
 
 type CategoriesCmd struct {
@@ -306,7 +322,7 @@ type CategoryCreateCmd struct {
 }
 
 func (c *CategoryCreateCmd) Run(ctx *runContext) error {
-	category, err := ctx.svc.CreateCategory(ctx.Context, app.CreateCategoryRequest{
+	category, err := ctx.svc.CreateCategory(ctx.Context, api.CreateCategoryRequest{
 		Name:        c.Name,
 		Code:        c.Code,
 		Description: c.Description,
@@ -322,7 +338,7 @@ type CategoryListCmd struct {
 }
 
 func (c *CategoryListCmd) Run(ctx *runContext) error {
-	categories, err := ctx.svc.ListCategories(ctx.Context, app.ListCategoriesRequest{IncludeInactive: c.IncludeInactive})
+	categories, err := ctx.svc.ListCategories(ctx.Context, api.ListCategoriesQuery{IncludeInactive: c.IncludeInactive})
 	if err != nil {
 		return err
 	}
@@ -335,14 +351,11 @@ type CategoryRenameCmd struct {
 }
 
 func (c *CategoryRenameCmd) Run(ctx *runContext) error {
-	existing, err := ctx.svc.GetCategoryByCode(ctx.Context, c.Code)
+	existing, err := ctx.svc.GetCategory(ctx.Context, c.Code)
 	if err != nil {
 		return err
 	}
-	category, err := ctx.svc.UpdateCategory(ctx.Context, app.UpdateCategoryRequest{
-		ID:   existing.ID,
-		Name: &c.Name,
-	})
+	category, err := ctx.svc.UpdateCategory(ctx.Context, existing.ID, api.UpdateCategoryRequest{Name: &c.Name})
 	if err != nil {
 		return err
 	}
@@ -378,7 +391,7 @@ type UserCreateCmd struct {
 }
 
 func (c *UserCreateCmd) Run(ctx *runContext) error {
-	user, err := ctx.svc.CreateUser(ctx.Context, app.CreateUserRequest{Name: c.Name, DiscordID: c.DiscordID, TelegramID: c.TelegramID, PhoneNumber: c.PhoneNumber, WhatsappID: c.WhatsappID})
+	user, err := ctx.svc.CreateUser(ctx.Context, api.CreateUserRequest{Name: c.Name, DiscordID: c.DiscordID, TelegramID: c.TelegramID, PhoneNumber: c.PhoneNumber, WhatsAppID: c.WhatsappID})
 	if err != nil {
 		return err
 	}
@@ -399,17 +412,10 @@ type UserUpdateCmd struct {
 }
 
 func (c *UserUpdateCmd) Run(ctx *runContext) error {
-	user, err := ctx.svc.UpdateUser(ctx.Context, app.UpdateUserRequest{
-		ID:               c.ID,
-		Name:             c.Name,
-		DiscordID:        c.DiscordID,
-		TelegramID:       c.TelegramID,
-		PhoneNumber:      c.PhoneNumber,
-		WhatsappID:       c.WhatsappID,
-		ClearDiscordID:   c.ClearDiscordID,
-		ClearTelegramID:  c.ClearTelegramID,
-		ClearPhoneNumber: c.ClearPhoneNumber,
-		ClearWhatsappID:  c.ClearWhatsappID,
+	user, err := ctx.svc.UpdateUser(ctx.Context, c.ID, api.UpdateUserRequest{
+		Name: c.Name, DiscordID: c.DiscordID, TelegramID: c.TelegramID, PhoneNumber: c.PhoneNumber, WhatsAppID: c.WhatsappID,
+		ClearDiscordID: c.ClearDiscordID, ClearTelegramID: c.ClearTelegramID,
+		ClearPhoneNumber: c.ClearPhoneNumber, ClearWhatsAppID: c.ClearWhatsappID,
 	})
 	if err != nil {
 		return err
@@ -468,7 +474,13 @@ type HouseholdGetCmd struct {
 }
 
 func (c *HouseholdGetCmd) Run(ctx *runContext) error {
-	household, err := ctx.svc.GetHousehold(ctx.Context, app.GetHouseholdRequest{ID: c.ID, GuildID: c.GuildID, Name: c.Name})
+	var household api.Household
+	var err error
+	if c.ID != nil {
+		household, err = ctx.svc.GetHousehold(ctx.Context, *c.ID)
+	} else {
+		household, err = ctx.svc.ResolveHousehold(ctx.Context, api.ResolveHouseholdQuery{Name: c.Name, GuildID: c.GuildID})
+	}
 	if err != nil {
 		return err
 	}
@@ -490,7 +502,7 @@ type HouseholdUsersCmd struct {
 }
 
 func (c *HouseholdUsersCmd) Run(ctx *runContext) error {
-	users, err := ctx.svc.GetHouseholdUsers(ctx.Context, c.HouseholdID)
+	users, err := ctx.svc.ListHouseholdUsers(ctx.Context, c.HouseholdID)
 	if err != nil {
 		return err
 	}
@@ -515,13 +527,13 @@ func (c *BudgetGetCmd) Run(ctx *runContext) error {
 	if err != nil {
 		return err
 	}
-	budget, err := ctx.svc.GetMonthlyBudget(ctx.Context, app.GetMonthlyBudgetRequest{
-		HouseholdID:     c.HouseholdID,
-		UserID:          c.UserID,
-		Year:            year,
-		Month:           month,
-		CreateIfMissing: c.Create,
-	})
+	params := api.MonthlyBudgetParams{HouseholdID: c.HouseholdID, UserID: c.UserID, Year: year, Month: month}
+	var budget api.Budget
+	if c.Create {
+		budget, err = ctx.svc.EnsureMonthlyBudget(ctx.Context, params)
+	} else {
+		budget, err = ctx.svc.GetMonthlyBudget(ctx.Context, params)
+	}
 	if err != nil {
 		return err
 	}
@@ -555,8 +567,7 @@ type BudgetLineAddCmd struct {
 }
 
 func (c *BudgetLineAddCmd) Run(ctx *runContext) error {
-	line, err := ctx.svc.CreateBudgetLine(ctx.Context, app.CreateBudgetLineRequest{
-		BudgetID:         c.BudgetID,
+	line, err := ctx.svc.CreateBudgetLine(ctx.Context, c.BudgetID, api.CreateBudgetLineRequest{
 		Name:             c.Name,
 		AllocationAmount: c.Amount,
 		CategoryCodes:    parseOptionalCSV(c.Categories),
@@ -582,8 +593,7 @@ func (c *BudgetLineUpdateCmd) Run(ctx *runContext) error {
 		parsed := parseOptionalCSV(c.Categories)
 		categoryCodes = &parsed
 	}
-	line, err := ctx.svc.UpdateBudgetLine(ctx.Context, app.UpdateBudgetLineRequest{
-		LineID:           c.ID,
+	line, err := ctx.svc.UpdateBudgetLine(ctx.Context, c.ID, api.UpdateBudgetLineRequest{
 		Name:             c.Name,
 		AllocationAmount: c.Amount,
 		CategoryCodes:    categoryCodes,
@@ -603,16 +613,16 @@ func (c *BudgetLineDeleteCmd) Run(ctx *runContext) error {
 	return ctx.svc.DeleteBudgetLine(ctx.Context, c.ID)
 }
 
-func identity(authorID *int64, discordID, telegramID, phoneNumber, whatsappID *string) app.IdentitySelector {
-	return app.IdentitySelector{AuthorID: authorID, DiscordID: discordID, TelegramID: telegramID, PhoneNumber: phoneNumber, WhatsappID: whatsappID}
+func identity(userID *int64, discordID, telegramID, phoneNumber, whatsappID *string) api.IdentitySelector {
+	return api.IdentitySelector{UserID: userID, DiscordID: discordID, TelegramID: telegramID, PhoneNumber: phoneNumber, WhatsAppID: whatsappID}
 }
 
-func renderWriteResult(w io.Writer, result app.WriteResult) error {
+func renderBulkResult(w io.Writer, result api.BulkResult) error {
 	if err := RenderJSON(w, result); err != nil {
 		return err
 	}
-	if len(result.Errors) > 0 {
-		return NewCLIError("write completed with errors")
+	if len(result.Failed) > 0 {
+		return NewCLIError("write completed with item failures")
 	}
 	return nil
 }
@@ -630,18 +640,21 @@ func (e CLIError) Error() string {
 }
 
 func isExpectedError(err error) bool {
-	var appErr *app.AppError
 	var cliErr CLIError
-	return errors.As(err, &appErr) || errors.As(err, &cliErr)
+	if errors.As(err, &cliErr) {
+		return true
+	}
+	var apiErr *restclient.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 && apiErr.StatusCode != 401 && apiErr.StatusCode != 403
 }
 
 func expectedErrorMessage(err error) string {
-	var appErr *app.AppError
-	if errors.As(err, &appErr) {
-		if cause := appErr.Unwrap(); cause != nil {
-			return fmt.Sprintf("%s: %v", appErr.Message, cause)
-		}
-		return appErr.Message
+	var apiErr *restclient.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Message
 	}
 	return err.Error()
 }
@@ -656,7 +669,19 @@ func decodeJSONInput(stdin io.Reader, input *string, value any) error {
 		defer file.Close()
 		reader = file
 	}
-	return json.NewDecoder(reader).Decode(value)
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("input contains multiple JSON values")
+		}
+		return err
+	}
+	return nil
 }
 
 func parseIDs(raw string) ([]int64, error) {

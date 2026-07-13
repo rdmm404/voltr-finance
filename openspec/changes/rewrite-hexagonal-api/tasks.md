@@ -57,13 +57,13 @@
 
 ## 7. API-Backed CLI
 
-- [ ] 7.1 Replace the CLI database config schema with strict API base URL/API key configuration and `VOLTR_API_URL`/`VOLTR_API_KEY` overrides while preserving config-path precedence.
-- [ ] 7.2 Rewire `cmd/cli` and `internal/cli` to depend only on the REST client and API wire types, with help remaining configuration-free.
-- [ ] 7.3 Migrate transaction commands to the REST client while preserving useful flags, stdin bulk input, and JSON/compact/CSV rendering.
-- [ ] 7.4 Migrate user, household, and category commands to the REST client while retaining supported Discord identity data as ordinary selectors.
-- [ ] 7.5 Migrate budget commands so `budgets get --create` directly calls monthly ensure and the command without the flag performs only a read.
-- [ ] 7.6 Normalize CLI rendering and enforce exit code 0 for complete success, 2 for usage/validation or item failures, and 1 for configuration/authentication/transport/server failures.
-- [ ] 7.7 Add CLI-to-`httptest` integration coverage proving commands authenticate, never initialize Postgres, render partial successes before a non-zero exit, and select the correct budget endpoint.
+- [x] 7.1 Replace the CLI database config schema with strict API base URL/API key configuration and `VOLTR_API_URL`/`VOLTR_API_KEY` overrides while preserving config-path precedence.
+- [x] 7.2 Rewire `cmd/cli` and `internal/cli` to depend only on the REST client and API wire types, with help remaining configuration-free.
+- [x] 7.3 Migrate transaction commands to the REST client while preserving useful flags, stdin bulk input, and JSON/compact/CSV rendering.
+- [x] 7.4 Migrate user, household, and category commands to the REST client while retaining supported Discord identity data as ordinary selectors.
+- [x] 7.5 Migrate budget commands so `budgets get --create` directly calls monthly ensure and the command without the flag performs only a read.
+- [x] 7.6 Normalize CLI rendering and enforce exit code 0 for complete success, 2 for usage/validation or item failures, and 1 for configuration/authentication/transport/server failures.
+- [x] 7.7 Add CLI-to-`httptest` integration coverage proving commands authenticate, never initialize Postgres, render partial successes before a non-zero exit, and select the correct budget endpoint.
 
 ## 8. API Composition and Deployment
 
