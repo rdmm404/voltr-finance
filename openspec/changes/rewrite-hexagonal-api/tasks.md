@@ -87,3 +87,16 @@
 - [x] 10.3 Run formatting, unit tests, race-enabled tests, API/CLI integration tests, and production builds for both `cmd/api` and `cmd/cli`.
 - [x] 10.4 Perform a local Postgres smoke test covering authentication, every REST feature family, bulk partial success, monthly budget read/ensure, budget reporting, and CLI rendering.
 - [x] 10.5 Confirm deployment rollback requires only the previous binaries and configuration because this change introduces no destructive database migration.
+
+## 11. Review Follow-ups
+
+- [x] 11.1 Retain the application-owned budget transactor while removing the race-prone category availability pre-check and translating the authoritative category-mapping constraint to a safe budget conflict.
+- [x] 11.2 Serialize automatic budget-line sort allocation by locking the parent budget within the write transaction.
+- [x] 11.3 Load budget report inputs in one repeatable-read, read-only transaction snapshot.
+- [x] 11.4 Make transaction update read/merge/hash/write atomic under a row lock using the canonical application hash function.
+- [x] 11.5 Collapse nullable PATCH fields into an application-owned tri-state mutation and reject contradictory boundary payloads consistently.
+- [x] 11.6 Inject shared logger-backed handler support, centralize strict decode/error mechanics, and ensure production internal failures are recorded safely.
+- [x] 11.7 Standardize category resource identity on category code and make CLI rename a single PATCH request.
+- [x] 11.8 Split CLI commands and clients by feature, remove permissive embedded-interface test doubles, and cover every command through the authenticated REST client.
+- [x] 11.9 Restore focused budget validation/report characterization, add concurrency integration cases, and collapse duplicate transaction bulk loops.
+- [x] 11.10 Run formatting, unit, race, vet, build, architecture, and PostgreSQL integration verification for the review changes.

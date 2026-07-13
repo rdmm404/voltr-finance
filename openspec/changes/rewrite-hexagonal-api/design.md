@@ -58,7 +58,11 @@ The HTTP handlers and API client use explicit wire contracts from `internal/api`
 
 The existing `internal/transaction` behavior, including validation and transaction hash generation, moves into the transactions application feature or an application-owned domain helper. Persistence-specific parameter construction moves into the database adapter.
 
-Budget atomic operations use an application-owned transaction port. The Postgres adapter implements it with pgx and supplies transaction-scoped repository implementations. Application callbacks see only application repository ports.
+Budget atomic operations use an application-owned transaction port. The Postgres adapter implements it with pgx and supplies transaction-scoped repository implementations. Application callbacks see only application repository ports. This boundary remains intentionally available for application workflows that coordinate repository operations; it is not replaced by persistence-specific callbacks.
+
+Within that boundary, concurrency-sensitive mechanics remain authoritative in PostgreSQL. Automatic budget-line ordering locks the parent budget before reading the next order, category assignment relies on the existing unique constraint rather than a race-prone pre-check, and constraint violations are translated to safe application conflicts. Multi-query reports run through a repeatable-read, read-only snapshot callback, while write callbacks retain normal read-committed behavior so a writer waiting on a parent lock sees the preceding committed line.
+
+Transaction updates use a cohesive repository operation that locks the current row, applies the application-owned mutation, calculates the canonical application hash from the merged state, and writes before committing. This keeps derived transaction identity synchronized under concurrent updates.
 
 Alternatives considered:
 
@@ -111,7 +115,7 @@ Categories
   POST   /v1/categories
   GET    /v1/categories
   GET    /v1/categories/{code}
-  PATCH  /v1/categories/{id}
+  PATCH  /v1/categories/{code}
   DELETE /v1/categories/{code}
 
 Budgets
@@ -127,7 +131,9 @@ Budgets
 
 Household resolution accepts exactly one of `name` or `guildId`; direct ID retrieval uses the resource route. User resolution accepts exactly one supported identity selector.
 
-Request IDs belong in path parameters for single-resource mutations and are not duplicated in JSON bodies. List filters, sorting, pagination, and include-deleted flags use query parameters. JSON field names remain lower camel case.
+Resource identifiers belong in path parameters for single-resource mutations and are not duplicated in JSON bodies. Categories consistently use their stable code for GET, PATCH, and DELETE, avoiding client-side lookup-before-mutation orchestration. List filters, sorting, pagination, and include-deleted flags use query parameters. JSON field names remain lower camel case.
+
+Nullable PATCH fields have one application-owned tri-state representation: absent, set, or clear. The retained public pointer-plus-`clearX` JSON shape is validated at the handler boundary; contradictory set-and-clear payloads are rejected, and handlers immediately collapse valid input into the tri-state mutation before calling a service.
 
 ### 4. Monthly-budget read and ensure are separate
 
@@ -208,7 +214,7 @@ Operations remain non-atomic across items. Application use cases may use a trans
 
 ### 8. CLI is an HTTP adapter and renderer
 
-`cmd/cli` wires command parsing to a standard-library REST client only. Neither it nor `internal/cli` imports database, sqlc, pgx, or server application packages. The client sets the bearer header, applies request timeouts, encodes requests, decodes success and error envelopes, and distinguishes transport failures from API operation failures.
+`cmd/cli` wires command parsing to a standard-library REST client only. Neither it nor `internal/cli` imports database, sqlc, pgx, or server application packages. Commands are split by feature and depend on narrow transaction, user, household, category, or budget client interfaces. The client sets the bearer header, applies request timeouts, encodes requests, decodes success and error envelopes, and distinguishes transport failures from API operation failures.
 
 The strict CLI config changes to:
 

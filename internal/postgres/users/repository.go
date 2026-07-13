@@ -36,10 +36,10 @@ func (r *Repository) Update(ctx context.Context, id int64, input appusers.Update
 		name = *input.Name
 	}
 	row, err := r.queries.UpdateUser(ctx, sqlc.UpdateUserParams{
-		SetDiscordID: input.SetDiscordID, DiscordID: input.DiscordID,
-		SetTelegramID: input.SetTelegramID, TelegramID: input.TelegramID,
-		SetPhoneNumber: input.SetPhoneNumber, PhoneNumber: input.PhoneNumber,
-		SetWhatsappID: input.SetWhatsAppID, WhatsappID: input.WhatsAppID,
+		SetDiscordID: input.DiscordID.Present(), DiscordID: input.DiscordID.Value(),
+		SetTelegramID: input.TelegramID.Present(), TelegramID: input.TelegramID.Value(),
+		SetPhoneNumber: input.PhoneNumber.Present(), PhoneNumber: input.PhoneNumber.Value(),
+		SetWhatsappID: input.WhatsAppID.Present(), WhatsappID: input.WhatsAppID.Value(),
 		SetName: input.Name != nil, Name: name, ID: id,
 	})
 	return mapUser(row), mapError(err)

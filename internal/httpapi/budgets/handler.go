@@ -18,9 +18,14 @@ type service interface {
 	Report(context.Context, int64) (appbudgets.Report, error)
 }
 
-type Handler struct{ service service }
+type Handler struct {
+	service service
+	support *httpapi.HandlerSupport
+}
 
-func New(service service) *Handler { return &Handler{service: service} }
+func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
+}
 
 func (h *Handler) Register(router *httpapi.Router) {
 	router.HandleFunc(http.MethodGet, api.MonthlyBudgetsPath, h.getMonthly)
@@ -38,7 +43,7 @@ func (h *Handler) getMonthly(w http.ResponseWriter, request *http.Request) {
 	}
 	item, err := h.service.GetMonthly(request.Context(), input)
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, budget(item))
@@ -46,12 +51,12 @@ func (h *Handler) getMonthly(w http.ResponseWriter, request *http.Request) {
 
 func (h *Handler) ensureMonthly(w http.ResponseWriter, request *http.Request) {
 	var body api.MonthlyBudgetParams
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	result, err := h.service.EnsureMonthly(request.Context(), monthlyInput(body))
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	status := http.StatusOK
@@ -68,7 +73,7 @@ func (h *Handler) createLine(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var body api.CreateBudgetLineRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	item, err := h.service.CreateLine(request.Context(), appbudgets.CreateLineInput{
@@ -76,7 +81,7 @@ func (h *Handler) createLine(w http.ResponseWriter, request *http.Request) {
 		CategoryIDs: body.CategoryIDs, CategoryCodes: body.CategoryCodes, SortOrder: body.SortOrder,
 	})
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, line(item))
@@ -89,7 +94,7 @@ func (h *Handler) updateLine(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var body api.UpdateBudgetLineRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	item, err := h.service.UpdateLine(request.Context(), appbudgets.UpdateLineInput{
@@ -97,7 +102,7 @@ func (h *Handler) updateLine(w http.ResponseWriter, request *http.Request) {
 		CategoryIDs: body.CategoryIDs, CategoryCodes: body.CategoryCodes, SortOrder: body.SortOrder,
 	})
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, line(item))
@@ -110,7 +115,7 @@ func (h *Handler) deleteLine(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if err := h.service.DeleteLine(request.Context(), lineID); err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -124,7 +129,7 @@ func (h *Handler) report(w http.ResponseWriter, request *http.Request) {
 	}
 	item, err := h.service.Report(request.Context(), budgetID)
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, report(item))
@@ -211,16 +216,4 @@ func report(item appbudgets.Report) api.BudgetReport {
 		result.UnmappedTransactions = append(result.UnmappedTransactions, mapped)
 	}
 	return result
-}
-
-func decode(w http.ResponseWriter, request *http.Request, value any) bool {
-	if err := httpapi.DecodeJSON(w, request, value); err != nil {
-		httpapi.WriteValidationError(w, err.Error())
-		return false
-	}
-	return true
-}
-
-func fail(w http.ResponseWriter, request *http.Request, err error) {
-	httpapi.WriteApplicationError(w, request, nil, err)
 }

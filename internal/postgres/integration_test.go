@@ -13,6 +13,7 @@ import (
 	appbudgets "rdmm404/voltr-finance/internal/app/budgets"
 	appcategories "rdmm404/voltr-finance/internal/app/categories"
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	"rdmm404/voltr-finance/internal/app/patch"
 	apptransactions "rdmm404/voltr-finance/internal/app/transactions"
 	appusers "rdmm404/voltr-finance/internal/app/users"
 	"rdmm404/voltr-finance/internal/database/sqlc"
@@ -110,7 +111,7 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 		t.Fatalf("duplicate category error=%v", err)
 	}
 
-	transactionRepo := postgrestransactions.NewRepository(queries)
+	transactionRepo := postgrestransactions.NewRepository(pool)
 	transactionService := apptransactions.NewService(transactionRepo, identityResolver{id: user.ID}, categoryResolver{service: categoryService})
 	transaction, err := transactionService.Create(ctx, apptransactions.CreateInput{Amount: 25.50, TransactionDate: time.Now().UTC(), HouseholdID: &householdID, CategoryID: &category.ID})
 	if err != nil {
@@ -122,6 +123,27 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 	}
 	if _, err := transactionService.Create(ctx, apptransactions.CreateInput{Amount: 25.50, TransactionDate: transaction.TransactionDate, HouseholdID: &householdID, CategoryID: &category.ID}); !apperrors.IsKind(err, apperrors.KindConflict) {
 		t.Fatalf("duplicate transaction error=%v", err)
+	}
+	updatedAmount, updatedDescription := float32(30.75), "concurrent update"
+	updateErrors := make([]error, 2)
+	var updateWait sync.WaitGroup
+	updateWait.Add(2)
+	go func() {
+		defer updateWait.Done()
+		_, updateErrors[0] = transactionService.Update(ctx, apptransactions.UpdateInput{ID: transaction.ID, Amount: &updatedAmount})
+	}()
+	go func() {
+		defer updateWait.Done()
+		_, updateErrors[1] = transactionService.Update(ctx, apptransactions.UpdateInput{ID: transaction.ID, Description: patch.Set(updatedDescription)})
+	}()
+	updateWait.Wait()
+	finalTransaction, err := transactionService.Get(ctx, transaction.ID, true)
+	if updateErrors[0] != nil || updateErrors[1] != nil || err != nil || finalTransaction.Amount != updatedAmount || finalTransaction.Description == nil || *finalTransaction.Description != updatedDescription {
+		t.Fatalf("concurrent transaction=%+v updateErrors=%v getError=%v", finalTransaction, updateErrors, err)
+	}
+	wantHash, _ := apptransactions.Hash(finalTransaction.Description, finalTransaction.TransactionDate, finalTransaction.AuthorID, finalTransaction.HouseholdID, finalTransaction.CategoryID, finalTransaction.Amount)
+	if finalTransaction.Hash != wantHash {
+		t.Fatalf("hash=%q want=%q", finalTransaction.Hash, wantHash)
 	}
 	if _, err := transactionService.SoftDelete(ctx, apptransactions.DeleteInput{ID: transaction.ID, DeletedByUserID: user.ID}); err != nil {
 		t.Fatal(err)
@@ -146,8 +168,25 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 	if err != nil || len(line.Categories) != 1 {
 		t.Fatalf("create line=%+v error=%v", line, err)
 	}
+	if _, err := budgetService.CreateLine(ctx, appbudgets.CreateLineInput{BudgetID: ensured.Budget.ID, Name: "Duplicate mapping", AllocationAmount: "1.00", CategoryIDs: []int64{category.ID}}); !apperrors.IsKind(err, apperrors.KindConflict) || apperrors.MessageOf(err) != "category already mapped to another budget line" {
+		t.Fatalf("category mapping conflict=%v", err)
+	}
+	lineResults := make([]appbudgets.Line, 2)
+	lineErrors := make([]error, 2)
+	var lineWait sync.WaitGroup
+	for index := range lineResults {
+		lineWait.Add(1)
+		go func(i int) {
+			defer lineWait.Done()
+			lineResults[i], lineErrors[i] = budgetService.CreateLine(ctx, appbudgets.CreateLineInput{BudgetID: ensured.Budget.ID, Name: fmt.Sprintf("Concurrent %d", i), AllocationAmount: "1.00"})
+		}(index)
+	}
+	lineWait.Wait()
+	if lineErrors[0] != nil || lineErrors[1] != nil || lineResults[0].SortOrder == lineResults[1].SortOrder {
+		t.Fatalf("concurrent lines=%+v errors=%v", lineResults, lineErrors)
+	}
 	report, err := budgetService.Report(ctx, ensured.Budget.ID)
-	if err != nil || report.Totals.ActualAmount != "25.50" || report.Totals.RemainingAmount != "74.50" {
+	if err != nil || report.Totals.ActualAmount != "30.75" || report.Totals.RemainingAmount != "71.25" {
 		t.Fatalf("report=%+v error=%v", report, err)
 	}
 
@@ -161,7 +200,7 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 		go func(i int) { defer wait.Done(); results[i], errs[i] = budgetService.EnsureMonthly(ctx, nextMonthly) }(index)
 	}
 	wait.Wait()
-	if errs[0] != nil || errs[1] != nil || results[0].Budget.ID != results[1].Budget.ID || results[0].Created == results[1].Created || len(results[0].Budget.Lines) != 1 {
+	if errs[0] != nil || errs[1] != nil || results[0].Budget.ID != results[1].Budget.ID || results[0].Created == results[1].Created || len(results[0].Budget.Lines) != 3 {
 		t.Fatalf("concurrent ensure results=%+v errors=%v", results, errs)
 	}
 	t.Cleanup(func() { pool.Exec(context.Background(), `DELETE FROM budget WHERE id=$1`, results[0].Budget.ID) })

@@ -3,13 +3,13 @@ package transactions
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cespare/xxhash"
 	"github.com/jxskiss/base62"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 type CategoryRef struct {
@@ -68,38 +68,30 @@ type NewTransaction struct {
 	AuthorID        int64
 }
 
+type CategorySelector struct {
+	ID   *int64
+	Code *string
+}
+
 type UpdateInput struct {
-	ID               int64
-	Amount           *float32
-	TransactionDate  *time.Time
-	Description      *string
-	Notes            *string
-	CategoryID       *int64
-	CategoryCode     *string
-	HouseholdID      *int64
-	Author           *IdentitySelector
-	ClearDescription bool
-	ClearNotes       bool
-	ClearCategoryID  bool
-	ClearHouseholdID bool
+	ID              int64
+	Amount          *float32
+	TransactionDate *time.Time
+	Description     patch.Field[string]
+	Notes           patch.Field[string]
+	Category        patch.Field[CategorySelector]
+	HouseholdID     patch.Field[int64]
+	Author          *IdentitySelector
 }
 
 type Mutation struct {
-	Hash               string
-	SetAmount          bool
-	Amount             float32
-	SetTransactionDate bool
-	TransactionDate    time.Time
-	SetDescription     bool
-	Description        *string
-	SetNotes           bool
-	Notes              *string
-	SetCategoryID      bool
-	CategoryID         *int64
-	SetHouseholdID     bool
-	HouseholdID        *int64
-	SetAuthorID        bool
-	AuthorID           int64
+	Amount          *float32
+	TransactionDate *time.Time
+	Description     patch.Field[string]
+	Notes           patch.Field[string]
+	CategoryID      patch.Field[int64]
+	HouseholdID     patch.Field[int64]
+	AuthorID        *int64
 }
 
 type ListFilter struct {
@@ -180,16 +172,10 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Transaction, e
 }
 
 func (s *Service) CreateBatch(ctx context.Context, inputs []CreateInput) BulkResult {
-	result := newBulkResult(len(inputs))
-	for index, input := range inputs {
+	return runBulk(inputs, func(CreateInput) *int64 { return nil }, func(input CreateInput) (int64, error) {
 		item, err := s.Create(ctx, input)
-		if err != nil {
-			result.Failed = append(result.Failed, Failed{Index: index, Error: err})
-			continue
-		}
-		result.Succeeded = append(result.Succeeded, Succeeded{Index: index, ID: item.ID})
-	}
-	return result
+		return item.ID, err
+	})
 }
 
 func (s *Service) Get(ctx context.Context, id int64, includeDeleted bool) (Transaction, error) {
@@ -233,11 +219,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (Transaction, e
 	if input.ID == 0 {
 		return Transaction{}, apperrors.Validation("transaction id is required")
 	}
-	existing, err := s.repo.Get(ctx, input.ID, true)
-	if err != nil {
-		return Transaction{}, apperrors.WrapInternal("get transaction for update", err)
-	}
-	mutation, err := s.prepareUpdate(ctx, existing, input)
+	mutation, err := s.prepareUpdate(ctx, input)
 	if err != nil {
 		return Transaction{}, err
 	}
@@ -246,16 +228,10 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (Transaction, e
 }
 
 func (s *Service) UpdateBatch(ctx context.Context, inputs []UpdateInput) BulkResult {
-	result := newBulkResult(len(inputs))
-	for index, input := range inputs {
+	return runBulk(inputs, func(input UpdateInput) *int64 { return knownID(input.ID) }, func(input UpdateInput) (int64, error) {
 		item, err := s.Update(ctx, input)
-		if err != nil {
-			result.Failed = append(result.Failed, Failed{Index: index, ID: knownID(input.ID), Error: err})
-			continue
-		}
-		result.Succeeded = append(result.Succeeded, Succeeded{Index: index, ID: item.ID})
-	}
-	return result
+		return item.ID, err
+	})
 }
 
 func (s *Service) SoftDelete(ctx context.Context, input DeleteInput) (Transaction, error) {
@@ -267,22 +243,10 @@ func (s *Service) SoftDelete(ctx context.Context, input DeleteInput) (Transactio
 }
 
 func (s *Service) DeleteBatch(ctx context.Context, ids []int64, deletedByUserID int64, reason *string) BulkResult {
-	result := newBulkResult(len(ids))
-	if deletedByUserID == 0 {
-		for index, id := range ids {
-			result.Failed = append(result.Failed, Failed{Index: index, ID: knownID(id), Error: apperrors.Validation("deleted by user id is required")})
-		}
-		return result
-	}
-	for index, id := range ids {
+	return runBulk(ids, knownID, func(id int64) (int64, error) {
 		item, err := s.SoftDelete(ctx, DeleteInput{ID: id, DeletedByUserID: deletedByUserID, Reason: reason})
-		if err != nil {
-			result.Failed = append(result.Failed, Failed{Index: index, ID: knownID(id), Error: err})
-			continue
-		}
-		result.Succeeded = append(result.Succeeded, Succeeded{Index: index, ID: item.ID})
-	}
-	return result
+		return item.ID, err
+	})
 }
 
 func (s *Service) Restore(ctx context.Context, input RestoreInput) (Transaction, error) {
@@ -294,22 +258,10 @@ func (s *Service) Restore(ctx context.Context, input RestoreInput) (Transaction,
 }
 
 func (s *Service) RestoreBatch(ctx context.Context, ids []int64, restoredByUserID int64) BulkResult {
-	result := newBulkResult(len(ids))
-	if restoredByUserID == 0 {
-		for index, id := range ids {
-			result.Failed = append(result.Failed, Failed{Index: index, ID: knownID(id), Error: apperrors.Validation("restored by user id is required")})
-		}
-		return result
-	}
-	for index, id := range ids {
+	return runBulk(ids, knownID, func(id int64) (int64, error) {
 		item, err := s.Restore(ctx, RestoreInput{ID: id, RestoredByUserID: restoredByUserID})
-		if err != nil {
-			result.Failed = append(result.Failed, Failed{Index: index, ID: knownID(id), Error: err})
-			continue
-		}
-		result.Succeeded = append(result.Succeeded, Succeeded{Index: index, ID: item.ID})
-	}
-	return result
+		return item.ID, err
+	})
 }
 
 func (s *Service) prepareCreate(ctx context.Context, input CreateInput) (NewTransaction, error) {
@@ -337,75 +289,64 @@ func (s *Service) prepareCreate(ctx context.Context, input CreateInput) (NewTran
 	return NewTransaction{Hash: hash, Amount: input.Amount, TransactionDate: input.TransactionDate, Description: input.Description, Notes: input.Notes, CategoryID: categoryID, HouseholdID: input.HouseholdID, AuthorID: authorID}, nil
 }
 
-func (s *Service) prepareUpdate(ctx context.Context, existing Transaction, input UpdateInput) (Mutation, error) {
-	mutation := Mutation{}
-	if input.Amount != nil {
-		if *input.Amount == 0 {
-			return Mutation{}, apperrors.Validation("amount is required")
+func (s *Service) prepareUpdate(ctx context.Context, input UpdateInput) (Mutation, error) {
+	mutation := Mutation{Amount: input.Amount, TransactionDate: input.TransactionDate, Description: input.Description, Notes: input.Notes, HouseholdID: input.HouseholdID}
+	if input.Amount != nil && *input.Amount == 0 {
+		return Mutation{}, apperrors.Validation("amount is required")
+	}
+	if input.TransactionDate != nil && input.TransactionDate.IsZero() {
+		return Mutation{}, apperrors.Validation("transaction date is required")
+	}
+	if input.Category.Present() {
+		selector := input.Category.Value()
+		if selector == nil {
+			mutation.CategoryID = patch.Clear[int64]()
+		} else {
+			categoryID, err := s.categories.ResolveActiveCategoryID(ctx, selector.ID, selector.Code)
+			if err != nil {
+				return Mutation{}, apperrors.Normalize(err)
+			}
+			if categoryID == nil {
+				mutation.CategoryID = patch.Clear[int64]()
+			} else {
+				mutation.CategoryID = patch.Set(*categoryID)
+			}
 		}
-		mutation.SetAmount, mutation.Amount = true, *input.Amount
-	}
-	if input.TransactionDate != nil {
-		if input.TransactionDate.IsZero() {
-			return Mutation{}, apperrors.Validation("transaction date is required")
-		}
-		mutation.SetTransactionDate, mutation.TransactionDate = true, *input.TransactionDate
-	}
-	if input.Description != nil || input.ClearDescription {
-		mutation.SetDescription, mutation.Description = true, input.Description
-	}
-	if input.Notes != nil || input.ClearNotes {
-		mutation.SetNotes, mutation.Notes = true, input.Notes
-	}
-	if input.CategoryID != nil || input.CategoryCode != nil {
-		categoryID, err := s.categories.ResolveActiveCategoryID(ctx, input.CategoryID, input.CategoryCode)
-		if err != nil {
-			return Mutation{}, apperrors.Normalize(err)
-		}
-		mutation.SetCategoryID, mutation.CategoryID = true, categoryID
-	} else if input.ClearCategoryID {
-		mutation.SetCategoryID = true
-	}
-	if input.HouseholdID != nil || input.ClearHouseholdID {
-		mutation.SetHouseholdID, mutation.HouseholdID = true, input.HouseholdID
 	}
 	if input.Author != nil {
 		authorID, err := s.identities.ResolveUserID(ctx, *input.Author)
 		if err != nil {
 			return Mutation{}, apperrors.Normalize(err)
 		}
-		mutation.SetAuthorID, mutation.AuthorID = true, authorID
+		mutation.AuthorID = &authorID
 	}
-	merged := applyMutation(existing, mutation)
-	hash, err := Hash(merged.Description, merged.TransactionDate, merged.AuthorID, merged.HouseholdID, merged.CategoryID, merged.Amount)
-	if err != nil {
-		return Mutation{}, err
-	}
-	mutation.Hash = hash
 	return mutation, nil
 }
 
-func applyMutation(item Transaction, update Mutation) Transaction {
-	if update.SetAmount {
-		item.Amount = update.Amount
+// Apply merges a validated mutation into the row locked by the persistence
+// adapter. Keeping this operation and Hash in the application package ensures
+// the adapter cannot invent domain merge or identity semantics.
+func (update Mutation) Apply(item Transaction) Transaction {
+	if update.Amount != nil {
+		item.Amount = *update.Amount
 	}
-	if update.SetTransactionDate {
-		item.TransactionDate = update.TransactionDate
+	if update.TransactionDate != nil {
+		item.TransactionDate = *update.TransactionDate
 	}
-	if update.SetDescription {
-		item.Description = update.Description
+	if update.Description.Present() {
+		item.Description = update.Description.Value()
 	}
-	if update.SetNotes {
-		item.Notes = update.Notes
+	if update.Notes.Present() {
+		item.Notes = update.Notes.Value()
 	}
-	if update.SetCategoryID {
-		item.CategoryID = update.CategoryID
+	if update.CategoryID.Present() {
+		item.CategoryID = update.CategoryID.Value()
 	}
-	if update.SetHouseholdID {
-		item.HouseholdID = update.HouseholdID
+	if update.HouseholdID.Present() {
+		item.HouseholdID = update.HouseholdID.Value()
 	}
-	if update.SetAuthorID {
-		item.AuthorID = update.AuthorID
+	if update.AuthorID != nil {
+		item.AuthorID = *update.AuthorID
 	}
 	return item
 }
@@ -431,8 +372,17 @@ func Hash(description *string, transactionDate time.Time, authorID int64, househ
 	return base62.EncodeToString(h.Sum(nil)), nil
 }
 
-func newBulkResult(size int) BulkResult {
-	return BulkResult{Succeeded: make([]Succeeded, 0, size), Failed: make([]Failed, 0)}
+func runBulk[T any](inputs []T, known func(T) *int64, action func(T) (int64, error)) BulkResult {
+	result := BulkResult{Succeeded: make([]Succeeded, 0, len(inputs)), Failed: make([]Failed, 0)}
+	for index, input := range inputs {
+		id, err := action(input)
+		if err != nil {
+			result.Failed = append(result.Failed, Failed{Index: index, ID: known(input), Error: err})
+			continue
+		}
+		result.Succeeded = append(result.Succeeded, Succeeded{Index: index, ID: id})
+	}
+	return result
 }
 
 func knownID(id int64) *int64 {
@@ -440,9 +390,4 @@ func knownID(id int64) *int64 {
 		return nil
 	}
 	return &id
-}
-
-func SortBulkResult(result *BulkResult) {
-	sort.SliceStable(result.Succeeded, func(i, j int) bool { return result.Succeeded[i].Index < result.Succeeded[j].Index })
-	sort.SliceStable(result.Failed, func(i, j int) bool { return result.Failed[i].Index < result.Failed[j].Index })
 }

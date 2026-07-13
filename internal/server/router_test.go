@@ -14,8 +14,29 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type userRepositoryStub struct{ appusers.Repository }
+type userRepositoryStub struct{}
 
+func (userRepositoryStub) Create(context.Context, appusers.CreateInput) (appusers.User, error) {
+	panic("unexpected Create")
+}
+func (userRepositoryStub) Update(context.Context, int64, appusers.Update) (appusers.User, error) {
+	panic("unexpected Update")
+}
+func (userRepositoryStub) GetByID(context.Context, int64) (appusers.User, error) {
+	panic("unexpected GetByID")
+}
+func (userRepositoryStub) GetByDiscordID(context.Context, string) (appusers.User, error) {
+	panic("unexpected GetByDiscordID")
+}
+func (userRepositoryStub) GetByTelegramID(context.Context, string) (appusers.User, error) {
+	panic("unexpected GetByTelegramID")
+}
+func (userRepositoryStub) GetByPhoneNumber(context.Context, string) (appusers.User, error) {
+	panic("unexpected GetByPhoneNumber")
+}
+func (userRepositoryStub) GetByWhatsAppID(context.Context, string) (appusers.User, error) {
+	panic("unexpected GetByWhatsAppID")
+}
 func (userRepositoryStub) List(context.Context) ([]appusers.User, error) {
 	return []appusers.User{}, nil
 }

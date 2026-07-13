@@ -3,6 +3,8 @@ package users
 import (
 	"context"
 	"testing"
+
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 type fakeRepository struct {
@@ -48,7 +50,7 @@ func TestServicePreservesSelectorsAndUpdates(t *testing.T) {
 	if _, err := service.Resolve(context.Background(), Selector{DiscordID: stringPointer("d"), PhoneNumber: stringPointer("p")}); err == nil {
 		t.Fatal("Resolve accepted multiple selectors")
 	}
-	if _, err := service.Update(context.Background(), UpdateInput{ID: 1, ClearPhoneNumber: true}); err != nil || !repo.updated.SetPhoneNumber || repo.updated.PhoneNumber != nil {
+	if _, err := service.Update(context.Background(), UpdateInput{ID: 1, PhoneNumber: patch.Clear[string]()}); err != nil || !repo.updated.PhoneNumber.Present() || repo.updated.PhoneNumber.Value() != nil {
 		t.Fatalf("Update error=%v update=%+v", err, repo.updated)
 	}
 	items, err := service.List(context.Background())

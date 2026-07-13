@@ -12,7 +12,6 @@ import (
 )
 
 type transactionServiceStub struct {
-	service
 	create func(context.Context, apptransactions.CreateInput) (apptransactions.Transaction, error)
 }
 
@@ -23,6 +22,9 @@ func (transactionServiceStub) Get(context.Context, int64, bool) (apptransactions
 	return apptransactions.Transaction{ID: 1}, nil
 }
 func (transactionServiceStub) List(context.Context, apptransactions.ListFilter) ([]apptransactions.Transaction, error) {
+	return []apptransactions.Transaction{}, nil
+}
+func (transactionServiceStub) GetMany(context.Context, []int64, bool) ([]apptransactions.Transaction, error) {
 	return []apptransactions.Transaction{}, nil
 }
 func (transactionServiceStub) Update(_ context.Context, input apptransactions.UpdateInput) (apptransactions.Transaction, error) {
@@ -82,6 +84,23 @@ func TestLifecycleRoutes(t *testing.T) {
 		router.ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Errorf("%s %s = %d: %s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestUpdateRejectsContradictoryNullableFields(t *testing.T) {
+	router := httpapi.NewRouter()
+	New(transactionServiceStub{}).Register(router)
+	for _, body := range []string{
+		`{"description":"set","clearDescription":true}`,
+		`{"notes":"set","clearNotes":true}`,
+		`{"categoryId":1,"clearCategoryId":true}`,
+		`{"householdId":1,"clearHouseholdId":true}`,
+	} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/v1/transactions/1", strings.NewReader(body)))
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("body %s = %d: %s", body, response.Code, response.Body.String())
 		}
 	}
 }

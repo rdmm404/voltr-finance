@@ -719,6 +719,8 @@ FROM budget_line
 WHERE budget_id = $1::BIGINT
 `
 
+// Call only after LockBudgetForUpdate in the same transaction when allocating
+// an automatic sort order.
 func (q *Queries) GetMaxBudgetLineSortOrder(ctx context.Context, budgetID int64) (int32, error) {
 	row := q.db.QueryRow(ctx, getMaxBudgetLineSortOrder, budgetID)
 	var sort_order int32
@@ -872,6 +874,34 @@ WHERE id = $1 AND deleted_at IS NULL
 
 func (q *Queries) GetTransactionByIdActive(ctx context.Context, id int64) (Transaction, error) {
 	row := q.db.QueryRow(ctx, getTransactionByIdActive, id)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Amount,
+		&i.AuthorID,
+		&i.Description,
+		&i.TransactionDate,
+		&i.TransactionID,
+		&i.HouseholdID,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DeletedByUserID,
+		&i.DeleteReason,
+		&i.CategoryID,
+	)
+	return i, err
+}
+
+const getTransactionByIdForUpdate = `-- name: GetTransactionByIdForUpdate :one
+SELECT id, amount, author_id, description, transaction_date, transaction_id, household_id, notes, created_at, updated_at, deleted_at, deleted_by_user_id, delete_reason, category_id FROM transaction
+WHERE id = $1::BIGINT
+FOR UPDATE
+`
+
+func (q *Queries) GetTransactionByIdForUpdate(ctx context.Context, id int64) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionByIdForUpdate, id)
 	var i Transaction
 	err := row.Scan(
 		&i.ID,
@@ -1772,6 +1802,19 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	return items, nil
 }
 
+const lockBudgetForUpdate = `-- name: LockBudgetForUpdate :one
+SELECT id FROM budget
+WHERE id = $1::BIGINT
+FOR UPDATE
+`
+
+func (q *Queries) LockBudgetForUpdate(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockBudgetForUpdate, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const restoreTransactionsById = `-- name: RestoreTransactionsById :many
 UPDATE transaction
 SET
@@ -1962,7 +2005,7 @@ SET
         ELSE description
     END,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $5::BIGINT
+WHERE code = $5::VARCHAR
 RETURNING id, code, name, description, is_active, created_at, updated_at
 `
 
@@ -1971,7 +2014,7 @@ type UpdateCategoryParams struct {
 	Name           string  `json:"name"`
 	SetDescription bool    `json:"setDescription"`
 	Description    *string `json:"description"`
-	ID             int64   `json:"id"`
+	Code           string  `json:"code"`
 }
 
 // WRITES
@@ -1981,7 +2024,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		arg.Name,
 		arg.SetDescription,
 		arg.Description,
-		arg.ID,
+		arg.Code,
 	)
 	var i Category
 	err := row.Scan(
@@ -2031,7 +2074,7 @@ SET
         ELSE description
     END,
     transaction_date = CASE
-        WHEN $11::bool THEN $12::timestamp
+        WHEN $11::bool THEN $12::timestamptz
         ELSE transaction_date
     END,
     notes = CASE
@@ -2048,22 +2091,22 @@ WHERE
 `
 
 type UpdateTransactionByIdParams struct {
-	ID                 int64            `json:"id"`
-	TransactionID      string           `json:"transactionId"`
-	SetAmount          bool             `json:"setAmount"`
-	Amount             float32          `json:"amount"`
-	SetAuthorID        bool             `json:"setAuthorId"`
-	AuthorID           int64            `json:"authorId"`
-	SetCategoryID      bool             `json:"setCategoryId"`
-	CategoryID         *int64           `json:"categoryId"`
-	SetDescription     bool             `json:"setDescription"`
-	Description        *string          `json:"description"`
-	SetTransactionDate bool             `json:"setTransactionDate"`
-	TransactionDate    pgtype.Timestamp `json:"transactionDate"`
-	SetNotes           bool             `json:"setNotes"`
-	Notes              *string          `json:"notes"`
-	SetHouseholdID     bool             `json:"setHouseholdId"`
-	HouseholdID        *int64           `json:"householdId"`
+	ID                 int64              `json:"id"`
+	TransactionID      string             `json:"transactionId"`
+	SetAmount          bool               `json:"setAmount"`
+	Amount             float32            `json:"amount"`
+	SetAuthorID        bool               `json:"setAuthorId"`
+	AuthorID           int64              `json:"authorId"`
+	SetCategoryID      bool               `json:"setCategoryId"`
+	CategoryID         *int64             `json:"categoryId"`
+	SetDescription     bool               `json:"setDescription"`
+	Description        *string            `json:"description"`
+	SetTransactionDate bool               `json:"setTransactionDate"`
+	TransactionDate    pgtype.Timestamptz `json:"transactionDate"`
+	SetNotes           bool               `json:"setNotes"`
+	Notes              *string            `json:"notes"`
+	SetHouseholdID     bool               `json:"setHouseholdId"`
+	HouseholdID        *int64             `json:"householdId"`
 }
 
 func (q *Queries) UpdateTransactionById(ctx context.Context, arg UpdateTransactionByIdParams) (Transaction, error) {

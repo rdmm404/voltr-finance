@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"rdmm404/voltr-finance/internal/api"
@@ -83,9 +82,9 @@ func (c *Client) GetCategory(ctx context.Context, code string) (api.Category, er
 	err := c.do(ctx, http.MethodGet, strings.Replace(api.CategoryPath, "{code}", url.PathEscape(code), 1), nil, nil, &response)
 	return response, err
 }
-func (c *Client) UpdateCategory(ctx context.Context, id int64, request api.UpdateCategoryRequest) (api.Category, error) {
+func (c *Client) UpdateCategory(ctx context.Context, code string, request api.UpdateCategoryRequest) (api.Category, error) {
 	var response api.Category
-	err := c.do(ctx, http.MethodPatch, strings.Replace(api.CategoryUpdatePath, "{id}", strconv.FormatInt(id, 10), 1), nil, request, &response)
+	err := c.do(ctx, http.MethodPatch, strings.Replace(api.CategoryPath, "{code}", url.PathEscape(code), 1), nil, request, &response)
 	return response, err
 }
 func (c *Client) DeactivateCategory(ctx context.Context, code string) (api.Category, error) {

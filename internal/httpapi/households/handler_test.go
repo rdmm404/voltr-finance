@@ -10,7 +10,7 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type householdServiceStub struct{ service }
+type householdServiceStub struct{}
 
 func (householdServiceStub) Resolve(_ context.Context, selector apphouseholds.Selector) (apphouseholds.Household, error) {
 	return apphouseholds.Household{ID: 3, Name: *selector.Name}, nil

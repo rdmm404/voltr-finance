@@ -50,6 +50,10 @@ func (f *fakeRepository) GetBudget(_ context.Context, id int64) (Budget, error) 
 	}
 	return item, nil
 }
+func (f *fakeRepository) LockBudget(ctx context.Context, id int64) error {
+	_, err := f.GetBudget(ctx, id)
+	return err
+}
 func (f *fakeRepository) CreateBudget(_ context.Context, input CreateBudget) (Budget, error) {
 	if f.createConflict {
 		return Budget{}, apperrors.Conflict(apperrors.CodeBudgetConflict, "budget exists", nil)
@@ -138,6 +142,11 @@ func (f *fakeRepository) DeleteLineCategories(_ context.Context, lineID int64) e
 	return nil
 }
 func (f *fakeRepository) CreateLineCategory(_ context.Context, budgetID, lineID, categoryID int64) error {
+	for _, mapping := range f.mappings[budgetID] {
+		if mapping.Category.ID == categoryID && mapping.LineID != lineID {
+			return apperrors.Conflict(apperrors.CodeBudgetConflict, "category already mapped to another budget line", nil)
+		}
+	}
 	f.mappings[budgetID] = append(f.mappings[budgetID], LineCategory{BudgetID: budgetID, LineID: lineID, Category: f.categories[categoryID]})
 	return nil
 }
@@ -175,6 +184,10 @@ type fakeTransactor struct {
 }
 
 func (f *fakeTransactor) WithinTransaction(ctx context.Context, callback func(Repository) error) error {
+	f.calls++
+	return callback(f.repo)
+}
+func (f *fakeTransactor) WithinSnapshot(ctx context.Context, callback func(Repository) error) error {
 	f.calls++
 	return callback(f.repo)
 }
@@ -232,6 +245,57 @@ func TestLineChangesUseTransactionAndEnforceCategoryInvariant(t *testing.T) {
 	}
 }
 
+func TestMonthlyValidation(t *testing.T) {
+	householdID, userID := int64(1), int64(2)
+	for name, input := range map[string]MonthlyInput{
+		"missing owner":     {Year: 2026, Month: 7},
+		"multiple owners":   {Owner: Owner{HouseholdID: &householdID, UserID: &userID}, Year: 2026, Month: 7},
+		"invalid year":      {Owner: Owner{HouseholdID: &householdID}, Year: 0, Month: 7},
+		"month below range": {Owner: Owner{HouseholdID: &householdID}, Year: 2026, Month: 0},
+		"month above range": {Owner: Owner{HouseholdID: &householdID}, Year: 2026, Month: 13},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := NewService(newFakeRepository(), &fakeTransactor{}).GetMonthly(context.Background(), input); !apperrors.IsKind(err, apperrors.KindValidation) {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+}
+
+func TestUserMonthlyEnsureCopiesPriorStructure(t *testing.T) {
+	userID := int64(8)
+	repo := newFakeRepository()
+	repo.prior = Budget{ID: 10, Owner: Owner{UserID: &userID}}
+	repo.budgets[10] = repo.prior
+	repo.lines[10] = []Line{{ID: 90, BudgetID: 10, Name: "Savings", AllocationAmount: "50.00", SortOrder: 1}}
+	result, err := NewService(repo, &fakeTransactor{repo: repo}).EnsureMonthly(context.Background(), MonthlyInput{Owner: Owner{UserID: &userID}, Year: 2026, Month: 7})
+	if err != nil || !result.Created || len(result.Budget.Lines) != 1 || result.Budget.Owner.UserID == nil {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+}
+
+func TestLineInputValidationAndUpdate(t *testing.T) {
+	repo := newFakeRepository()
+	repo.budgets[12] = Budget{ID: 12}
+	service := NewService(repo, &fakeTransactor{repo: repo})
+	for name, amount := range map[string]string{"negative": "-1", "too precise": "1.001", "not numeric": "one"} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := service.CreateLine(context.Background(), CreateLineInput{BudgetID: 12, Name: "Food", AllocationAmount: amount}); !apperrors.IsKind(err, apperrors.KindValidation) {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+	line, err := service.CreateLine(context.Background(), CreateLineInput{BudgetID: 12, Name: "Food", AllocationAmount: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, amount, order := " Essentials ", "25.5", int32(9)
+	updated, err := service.UpdateLine(context.Background(), UpdateLineInput{LineID: line.ID, Name: &name, AllocationAmount: &amount, SortOrder: &order})
+	if err != nil || updated.Name != "Essentials" || updated.AllocationAmount != "25.50" || updated.SortOrder != 9 {
+		t.Fatalf("updated=%+v error=%v", updated, err)
+	}
+}
+
 func TestReportAssemblesTotalsAndUnmappedRequirements(t *testing.T) {
 	householdID := int64(1)
 	repo := newFakeRepository()
@@ -239,8 +303,24 @@ func TestReportAssemblesTotalsAndUnmappedRequirements(t *testing.T) {
 	repo.reportLines = []ReportLineData{{Line: Line{ID: 1, BudgetID: 12, Name: "Food", AllocationAmount: "100.00"}, ActualAmount: "60.25"}}
 	repo.unmapped = []UnmappedTransaction{{ID: 9, Amount: "12.50"}, {ID: 10, Amount: "3.25", Category: &Category{ID: 4, Code: "other"}}}
 	repo.uncategorized = "12.50"
-	report, err := NewService(repo, nil).Report(context.Background(), 12)
+	report, err := NewService(repo, &fakeTransactor{repo: repo}).Report(context.Background(), 12)
 	if err != nil || report.Lines[0].RemainingAmount != "39.75" || report.Totals.UnmappedActualAmount != "15.75" || report.Totals.UncategorizedActualAmount != "12.50" || len(report.UnmappedTransactions) != 2 {
 		t.Fatalf("Report=%+v error=%v", report, err)
+	}
+}
+
+func TestReportSupportsNegativeValuesAndEmptyCollections(t *testing.T) {
+	repo := newFakeRepository()
+	repo.budgets[12] = Budget{ID: 12}
+	repo.reportLines = []ReportLineData{{Line: Line{ID: 1, BudgetID: 12, AllocationAmount: "0.00"}, ActualAmount: "-5.25"}}
+	report, err := NewService(repo, &fakeTransactor{repo: repo}).Report(context.Background(), 12)
+	if err != nil || report.Totals.ActualAmount != "-5.25" || report.Lines[0].RemainingAmount != "5.25" || report.UnmappedTransactions == nil || report.Lines[0].Categories == nil {
+		t.Fatalf("report=%+v error=%v", report, err)
+	}
+
+	repo.reportLines = nil
+	empty, err := NewService(repo, &fakeTransactor{repo: repo}).Report(context.Background(), 12)
+	if err != nil || empty.Lines == nil || empty.UnmappedTransactions == nil || len(empty.Lines) != 0 {
+		t.Fatalf("empty=%+v error=%v", empty, err)
 	}
 }

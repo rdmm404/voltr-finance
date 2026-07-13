@@ -12,7 +12,7 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type userServiceStub struct{ service }
+type userServiceStub struct{}
 
 func (userServiceStub) Create(context.Context, appusers.CreateInput) (appusers.User, error) {
 	return appusers.User{ID: 1}, nil
@@ -37,7 +37,7 @@ func TestListNormalizesEmptyArray(t *testing.T) {
 	}
 }
 
-type missingUserService struct{ service }
+type missingUserService struct{ userServiceStub }
 
 func (missingUserService) Get(context.Context, int64) (appusers.User, error) {
 	return appusers.User{}, apperrors.NotFound(apperrors.CodeUserNotFound, "user not found", nil)
@@ -51,6 +51,23 @@ func TestMissingUserMapsToNotFound(t *testing.T) {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
 }
+func TestUpdateRejectsContradictoryNullableFields(t *testing.T) {
+	router := httpapi.NewRouter()
+	New(userServiceStub{}).Register(router)
+	for _, body := range []string{
+		`{"discordId":"set","clearDiscordId":true}`,
+		`{"telegramId":"set","clearTelegramId":true}`,
+		`{"phoneNumber":"set","clearPhoneNumber":true}`,
+		`{"whatsappId":"set","clearWhatsappId":true}`,
+	} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/v1/users/1", strings.NewReader(body)))
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("body %s = %d: %s", body, response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestUserMutationAndResolutionRoutes(t *testing.T) {
 	router := httpapi.NewRouter()
 	New(userServiceStub{}).Register(router)

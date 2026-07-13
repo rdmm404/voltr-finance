@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 type fakeRepository struct {
@@ -46,8 +47,8 @@ func (f *fakeRepository) Update(_ context.Context, id int64, update Mutation) (T
 	if !ok {
 		return Transaction{}, apperrors.NotFound(apperrors.CodeTransactionNotFound, "transaction not found", nil)
 	}
-	item = applyMutation(item, update)
-	item.Hash = update.Hash
+	item = update.Apply(item)
+	item.Hash, _ = Hash(item.Description, item.TransactionDate, item.AuthorID, item.HouseholdID, item.CategoryID, item.Amount)
 	f.items[id] = item
 	return item, nil
 }
@@ -97,7 +98,7 @@ func TestSingleTransactionLifecycleAndHash(t *testing.T) {
 		t.Fatalf("hash=%q want=%q", created.Hash, wantHash)
 	}
 	amount := float32(5)
-	updated, err := service.Update(context.Background(), UpdateInput{ID: created.ID, Amount: &amount, ClearCategoryID: true})
+	updated, err := service.Update(context.Background(), UpdateInput{ID: created.ID, Amount: &amount, Category: patch.Clear[CategorySelector]()})
 	if err != nil || updated.Amount != 5 || updated.CategoryID != nil {
 		t.Fatalf("Update=%+v error=%v", updated, err)
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 type User struct {
@@ -59,27 +60,18 @@ type CreateInput struct {
 type UpdateInput struct {
 	ID          int64
 	Name        *string
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsAppID  *string
-
-	ClearDiscordID   bool
-	ClearTelegramID  bool
-	ClearPhoneNumber bool
-	ClearWhatsAppID  bool
+	DiscordID   patch.Field[string]
+	TelegramID  patch.Field[string]
+	PhoneNumber patch.Field[string]
+	WhatsAppID  patch.Field[string]
 }
 
 type Update struct {
-	Name           *string
-	SetDiscordID   bool
-	DiscordID      *string
-	SetTelegramID  bool
-	TelegramID     *string
-	SetPhoneNumber bool
-	PhoneNumber    *string
-	SetWhatsAppID  bool
-	WhatsAppID     *string
+	Name        *string
+	DiscordID   patch.Field[string]
+	TelegramID  patch.Field[string]
+	PhoneNumber patch.Field[string]
+	WhatsAppID  patch.Field[string]
 }
 
 type Repository interface {
@@ -118,11 +110,8 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (User, error) {
 		input.Name = &name
 	}
 	user, err := s.repo.Update(ctx, input.ID, Update{
-		Name:         input.Name,
-		SetDiscordID: input.DiscordID != nil || input.ClearDiscordID, DiscordID: input.DiscordID,
-		SetTelegramID: input.TelegramID != nil || input.ClearTelegramID, TelegramID: input.TelegramID,
-		SetPhoneNumber: input.PhoneNumber != nil || input.ClearPhoneNumber, PhoneNumber: input.PhoneNumber,
-		SetWhatsAppID: input.WhatsAppID != nil || input.ClearWhatsAppID, WhatsAppID: input.WhatsAppID,
+		Name: input.Name, DiscordID: input.DiscordID, TelegramID: input.TelegramID,
+		PhoneNumber: input.PhoneNumber, WhatsAppID: input.WhatsAppID,
 	})
 	return user, apperrors.WrapInternal("update user", err)
 }

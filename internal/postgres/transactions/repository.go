@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
 	apptransactions "rdmm404/voltr-finance/internal/app/transactions"
@@ -14,6 +15,7 @@ import (
 
 type queries interface {
 	CreateTransaction(context.Context, sqlc.CreateTransactionParams) (sqlc.Transaction, error)
+	GetTransactionByIdForUpdate(context.Context, int64) (sqlc.Transaction, error)
 	GetTransactionsByIdWithDetails(context.Context, sqlc.GetTransactionsByIdWithDetailsParams) ([]sqlc.GetTransactionsByIdWithDetailsRow, error)
 	ListTransactions(context.Context, sqlc.ListTransactionsParams) ([]sqlc.ListTransactionsRow, error)
 	UpdateTransactionById(context.Context, sqlc.UpdateTransactionByIdParams) (sqlc.Transaction, error)
@@ -21,9 +23,14 @@ type queries interface {
 	RestoreTransactionsById(context.Context, []int64) ([]sqlc.Transaction, error)
 }
 
-type Repository struct{ queries queries }
+type Repository struct {
+	pool    *pgxpool.Pool
+	queries queries
+}
 
-func NewRepository(queries queries) *Repository { return &Repository{queries: queries} }
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool, queries: sqlc.New(pool)}
+}
 
 func (r *Repository) Create(ctx context.Context, input apptransactions.NewTransaction) (apptransactions.Transaction, error) {
 	row, err := r.queries.CreateTransaction(ctx, sqlc.CreateTransactionParams{Amount: input.Amount, CategoryID: input.CategoryID, Description: input.Description, TransactionDate: timestamptz(input.TransactionDate), TransactionID: input.Hash, AuthorID: input.AuthorID, HouseholdID: input.HouseholdID, Notes: input.Notes})
@@ -50,11 +57,44 @@ func (r *Repository) List(ctx context.Context, filter apptransactions.ListFilter
 }
 
 func (r *Repository) Update(ctx context.Context, id int64, input apptransactions.Mutation) (apptransactions.Transaction, error) {
-	_, err := r.queries.UpdateTransactionById(ctx, sqlc.UpdateTransactionByIdParams{ID: id, TransactionID: input.Hash, SetAmount: input.SetAmount, Amount: input.Amount, SetAuthorID: input.SetAuthorID, AuthorID: input.AuthorID, SetCategoryID: input.SetCategoryID, CategoryID: input.CategoryID, SetDescription: input.SetDescription, Description: input.Description, SetTransactionDate: input.SetTransactionDate, TransactionDate: optionalTimestamp(input.TransactionDate, input.SetTransactionDate), SetNotes: input.SetNotes, Notes: input.Notes, SetHouseholdID: input.SetHouseholdID, HouseholdID: input.HouseholdID})
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return apptransactions.Transaction{}, mapError(err)
 	}
-	return r.getDetails(ctx, id, true)
+	defer tx.Rollback(ctx)
+	q := sqlc.New(tx)
+
+	row, err := q.GetTransactionByIdForUpdate(ctx, id)
+	if err != nil {
+		return apptransactions.Transaction{}, mapError(err)
+	}
+	existing := mapTransaction(row)
+	merged := input.Apply(existing)
+	hash, err := apptransactions.Hash(merged.Description, merged.TransactionDate, merged.AuthorID, merged.HouseholdID, merged.CategoryID, merged.Amount)
+	if err != nil {
+		return apptransactions.Transaction{}, err
+	}
+	_, err = q.UpdateTransactionById(ctx, sqlc.UpdateTransactionByIdParams{
+		ID: id, TransactionID: hash,
+		SetAmount: input.Amount != nil, Amount: valueOrZero(input.Amount),
+		SetAuthorID: input.AuthorID != nil, AuthorID: valueOrZero(input.AuthorID),
+		SetCategoryID: input.CategoryID.Present(), CategoryID: input.CategoryID.Value(),
+		SetDescription: input.Description.Present(), Description: input.Description.Value(),
+		SetTransactionDate: input.TransactionDate != nil, TransactionDate: optionalTimestamptz(input.TransactionDate),
+		SetNotes: input.Notes.Present(), Notes: input.Notes.Value(),
+		SetHouseholdID: input.HouseholdID.Present(), HouseholdID: input.HouseholdID.Value(),
+	})
+	if err != nil {
+		return apptransactions.Transaction{}, mapError(err)
+	}
+	item, err := getDetails(ctx, q, id, true)
+	if err != nil {
+		return apptransactions.Transaction{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return apptransactions.Transaction{}, mapError(err)
+	}
+	return item, nil
 }
 
 func (r *Repository) SoftDelete(ctx context.Context, input apptransactions.DeleteInput) (apptransactions.Transaction, error) {
@@ -80,7 +120,11 @@ func (r *Repository) Restore(ctx context.Context, input apptransactions.RestoreI
 }
 
 func (r *Repository) getDetails(ctx context.Context, id int64, includeDeleted bool) (apptransactions.Transaction, error) {
-	rows, err := r.queries.GetTransactionsByIdWithDetails(ctx, sqlc.GetTransactionsByIdWithDetailsParams{Ids: []int64{id}, IncludeDeleted: includeDeleted})
+	return getDetails(ctx, r.queries, id, includeDeleted)
+}
+
+func getDetails(ctx context.Context, q queries, id int64, includeDeleted bool) (apptransactions.Transaction, error) {
+	rows, err := q.GetTransactionsByIdWithDetails(ctx, sqlc.GetTransactionsByIdWithDetailsParams{Ids: []int64{id}, IncludeDeleted: includeDeleted})
 	if err != nil {
 		return apptransactions.Transaction{}, mapError(err)
 	}
@@ -89,6 +133,10 @@ func (r *Repository) getDetails(ctx context.Context, id int64, includeDeleted bo
 	}
 	row := rows[0]
 	return mapDetailed(row.Transaction, row.AuthorName, row.HouseholdID, row.HouseholdName, row.CategoryID, row.CategoryCode, row.CategoryName), nil
+}
+
+func mapTransaction(row sqlc.Transaction) apptransactions.Transaction {
+	return apptransactions.Transaction{ID: row.ID, Hash: row.TransactionID, Amount: row.Amount, TransactionDate: row.TransactionDate.Time, AuthorID: row.AuthorID, HouseholdID: row.HouseholdID, CategoryID: row.CategoryID, Description: row.Description, Notes: row.Notes}
 }
 
 func mapDetailed(row sqlc.Transaction, authorName string, householdID *int64, householdName *string, categoryID *int64, categoryCode, categoryName *string) apptransactions.Transaction {
@@ -115,8 +163,12 @@ func optionalTimestamptz(value *time.Time) pgtype.Timestamptz {
 	}
 	return timestamptz(*value)
 }
-func optionalTimestamp(value time.Time, valid bool) pgtype.Timestamp {
-	return pgtype.Timestamp{Time: value, Valid: valid}
+func valueOrZero[T any](value *T) T {
+	if value == nil {
+		var zero T
+		return zero
+	}
+	return *value
 }
 func timestamp(value pgtype.Timestamptz) *time.Time {
 	if !value.Valid {

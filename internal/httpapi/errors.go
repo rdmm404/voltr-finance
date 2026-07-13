@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -8,10 +9,41 @@ import (
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
 )
 
+type HandlerSupport struct{ logger *slog.Logger }
+
+func NewHandlerSupport(logger *slog.Logger) *HandlerSupport {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &HandlerSupport{logger: logger}
+}
+
+func HandlerSupportOrDefault(support ...*HandlerSupport) *HandlerSupport {
+	if len(support) > 0 && support[0] != nil {
+		return support[0]
+	}
+	return NewHandlerSupport(nil)
+}
+
+func (s *HandlerSupport) Decode(w http.ResponseWriter, request *http.Request, value any) bool {
+	if err := DecodeJSON(w, request, value); err != nil {
+		WriteValidationError(w, err.Error())
+		return false
+	}
+	return true
+}
+
+func (s *HandlerSupport) Fail(w http.ResponseWriter, request *http.Request, err error) {
+	WriteApplicationError(w, request, s.logger, err)
+}
+
 func WriteApplicationError(w http.ResponseWriter, request *http.Request, logger *slog.Logger, err error) {
 	status, response := MapApplicationError(err)
-	if status == http.StatusInternalServerError && logger != nil {
-		logger.Error("request failed", "method", request.Method, "path", request.URL.Path, "code", response.Error.Code)
+	if status == http.StatusInternalServerError {
+		if logger == nil {
+			logger = slog.Default()
+		}
+		logger.Error("request failed", "method", request.Method, "path", request.URL.Path, "code", response.Error.Code, "error_type", fmt.Sprintf("%T", err))
 	}
 	WriteJSON(w, status, response)
 }

@@ -73,7 +73,7 @@ func run(ctx context.Context, cfg config) error {
 	categoryService := appcategories.NewService(categorypostgres.NewRepository(queries))
 	householdService := apphouseholds.NewService(householdpostgres.NewRepository(queries))
 	transactionService := apptransactions.NewService(
-		transactionpostgres.NewRepository(queries),
+		transactionpostgres.NewRepository(pool),
 		identityResolver{users: userService},
 		categoryResolver{categories: categoryService},
 	)

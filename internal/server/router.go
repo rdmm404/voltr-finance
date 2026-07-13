@@ -2,6 +2,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 
 	appbudgets "rdmm404/voltr-finance/internal/app/budgets"
@@ -26,11 +27,12 @@ func New(
 	categoryService *appcategories.Service,
 	budgetService *appbudgets.Service,
 ) (*http.Server, error) {
+	support := httpapi.NewHandlerSupport(slog.Default())
 	return httpapi.NewServer(config, func(router *httpapi.Router) {
-		transactionhttp.New(transactionService).Register(router)
-		userhttp.New(userService).Register(router)
-		householdhttp.New(householdService).Register(router)
-		categoryhttp.New(categoryService).Register(router)
-		budgethttp.New(budgetService).Register(router)
+		transactionhttp.New(transactionService, support).Register(router)
+		userhttp.New(userService, support).Register(router)
+		householdhttp.New(householdService, support).Register(router)
+		categoryhttp.New(categoryService, support).Register(router)
+		budgethttp.New(budgetService, support).Register(router)
 	})
 }

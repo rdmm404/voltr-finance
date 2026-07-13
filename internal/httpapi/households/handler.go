@@ -15,9 +15,14 @@ type service interface {
 	Resolve(context.Context, apphouseholds.Selector) (apphouseholds.Household, error)
 	ListUsers(context.Context, int64) ([]apphouseholds.User, error)
 }
-type Handler struct{ service service }
+type Handler struct {
+	service service
+	support *httpapi.HandlerSupport
+}
 
-func New(service service) *Handler { return &Handler{service: service} }
+func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
+}
 func (h *Handler) Register(router *httpapi.Router) {
 	router.HandleFunc(http.MethodGet, api.HouseholdsPath, h.list)
 	router.HandleFunc(http.MethodGet, api.HouseholdResolvePath, h.resolve)
@@ -27,7 +32,7 @@ func (h *Handler) Register(router *httpapi.Router) {
 func (h *Handler) list(w http.ResponseWriter, request *http.Request) {
 	items, err := h.service.List(request.Context())
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	response := make([]api.Household, 0, len(items))
@@ -44,7 +49,7 @@ func (h *Handler) get(w http.ResponseWriter, request *http.Request) {
 	}
 	item, err := h.service.Get(request.Context(), id)
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, household(item))
@@ -52,7 +57,7 @@ func (h *Handler) get(w http.ResponseWriter, request *http.Request) {
 func (h *Handler) resolve(w http.ResponseWriter, request *http.Request) {
 	item, err := h.service.Resolve(request.Context(), apphouseholds.Selector{Name: httpapi.QueryString(request, "name"), GuildID: httpapi.QueryString(request, "guildId")})
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, household(item))
@@ -65,7 +70,7 @@ func (h *Handler) listUsers(w http.ResponseWriter, request *http.Request) {
 	}
 	items, err := h.service.ListUsers(request.Context(), id)
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	response := make([]api.User, 0, len(items))
@@ -79,7 +84,4 @@ func household(item apphouseholds.Household) api.Household {
 }
 func user(item apphouseholds.User) api.User {
 	return api.User{ID: item.ID, Name: item.Name, DiscordID: item.DiscordID, TelegramID: item.TelegramID, PhoneNumber: item.PhoneNumber, WhatsAppID: item.WhatsAppID, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt}
-}
-func fail(w http.ResponseWriter, request *http.Request, err error) {
-	httpapi.WriteApplicationError(w, request, nil, err)
 }

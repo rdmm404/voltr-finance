@@ -11,7 +11,7 @@ func TestVersionedRouteContracts(t *testing.T) {
 		TransactionsPath, TransactionsBulkPath, TransactionsRestorePath, TransactionPath,
 		UsersPath, UserPath, UserResolvePath,
 		HouseholdsPath, HouseholdPath, HouseholdUsersPath, HouseholdResolvePath,
-		CategoriesPath, CategoryPath, CategoryUpdatePath,
+		CategoriesPath, CategoryPath,
 		MonthlyBudgetsPath, BudgetReportPath, BudgetLinesPath, BudgetLinePath,
 	}
 	for _, route := range routes {

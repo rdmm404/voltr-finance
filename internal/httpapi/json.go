@@ -7,9 +7,26 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 const maxJSONBodyBytes = 1 << 20
+
+func NullablePatch[T any](value *T, clear bool, name string) (patch.Field[T], error) {
+	if value != nil && clear {
+		clearName := "clear" + strings.ToUpper(name[:1]) + name[1:]
+		return patch.Field[T]{}, fmt.Errorf("%s and %s are mutually exclusive", name, clearName)
+	}
+	if clear {
+		return patch.Clear[T](), nil
+	}
+	if value != nil {
+		return patch.Set(*value), nil
+	}
+	return patch.Unchanged[T](), nil
+}
 
 func DecodeJSON(w http.ResponseWriter, request *http.Request, destination any) error {
 	request.Body = http.MaxBytesReader(w, request.Body, maxJSONBodyBytes)

@@ -136,6 +136,7 @@ type Repository interface {
 	FindMonthly(context.Context, Owner, time.Time, time.Time) (Budget, error)
 	FindLatestPrior(context.Context, Owner, time.Time) (Budget, error)
 	GetBudget(context.Context, int64) (Budget, error)
+	LockBudget(context.Context, int64) error
 	CreateBudget(context.Context, CreateBudget) (Budget, error)
 	ListLines(context.Context, int64) ([]Line, error)
 	ListLineCategories(context.Context, int64) ([]LineCategory, error)
@@ -155,6 +156,7 @@ type Repository interface {
 
 type Transactor interface {
 	WithinTransaction(context.Context, func(Repository) error) error
+	WithinSnapshot(context.Context, func(Repository) error) error
 }
 
 type Service struct {
@@ -259,11 +261,13 @@ func (s *Service) CreateLine(ctx context.Context, input CreateLineInput) (Line, 
 		if err != nil {
 			return err
 		}
-		if err := validateCategoryAvailability(ctx, repo, input.BudgetID, 0, categoryIDs); err != nil {
-			return err
-		}
 		sortOrder := input.SortOrder
 		if sortOrder == nil {
+			// Serialize automatic allocation on the parent budget. The unique
+			// constraint remains authoritative for explicit caller values.
+			if err := repo.LockBudget(ctx, input.BudgetID); err != nil {
+				return err
+			}
 			max, err := repo.MaxSortOrder(ctx, input.BudgetID)
 			if err != nil {
 				return err
@@ -326,9 +330,6 @@ func (s *Service) UpdateLine(ctx context.Context, input UpdateLineInput) (Line, 
 			if err != nil {
 				return err
 			}
-			if err := validateCategoryAvailability(ctx, repo, existing.BudgetID, existing.ID, categoryIDs); err != nil {
-				return err
-			}
 		}
 		updated, err = repo.UpdateLine(ctx, input.LineID, update)
 		if err != nil {
@@ -356,25 +357,33 @@ func (s *Service) Report(ctx context.Context, budgetID int64) (Report, error) {
 	if budgetID == 0 {
 		return Report{}, apperrors.Validation("budget id is required")
 	}
-	budget, err := s.repo.GetBudget(ctx, budgetID)
-	if err != nil {
-		return Report{}, apperrors.WrapInternal("get report budget", err)
+	if s.tx == nil {
+		return Report{}, apperrors.Internal(errors.New("budget reports require transaction support"))
 	}
-	rows, err := s.repo.ListReportLines(ctx, budgetID)
+	var budget Budget
+	var rows []ReportLineData
+	var mappings []LineCategory
+	var uncategorized string
+	var unmapped []UnmappedTransaction
+	err := s.tx.WithinSnapshot(ctx, func(repo Repository) error {
+		var err error
+		if budget, err = repo.GetBudget(ctx, budgetID); err != nil {
+			return err
+		}
+		if rows, err = repo.ListReportLines(ctx, budgetID); err != nil {
+			return err
+		}
+		if mappings, err = repo.ListLineCategories(ctx, budgetID); err != nil {
+			return err
+		}
+		if uncategorized, err = repo.SumUncategorized(ctx, budgetID); err != nil {
+			return err
+		}
+		unmapped, err = repo.ListUnmappedTransactions(ctx, budgetID)
+		return err
+	})
 	if err != nil {
-		return Report{}, apperrors.WrapInternal("list report lines", err)
-	}
-	mappings, err := s.repo.ListLineCategories(ctx, budgetID)
-	if err != nil {
-		return Report{}, apperrors.WrapInternal("list report categories", err)
-	}
-	uncategorized, err := s.repo.SumUncategorized(ctx, budgetID)
-	if err != nil {
-		return Report{}, apperrors.WrapInternal("sum uncategorized", err)
-	}
-	unmapped, err := s.repo.ListUnmappedTransactions(ctx, budgetID)
-	if err != nil {
-		return Report{}, apperrors.WrapInternal("list unmapped transactions", err)
+		return Report{}, apperrors.WrapInternal("load budget report snapshot", err)
 	}
 
 	categories := map[int64][]Category{}
@@ -483,25 +492,6 @@ func resolveCategoryIDs(ctx context.Context, repo Repository, ids []int64, codes
 		}
 	}
 	return resolved, nil
-}
-
-func validateCategoryAvailability(ctx context.Context, repo Repository, budgetID, currentLineID int64, ids []int64) error {
-	mappings, err := repo.ListLineCategories(ctx, budgetID)
-	if err != nil {
-		return err
-	}
-	wanted := map[int64]struct{}{}
-	for _, id := range ids {
-		wanted[id] = struct{}{}
-	}
-	for _, mapping := range mappings {
-		if mapping.LineID != currentLineID {
-			if _, exists := wanted[mapping.Category.ID]; exists {
-				return apperrors.Conflict(apperrors.CodeBudgetConflict, "category already mapped to another budget line", nil)
-			}
-		}
-	}
-	return nil
 }
 
 func replaceCategories(ctx context.Context, repo Repository, budgetID, lineID int64, ids []int64) error {

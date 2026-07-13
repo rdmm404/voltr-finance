@@ -18,9 +18,8 @@ const (
 	HouseholdUsersPath   = HouseholdPath + "/users"
 	HouseholdResolvePath = HouseholdsPath + "/resolve"
 
-	CategoriesPath     = APIPrefix + "/categories"
-	CategoryPath       = CategoriesPath + "/{code}"
-	CategoryUpdatePath = CategoriesPath + "/{id}"
+	CategoriesPath = APIPrefix + "/categories"
+	CategoryPath   = CategoriesPath + "/{code}"
 
 	MonthlyBudgetsPath = APIPrefix + "/budgets/monthly"
 	BudgetReportPath   = APIPrefix + "/budgets/{id}/report"

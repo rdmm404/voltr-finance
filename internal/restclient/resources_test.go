@@ -46,8 +46,8 @@ func TestUserHouseholdAndCategoryMethods(t *testing.T) {
 			return err
 		}},
 		{"get category", http.MethodGet, "/v1/categories/food", `{}`, func(c *Client) error { _, err := c.GetCategory(context.Background(), "food"); return err }},
-		{"update category", http.MethodPatch, "/v1/categories/4", `{}`, func(c *Client) error {
-			_, err := c.UpdateCategory(context.Background(), 4, api.UpdateCategoryRequest{})
+		{"update category", http.MethodPatch, "/v1/categories/food", `{}`, func(c *Client) error {
+			_, err := c.UpdateCategory(context.Background(), "food", api.UpdateCategoryRequest{})
 			return err
 		}},
 		{"deactivate category", http.MethodDelete, "/v1/categories/food", `{}`, func(c *Client) error { _, err := c.DeactivateCategory(context.Background(), "food"); return err }},

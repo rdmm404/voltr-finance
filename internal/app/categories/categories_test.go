@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 type fakeRepository struct {
@@ -30,9 +31,9 @@ func (*fakeRepository) GetActiveByID(_ context.Context, id int64) (Category, err
 func (*fakeRepository) GetActiveByCode(_ context.Context, code string) (Category, error) {
 	return Category{ID: 3, Code: code}, nil
 }
-func (f *fakeRepository) Update(_ context.Context, id int64, update Update) (Category, error) {
+func (f *fakeRepository) Update(_ context.Context, code string, update Update) (Category, error) {
 	f.update = update
-	return Category{ID: id}, nil
+	return Category{ID: 1, Code: code}, nil
 }
 func (*fakeRepository) Deactivate(_ context.Context, code string) (Category, error) {
 	return Category{ID: 1, Code: code, IsActive: false}, nil
@@ -52,7 +53,7 @@ func TestServiceCategoryLifecycleAndErrorContract(t *testing.T) {
 	if _, err := service.ResolveActive(context.Background(), &id, &otherCode); !apperrors.IsKind(err, apperrors.KindValidation) {
 		t.Fatalf("ResolveActive error=%v", err)
 	}
-	if _, err := service.Update(context.Background(), UpdateInput{ID: 1, ClearDescription: true}); err != nil || !repo.update.SetDescription || repo.update.Description != nil {
+	if _, err := service.Update(context.Background(), UpdateInput{Code: "food", Description: patch.Clear[string]()}); err != nil || !repo.update.Description.Present() || repo.update.Description.Value() != nil {
 		t.Fatalf("Update error=%v update=%+v", err, repo.update)
 	}
 	items, err := service.List(context.Background(), true)

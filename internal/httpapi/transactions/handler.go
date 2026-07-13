@@ -10,6 +10,7 @@ import (
 
 	"rdmm404/voltr-finance/internal/api"
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	apppatch "rdmm404/voltr-finance/internal/app/patch"
 	apptransactions "rdmm404/voltr-finance/internal/app/transactions"
 	"rdmm404/voltr-finance/internal/httpapi"
 )
@@ -26,9 +27,14 @@ type service interface {
 	RestoreBatch(context.Context, []int64, int64) apptransactions.BulkResult
 }
 
-type Handler struct{ service service }
+type Handler struct {
+	service service
+	support *httpapi.HandlerSupport
+}
 
-func New(service service) *Handler { return &Handler{service: service} }
+func New(service service, support ...*httpapi.HandlerSupport) *Handler {
+	return &Handler{service: service, support: httpapi.HandlerSupportOrDefault(support...)}
+}
 
 func (h *Handler) Register(router *httpapi.Router) {
 	router.HandleFunc(http.MethodPost, api.TransactionsPath, h.create)
@@ -43,12 +49,12 @@ func (h *Handler) Register(router *httpapi.Router) {
 
 func (h *Handler) create(w http.ResponseWriter, request *http.Request) {
 	var body api.CreateTransactionRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	item, err := h.service.Create(request.Context(), createInput(body))
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, transaction(item))
@@ -56,7 +62,7 @@ func (h *Handler) create(w http.ResponseWriter, request *http.Request) {
 
 func (h *Handler) createBatch(w http.ResponseWriter, request *http.Request) {
 	var body api.BulkCreateTransactionsRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	inputs := make([]apptransactions.CreateInput, 0, len(body.Transactions))
@@ -79,7 +85,7 @@ func (h *Handler) get(w http.ResponseWriter, request *http.Request) {
 	}
 	item, err := h.service.Get(request.Context(), id, includeDeleted)
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, transaction(item))
@@ -98,7 +104,7 @@ func (h *Handler) list(w http.ResponseWriter, request *http.Request) {
 		items, err = h.service.List(request.Context(), filter)
 	}
 	if err != nil {
-		fail(w, request, err)
+		h.support.Fail(w, request, err)
 		return
 	}
 	response := make([]api.Transaction, 0, len(items))
@@ -115,12 +121,17 @@ func (h *Handler) update(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var body api.UpdateTransactionRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
-	item, err := h.service.Update(request.Context(), updateInput(id, body))
+	input, err := updateInput(id, body)
 	if err != nil {
-		fail(w, request, err)
+		httpapi.WriteValidationError(w, err.Error())
+		return
+	}
+	item, err := h.service.Update(request.Context(), input)
+	if err != nil {
+		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, transaction(item))
@@ -128,19 +139,24 @@ func (h *Handler) update(w http.ResponseWriter, request *http.Request) {
 
 func (h *Handler) updateBatch(w http.ResponseWriter, request *http.Request) {
 	var body api.BulkUpdateTransactionsRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	inputs := make([]apptransactions.UpdateInput, 0, len(body.Transactions))
 	for _, item := range body.Transactions {
-		inputs = append(inputs, updateInput(item.ID, item.UpdateTransactionRequest))
+		input, err := updateInput(item.ID, item.UpdateTransactionRequest)
+		if err != nil {
+			httpapi.WriteValidationError(w, err.Error())
+			return
+		}
+		inputs = append(inputs, input)
 	}
 	httpapi.WriteJSON(w, http.StatusOK, bulkResult(h.service.UpdateBatch(request.Context(), inputs)))
 }
 
 func (h *Handler) deleteBatch(w http.ResponseWriter, request *http.Request) {
 	var body api.DeleteTransactionsRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, bulkResult(h.service.DeleteBatch(request.Context(), body.IDs, body.DeletedByUserID, body.Reason)))
@@ -148,7 +164,7 @@ func (h *Handler) deleteBatch(w http.ResponseWriter, request *http.Request) {
 
 func (h *Handler) restoreBatch(w http.ResponseWriter, request *http.Request) {
 	var body api.RestoreTransactionsRequest
-	if !decode(w, request, &body) {
+	if !h.support.Decode(w, request, &body) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, bulkResult(h.service.RestoreBatch(request.Context(), body.IDs, body.RestoredByUserID)))
@@ -157,13 +173,34 @@ func (h *Handler) restoreBatch(w http.ResponseWriter, request *http.Request) {
 func createInput(body api.CreateTransactionRequest) apptransactions.CreateInput {
 	return apptransactions.CreateInput{Amount: body.Amount, TransactionDate: body.TransactionDate, Description: body.Description, Notes: body.Notes, CategoryID: body.CategoryID, CategoryCode: body.CategoryCode, HouseholdID: body.HouseholdID, Author: identity(body.Author)}
 }
-func updateInput(id int64, body api.UpdateTransactionRequest) apptransactions.UpdateInput {
-	input := apptransactions.UpdateInput{ID: id, Amount: body.Amount, TransactionDate: body.TransactionDate, Description: body.Description, Notes: body.Notes, CategoryID: body.CategoryID, CategoryCode: body.CategoryCode, HouseholdID: body.HouseholdID, ClearDescription: body.ClearDescription, ClearNotes: body.ClearNotes, ClearCategoryID: body.ClearCategoryID, ClearHouseholdID: body.ClearHouseholdID}
+func updateInput(id int64, body api.UpdateTransactionRequest) (apptransactions.UpdateInput, error) {
+	description, err := httpapi.NullablePatch(body.Description, body.ClearDescription, "description")
+	if err != nil {
+		return apptransactions.UpdateInput{}, err
+	}
+	notes, err := httpapi.NullablePatch(body.Notes, body.ClearNotes, "notes")
+	if err != nil {
+		return apptransactions.UpdateInput{}, err
+	}
+	householdID, err := httpapi.NullablePatch(body.HouseholdID, body.ClearHouseholdID, "householdId")
+	if err != nil {
+		return apptransactions.UpdateInput{}, err
+	}
+	if body.ClearCategoryID && (body.CategoryID != nil || body.CategoryCode != nil) {
+		return apptransactions.UpdateInput{}, fmt.Errorf("categoryId/categoryCode and clearCategoryId are mutually exclusive")
+	}
+	category := apppatch.Unchanged[apptransactions.CategorySelector]()
+	if body.ClearCategoryID {
+		category = apppatch.Clear[apptransactions.CategorySelector]()
+	} else if body.CategoryID != nil || body.CategoryCode != nil {
+		category = apppatch.Set(apptransactions.CategorySelector{ID: body.CategoryID, Code: body.CategoryCode})
+	}
+	input := apptransactions.UpdateInput{ID: id, Amount: body.Amount, TransactionDate: body.TransactionDate, Description: description, Notes: notes, Category: category, HouseholdID: householdID}
 	if body.Author != nil {
 		value := identity(*body.Author)
 		input.Author = &value
 	}
-	return input
+	return input, nil
 }
 func identity(value api.IdentitySelector) apptransactions.IdentitySelector {
 	return apptransactions.IdentitySelector{UserID: value.UserID, DiscordID: value.DiscordID, TelegramID: value.TelegramID, PhoneNumber: value.PhoneNumber, WhatsAppID: value.WhatsAppID}
@@ -273,14 +310,4 @@ func oneOf(value string, choices ...string) bool {
 		}
 	}
 	return false
-}
-func decode(w http.ResponseWriter, request *http.Request, value any) bool {
-	if err := httpapi.DecodeJSON(w, request, value); err != nil {
-		httpapi.WriteValidationError(w, err.Error())
-		return false
-	}
-	return true
-}
-func fail(w http.ResponseWriter, request *http.Request, err error) {
-	httpapi.WriteApplicationError(w, request, nil, err)
 }

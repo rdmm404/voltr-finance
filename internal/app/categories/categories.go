@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
+	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 var codePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -25,16 +26,14 @@ type CreateInput struct {
 }
 
 type UpdateInput struct {
-	ID               int64
-	Name             *string
-	Description      *string
-	ClearDescription bool
+	Code        string
+	Name        *string
+	Description patch.Field[string]
 }
 
 type Update struct {
-	Name           *string
-	SetDescription bool
-	Description    *string
+	Name        *string
+	Description patch.Field[string]
 }
 
 // Repository implementations translate missing rows and unique violations to
@@ -45,7 +44,7 @@ type Repository interface {
 	GetByCode(context.Context, string) (Category, error)
 	GetActiveByID(context.Context, int64) (Category, error)
 	GetActiveByCode(context.Context, string) (Category, error)
-	Update(context.Context, int64, Update) (Category, error)
+	Update(context.Context, string, Update) (Category, error)
 	Deactivate(context.Context, string) (Category, error)
 }
 
@@ -114,10 +113,11 @@ func (s *Service) ResolveActive(ctx context.Context, id *int64, code *string) (C
 }
 
 func (s *Service) Update(ctx context.Context, input UpdateInput) (Category, error) {
-	if input.ID == 0 {
-		return Category{}, apperrors.Validation("category id is required")
+	code, err := validateCode(input.Code)
+	if err != nil {
+		return Category{}, err
 	}
-	if input.Name == nil && input.Description == nil && !input.ClearDescription {
+	if input.Name == nil && !input.Description.Present() {
 		return Category{}, apperrors.Validation("at least one category field is required")
 	}
 	if input.Name != nil {
@@ -127,11 +127,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (Category, erro
 		}
 		input.Name = &name
 	}
-	description := input.Description
-	if input.ClearDescription {
-		description = nil
-	}
-	item, err := s.repo.Update(ctx, input.ID, Update{Name: input.Name, SetDescription: input.Description != nil || input.ClearDescription, Description: description})
+	item, err := s.repo.Update(ctx, code, Update{Name: input.Name, Description: input.Description})
 	return item, apperrors.WrapInternal("update category", err)
 }
 

@@ -54,12 +54,12 @@ func (r *Repository) GetActiveByCode(ctx context.Context, code string) (appcateg
 	row, err := r.queries.GetActiveCategoryByCode(ctx, code)
 	return mapCategory(row), mapError(err)
 }
-func (r *Repository) Update(ctx context.Context, id int64, input appcategories.Update) (appcategories.Category, error) {
+func (r *Repository) Update(ctx context.Context, code string, input appcategories.Update) (appcategories.Category, error) {
 	name := ""
 	if input.Name != nil {
 		name = *input.Name
 	}
-	row, err := r.queries.UpdateCategory(ctx, sqlc.UpdateCategoryParams{SetName: input.Name != nil, Name: name, SetDescription: input.SetDescription, Description: input.Description, ID: id})
+	row, err := r.queries.UpdateCategory(ctx, sqlc.UpdateCategoryParams{SetName: input.Name != nil, Name: name, SetDescription: input.Description.Present(), Description: input.Description.Value(), Code: code})
 	return mapCategory(row), mapError(err)
 }
 func (r *Repository) Deactivate(ctx context.Context, code string) (appcategories.Category, error) {

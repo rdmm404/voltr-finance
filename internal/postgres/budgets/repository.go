@@ -2,9 +2,12 @@ package budgets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -47,6 +50,10 @@ func (r *Repository) FindLatestPrior(ctx context.Context, owner appbudgets.Owner
 func (r *Repository) GetBudget(ctx context.Context, id int64) (appbudgets.Budget, error) {
 	row, err := r.queries.GetBudgetById(ctx, id)
 	return mapBudget(row), mapBudgetError(err)
+}
+func (r *Repository) LockBudget(ctx context.Context, id int64) error {
+	_, err := r.queries.LockBudgetForUpdate(ctx, id)
+	return mapBudgetError(err)
 }
 func (r *Repository) CreateBudget(ctx context.Context, input appbudgets.CreateBudget) (appbudgets.Budget, error) {
 	var row sqlc.Budget
@@ -146,7 +153,7 @@ func (r *Repository) DeleteLineCategories(ctx context.Context, lineID int64) err
 	return mapLineError(r.queries.DeleteBudgetLineCategories(ctx, lineID))
 }
 func (r *Repository) CreateLineCategory(ctx context.Context, budgetID, lineID, categoryID int64) error {
-	return mapLineError(r.queries.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{BudgetID: budgetID, BudgetLineID: lineID, CategoryID: categoryID}))
+	return mapLineCategoryError(r.queries.CreateBudgetLineCategory(ctx, sqlc.CreateBudgetLineCategoryParams{BudgetID: budgetID, BudgetLineID: lineID, CategoryID: categoryID}))
 }
 func (r *Repository) GetActiveCategoryByID(ctx context.Context, id int64) (appbudgets.Category, error) {
 	row, err := r.queries.GetActiveCategoryById(ctx, id)
@@ -255,6 +262,13 @@ func mapBudgetError(err error) error {
 func mapLineError(err error) error {
 	return postgres.MapError(err, postgres.ErrorMapping{NotFoundCode: apperrors.CodeBudgetLineNotFound, NotFoundMessage: "budget line not found", ConflictCode: apperrors.CodeBudgetConflict, ConflictMessage: "budget line violates an invariant"})
 }
+func mapLineCategoryError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "budget_line_category_budget_id_category_id_key" {
+		return apperrors.Conflict(apperrors.CodeBudgetConflict, "category already mapped to another budget line", err)
+	}
+	return mapLineError(err)
+}
 func mapCategoryError(err error) error {
 	return postgres.MapError(err, postgres.ErrorMapping{NotFoundCode: apperrors.CodeCategoryNotFound, NotFoundMessage: "category not found", ConflictCode: apperrors.CodeBudgetConflict, ConflictMessage: "category violates a budget invariant"})
 }
@@ -265,7 +279,13 @@ type Transactor struct{ pool *pgxpool.Pool }
 
 func NewTransactor(pool *pgxpool.Pool) *Transactor { return &Transactor{pool: pool} }
 func (t *Transactor) WithinTransaction(ctx context.Context, callback func(appbudgets.Repository) error) error {
-	tx, err := t.pool.Begin(ctx)
+	return t.withOptions(ctx, pgx.TxOptions{}, callback)
+}
+func (t *Transactor) WithinSnapshot(ctx context.Context, callback func(appbudgets.Repository) error) error {
+	return t.withOptions(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, callback)
+}
+func (t *Transactor) withOptions(ctx context.Context, options pgx.TxOptions, callback func(appbudgets.Repository) error) error {
+	tx, err := t.pool.BeginTx(ctx, options)
 	if err != nil {
 		return mapBudgetError(err)
 	}

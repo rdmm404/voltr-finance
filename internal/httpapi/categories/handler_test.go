@@ -12,10 +12,10 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type categoryServiceStub struct{ service }
+type categoryServiceStub struct{}
 
 func (categoryServiceStub) Update(_ context.Context, input appcategories.UpdateInput) (appcategories.Category, error) {
-	return appcategories.Category{ID: input.ID, Code: "food", Name: *input.Name, IsActive: true}, nil
+	return appcategories.Category{ID: 4, Code: input.Code, Name: *input.Name, IsActive: true}, nil
 }
 func (categoryServiceStub) Create(context.Context, appcategories.CreateInput) (appcategories.Category, error) {
 	return appcategories.Category{ID: 1}, nil
@@ -29,10 +29,10 @@ func (categoryServiceStub) GetByCode(context.Context, string) (appcategories.Cat
 func (categoryServiceStub) Deactivate(context.Context, string) (appcategories.Category, error) {
 	return appcategories.Category{ID: 1, IsActive: false}, nil
 }
-func TestUpdateRouteUsesNumericID(t *testing.T) {
+func TestUpdateRouteUsesCategoryCode(t *testing.T) {
 	router := httpapi.NewRouter()
 	New(categoryServiceStub{}).Register(router)
-	request := httptest.NewRequest(http.MethodPatch, "/v1/categories/4", strings.NewReader(`{"name":"Food"}`))
+	request := httptest.NewRequest(http.MethodPatch, "/v1/categories/food", strings.NewReader(`{"name":"Food"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -41,7 +41,17 @@ func TestUpdateRouteUsesNumericID(t *testing.T) {
 	}
 }
 
-type conflictingCategoryService struct{ service }
+func TestUpdateRejectsContradictoryDescription(t *testing.T) {
+	router := httpapi.NewRouter()
+	New(categoryServiceStub{}).Register(router)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/v1/categories/food", strings.NewReader(`{"description":"set","clearDescription":true}`)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("response = %d %s", response.Code, response.Body.String())
+	}
+}
+
+type conflictingCategoryService struct{ categoryServiceStub }
 
 func (conflictingCategoryService) Create(context.Context, appcategories.CreateInput) (appcategories.Category, error) {
 	return appcategories.Category{}, apperrors.Conflict(apperrors.CodeCategoryConflict, "category conflict", nil)

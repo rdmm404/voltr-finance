@@ -12,10 +12,7 @@ import (
 	"rdmm404/voltr-finance/internal/httpapi"
 )
 
-type budgetServiceStub struct {
-	service
-	created bool
-}
+type budgetServiceStub struct{ created bool }
 
 func (s budgetServiceStub) EnsureMonthly(_ context.Context, input appbudgets.MonthlyInput) (appbudgets.EnsureResult, error) {
 	return appbudgets.EnsureResult{Budget: appbudgets.Budget{ID: 5, Owner: input.Owner, Lines: []appbudgets.Line{}}, Created: s.created}, nil
@@ -55,7 +52,7 @@ func TestExistingMonthlyBudgetReturnsOK(t *testing.T) {
 	}
 }
 
-type failingBudgetService struct{ service }
+type failingBudgetService struct{ budgetServiceStub }
 
 func (failingBudgetService) Report(context.Context, int64) (appbudgets.Report, error) {
 	return appbudgets.Report{}, errors.New("sql secret")
