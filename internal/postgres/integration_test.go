@@ -195,6 +195,43 @@ func TestPostgresAdaptersEndToEnd(t *testing.T) {
 		t.Fatalf("report=%+v error=%v", report, err)
 	}
 
+	unmappedDescription, unmappedNotes := "Unmapped detail", "shown in dashboard"
+	unmappedTransaction, err := transactionService.Create(ctx, apptransactions.CreateInput{
+		Amount: 4.25, TransactionDate: now.Add(time.Second), HouseholdID: &householdID,
+		Description: &unmappedDescription, Notes: &unmappedNotes,
+	})
+	if err != nil {
+		t.Fatalf("create unmapped transaction: %v", err)
+	}
+	deletedTransaction, err := transactionService.Create(ctx, apptransactions.CreateInput{Amount: 8, TransactionDate: now.Add(2 * time.Second), HouseholdID: &householdID})
+	if err != nil {
+		t.Fatalf("create deleted transaction: %v", err)
+	}
+	if _, err := transactionService.SoftDelete(ctx, apptransactions.DeleteInput{ID: deletedTransaction.ID, DeletedByUserID: user.ID}); err != nil {
+		t.Fatalf("delete detailed-report transaction: %v", err)
+	}
+	outOfScopeTransaction, err := transactionService.Create(ctx, apptransactions.CreateInput{Amount: 9, TransactionDate: now.Add(3 * time.Second)})
+	if err != nil {
+		t.Fatalf("create out-of-scope transaction: %v", err)
+	}
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM "transaction" WHERE id = ANY($1)`, []int64{unmappedTransaction.ID, deletedTransaction.ID, outOfScopeTransaction.ID})
+	})
+
+	detailed, err := budgetService.DetailedMonthlyReport(ctx, monthly)
+	if err != nil {
+		t.Fatalf("detailed report: %v", err)
+	}
+	if len(detailed.Lines) != 3 || len(detailed.Lines[0].Transactions) != 1 || detailed.Lines[0].Transactions[0].ID != transaction.ID {
+		t.Fatalf("mapped detailed transactions=%+v", detailed.Lines)
+	}
+	if len(detailed.UnmappedTransactions) != 1 || detailed.UnmappedTransactions[0].ID != unmappedTransaction.ID || detailed.UnmappedTransactions[0].Notes == nil || detailed.UnmappedTransactions[0].Author.Name == "" {
+		t.Fatalf("unmapped detailed transactions=%+v", detailed.UnmappedTransactions)
+	}
+	if detailed.Totals.ActualAmount != report.Totals.ActualAmount || detailed.Totals.UnmappedActualAmount != "4.25" || detailed.Totals.UncategorizedActualAmount != "4.25" {
+		t.Fatalf("detailed totals=%+v aggregate before unmapped=%+v", detailed.Totals, report.Totals)
+	}
+
 	next := now.AddDate(0, 1, 0)
 	nextMonthly := appbudgets.MonthlyInput{Owner: monthly.Owner, Year: next.Year(), Month: int(next.Month())}
 	results := make([]appbudgets.EnsureResult, 2)

@@ -74,6 +74,35 @@ type UnmappedTransaction struct {
 	Category        *Category
 }
 
+// DetailedTransaction contains the exact application-owned values needed to
+// explain spending without loading a separate transaction resource.
+type DetailedTransaction struct {
+	ID              int64
+	TransactionDate time.Time
+	Amount          string
+	Description     *string
+	Notes           *string
+	Category        *Category
+	Author          Author
+}
+
+type Author struct {
+	ID   int64
+	Name string
+}
+
+type DetailedReportLineData struct {
+	ReportLineData
+	Transactions []DetailedTransaction
+}
+
+type DetailedReportSnapshot struct {
+	Budget               Budget
+	Lines                []DetailedReportLineData
+	UnmappedTransactions []DetailedTransaction
+	UncategorizedAmount  string
+}
+
 type ReportSnapshot struct {
 	Budget               Budget
 	Lines                []ReportLineData
@@ -108,6 +137,18 @@ type ReportTotals struct {
 	RemainingAmount           string
 	UnmappedActualAmount      string
 	UncategorizedActualAmount string
+}
+
+type DetailedReport struct {
+	Budget               BudgetSummary
+	Lines                []DetailedReportLine
+	UnmappedTransactions []DetailedTransaction
+	Totals               ReportTotals
+}
+
+type DetailedReportLine struct {
+	ReportLine
+	Transactions []DetailedTransaction
 }
 
 type EnsureResult struct {

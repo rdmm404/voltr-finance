@@ -154,6 +154,74 @@ func (s *Service) Report(ctx context.Context, budgetID int64) (Report, error) {
 	}, nil
 }
 
+func (s *Service) DetailedMonthlyReport(ctx context.Context, input MonthlyInput) (DetailedReport, error) {
+	start, end, err := validateMonthly(input)
+	if err != nil {
+		return DetailedReport{}, err
+	}
+	snapshot, err := s.repo.LoadDetailedMonthlySnapshot(ctx, input.Owner, start, end)
+	if err != nil {
+		return DetailedReport{}, apperrors.WrapInternal("load detailed monthly budget report snapshot", err)
+	}
+
+	lines := make([]DetailedReportLine, 0, len(snapshot.Lines))
+	totalAllocation, totalActual := int64(0), int64(0)
+	for _, row := range snapshot.Lines {
+		allocation, err := cents(row.AllocationAmount)
+		if err != nil {
+			return DetailedReport{}, apperrors.WrapInternal("calculate detailed budget report", fmt.Errorf("invalid allocation amount: %w", err))
+		}
+		actual, err := cents(row.ActualAmount)
+		if err != nil {
+			return DetailedReport{}, apperrors.WrapInternal("calculate detailed budget report", fmt.Errorf("invalid actual amount: %w", err))
+		}
+		transactions, err := normalizeDetailedTransactions(row.Transactions)
+		if err != nil {
+			return DetailedReport{}, apperrors.WrapInternal("calculate detailed budget report", err)
+		}
+		totalAllocation += allocation
+		totalActual += actual
+		row.Line.Categories = nonNilCategories(row.Line.Categories)
+		lines = append(lines, DetailedReportLine{
+			ReportLine:   ReportLine{Line: row.Line, ActualAmount: formatCents(actual), RemainingAmount: formatCents(allocation - actual)},
+			Transactions: transactions,
+		})
+	}
+	unmapped, err := normalizeDetailedTransactions(snapshot.UnmappedTransactions)
+	if err != nil {
+		return DetailedReport{}, apperrors.WrapInternal("calculate detailed budget report", err)
+	}
+	unmappedTotal := int64(0)
+	for _, transaction := range unmapped {
+		value, _ := cents(transaction.Amount)
+		unmappedTotal += value
+	}
+	uncategorized, err := cents(snapshot.UncategorizedAmount)
+	if err != nil {
+		return DetailedReport{}, apperrors.WrapInternal("calculate detailed budget report", fmt.Errorf("invalid uncategorized amount: %w", err))
+	}
+	budget := snapshot.Budget
+	return DetailedReport{
+		Budget: BudgetSummary{ID: budget.ID, Owner: budget.Owner, PeriodStart: budget.PeriodStart, PeriodEnd: budget.PeriodEnd, SourceBudgetID: budget.SourceBudgetID},
+		Lines:  lines, UnmappedTransactions: unmapped,
+		Totals: ReportTotals{AllocationAmount: formatCents(totalAllocation), ActualAmount: formatCents(totalActual), RemainingAmount: formatCents(totalAllocation - totalActual), UnmappedActualAmount: formatCents(unmappedTotal), UncategorizedActualAmount: formatCents(uncategorized)},
+	}, nil
+}
+
+func normalizeDetailedTransactions(items []DetailedTransaction) ([]DetailedTransaction, error) {
+	if items == nil {
+		return []DetailedTransaction{}, nil
+	}
+	for i := range items {
+		value, err := cents(items[i].Amount)
+		if err != nil {
+			return nil, fmt.Errorf("invalid transaction amount: %w", err)
+		}
+		items[i].Amount = formatCents(value)
+	}
+	return items, nil
+}
+
 func validateMonthly(input MonthlyInput) (time.Time, time.Time, error) {
 	if (input.Owner.HouseholdID == nil) == (input.Owner.UserID == nil) {
 		return time.Time{}, time.Time{}, apperrors.Validation("exactly one budget owner is required")

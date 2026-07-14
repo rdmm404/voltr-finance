@@ -8,6 +8,8 @@ import (
 func TestLoadConfigAndValidate(t *testing.T) {
 	t.Setenv("VOLTR_API_ADDRESS", ":9090")
 	t.Setenv("VOLTR_API_KEY", "secret")
+	t.Setenv("VOLTR_UI_DEFAULT_USER_ID", "1")
+	t.Setenv("VOLTR_UI_DEFAULT_HOUSEHOLD_ID", "2")
 	t.Setenv("DB_USER", "voltr")
 	t.Setenv("DB_PASSWORD", "password")
 	t.Setenv("DB_HOST", "database")
@@ -19,13 +21,15 @@ func TestLoadConfigAndValidate(t *testing.T) {
 	if err := config.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if config.API.Address != ":9090" || config.Database.Port != 5433 || config.Database.MaxPoolSize != 8 || config.Database.MinPoolSize != 2 {
+	if config.API.Address != ":9090" || config.UI.DefaultUserID != 1 || config.UI.DefaultHouseholdID != 2 || config.Database.Port != 5433 || config.Database.MaxPoolSize != 8 || config.Database.MinPoolSize != 2 {
 		t.Fatalf("config=%+v", config)
 	}
 }
 
 func TestConfigurationRejectsEmptyAPIKeyBeforeStartup(t *testing.T) {
 	t.Setenv("VOLTR_API_KEY", "")
+	t.Setenv("VOLTR_UI_DEFAULT_USER_ID", "1")
+	t.Setenv("VOLTR_UI_DEFAULT_HOUSEHOLD_ID", "2")
 	t.Setenv("DB_USER", "voltr")
 	t.Setenv("DB_HOST", "database")
 	t.Setenv("DB_PORT", "5432")
@@ -38,6 +42,8 @@ func TestConfigurationRejectsEmptyAPIKeyBeforeStartup(t *testing.T) {
 
 func TestInvalidDatabaseNumbersFailValidation(t *testing.T) {
 	t.Setenv("VOLTR_API_KEY", "secret")
+	t.Setenv("VOLTR_UI_DEFAULT_USER_ID", "1")
+	t.Setenv("VOLTR_UI_DEFAULT_HOUSEHOLD_ID", "2")
 	t.Setenv("DB_USER", "voltr")
 	t.Setenv("DB_HOST", "database")
 	t.Setenv("DB_PORT", "invalid")

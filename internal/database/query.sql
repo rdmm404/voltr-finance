@@ -195,6 +195,37 @@ WHERE b.id = sqlc.arg(budget_id)::BIGINT
   )
 ORDER BY t.transaction_date ASC, t.id ASC;
 
+-- name: ListDetailedBudgetTransactions :many
+SELECT
+    blc.budget_line_id,
+    t.id,
+    t.transaction_date,
+    ROUND(t.amount::NUMERIC, 2) AS amount,
+    t.description,
+    t.notes,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name,
+    u.id AS author_id,
+    u.name AS author_name
+FROM budget b
+JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id AND t.household_id IS NULL)
+   )
+JOIN users u ON u.id = t.author_id
+LEFT JOIN category c ON c.id = t.category_id
+LEFT JOIN budget_line_category blc
+    ON blc.budget_id = b.id
+   AND blc.category_id = t.category_id
+WHERE b.id = sqlc.arg(budget_id)::BIGINT
+ORDER BY blc.budget_line_id ASC NULLS LAST, t.transaction_date ASC, t.id ASC;
+
 -- WRITES
 
 -- name: CreateHouseholdBudget :one

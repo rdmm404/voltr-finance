@@ -27,10 +27,12 @@ import (
 	transactionpostgres "rdmm404/voltr-finance/internal/postgres/transactions"
 	userpostgres "rdmm404/voltr-finance/internal/postgres/users"
 	"rdmm404/voltr-finance/internal/server"
+	"rdmm404/voltr-finance/internal/webui"
 )
 
 type config struct {
 	API      httpapi.Config
+	UI       webui.Config
 	Database database.Config
 }
 
@@ -46,6 +48,7 @@ func main() {
 func loadConfig() config {
 	return config{
 		API: httpapi.Config{Address: env("VOLTR_API_ADDRESS", ":8080"), APIKey: os.Getenv("VOLTR_API_KEY")},
+		UI:  webui.Config{DefaultUserID: int64(envInt("VOLTR_UI_DEFAULT_USER_ID", 0)), DefaultHouseholdID: int64(envInt("VOLTR_UI_DEFAULT_HOUSEHOLD_ID", 0))},
 		Database: database.Config{
 			User: os.Getenv("DB_USER"), Password: os.Getenv("DB_PASSWORD"), Host: os.Getenv("DB_HOST"),
 			Port: uint16(envInt("DB_PORT", 5432)), Name: os.Getenv("DB_NAME"),
@@ -55,7 +58,7 @@ func loadConfig() config {
 }
 
 func (c config) Validate() error {
-	return errors.Join(c.API.Validate(), c.Database.Validate())
+	return errors.Join(c.API.Validate(), c.UI.Validate(), c.Database.Validate())
 }
 
 func run(ctx context.Context, cfg config) error {
@@ -79,7 +82,7 @@ func run(ctx context.Context, cfg config) error {
 	)
 	budgetService := appbudgets.NewService(budgetpostgres.NewRepository(pool))
 
-	httpServer, err := server.New(cfg.API, transactionService, userService, householdService, categoryService, budgetService)
+	httpServer, err := server.New(cfg.API, cfg.UI, transactionService, userService, householdService, categoryService, budgetService)
 	if err != nil {
 		return fmt.Errorf("configure HTTP server: %w", err)
 	}

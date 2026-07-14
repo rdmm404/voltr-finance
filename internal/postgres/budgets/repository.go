@@ -168,6 +168,87 @@ func (r *Repository) LoadReportSnapshot(ctx context.Context, budgetID int64) (ap
 	})
 }
 
+func (r *Repository) LoadDetailedMonthlySnapshot(ctx context.Context, owner appbudgets.Owner, start, end time.Time) (appbudgets.DetailedReportSnapshot, error) {
+	return withTransaction(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(q *sqlc.Queries) (appbudgets.DetailedReportSnapshot, error) {
+		budget, err := findMonthly(ctx, q, owner, start, end)
+		if err != nil {
+			return appbudgets.DetailedReportSnapshot{}, err
+		}
+		lines, err := listReportLines(ctx, q, budget.ID)
+		if err != nil {
+			return appbudgets.DetailedReportSnapshot{}, err
+		}
+		mappings, err := listLineCategories(ctx, q, budget.ID)
+		if err != nil {
+			return appbudgets.DetailedReportSnapshot{}, err
+		}
+		categories := make(map[int64][]appbudgets.Category)
+		for _, mapping := range mappings {
+			categories[mapping.lineID] = append(categories[mapping.lineID], mapping.category)
+		}
+		detailedLines := make([]appbudgets.DetailedReportLineData, 0, len(lines))
+		lineIndexes := make(map[int64]int, len(lines))
+		for _, line := range lines {
+			line.Categories = nonNilCategories(categories[line.ID])
+			lineIndexes[line.ID] = len(detailedLines)
+			detailedLines = append(detailedLines, appbudgets.DetailedReportLineData{ReportLineData: line, Transactions: []appbudgets.DetailedTransaction{}})
+		}
+		rows, err := q.ListDetailedBudgetTransactions(ctx, budget.ID)
+		if err != nil {
+			return appbudgets.DetailedReportSnapshot{}, mapBudgetError(err)
+		}
+		unmapped := make([]appbudgets.DetailedTransaction, 0)
+		seen := make(map[int64]struct{}, len(rows))
+		for _, row := range rows {
+			if _, exists := seen[row.ID]; exists {
+				return appbudgets.DetailedReportSnapshot{}, apperrors.Internal(fmt.Errorf("transaction %d classified more than once", row.ID))
+			}
+			seen[row.ID] = struct{}{}
+			transaction, err := mapDetailedTransaction(row)
+			if err != nil {
+				return appbudgets.DetailedReportSnapshot{}, err
+			}
+			if row.BudgetLineID == nil {
+				unmapped = append(unmapped, transaction)
+				continue
+			}
+			index, exists := lineIndexes[*row.BudgetLineID]
+			if !exists {
+				return appbudgets.DetailedReportSnapshot{}, apperrors.Internal(fmt.Errorf("transaction %d mapped to unknown budget line %d", row.ID, *row.BudgetLineID))
+			}
+			detailedLines[index].Transactions = append(detailedLines[index].Transactions, transaction)
+		}
+		uncategorized, err := sumUncategorized(ctx, q, budget.ID)
+		if err != nil {
+			return appbudgets.DetailedReportSnapshot{}, err
+		}
+		return appbudgets.DetailedReportSnapshot{Budget: budget, Lines: detailedLines, UnmappedTransactions: unmapped, UncategorizedAmount: uncategorized}, nil
+	})
+}
+
+func mapDetailedTransaction(row sqlc.ListDetailedBudgetTransactionsRow) (appbudgets.DetailedTransaction, error) {
+	amount, err := numericString(row.Amount)
+	if err != nil {
+		return appbudgets.DetailedTransaction{}, apperrors.Internal(err)
+	}
+	item := appbudgets.DetailedTransaction{
+		ID: row.ID, TransactionDate: row.TransactionDate.Time, Amount: amount,
+		Description: row.Description, Notes: row.Notes,
+		Author: appbudgets.Author{ID: row.AuthorID, Name: row.AuthorName},
+	}
+	if row.CategoryID != nil {
+		code, name := "", ""
+		if row.CategoryCode != nil {
+			code = *row.CategoryCode
+		}
+		if row.CategoryName != nil {
+			name = *row.CategoryName
+		}
+		item.Category = &appbudgets.Category{ID: *row.CategoryID, Code: code, Name: name}
+	}
+	return item, nil
+}
+
 func findMonthly(ctx context.Context, q *sqlc.Queries, owner appbudgets.Owner, start, end time.Time) (appbudgets.Budget, error) {
 	var row sqlc.Budget
 	var err error

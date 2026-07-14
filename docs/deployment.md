@@ -1,4 +1,4 @@
-# API deployment
+# API and dashboard deployment
 
 ## Runtime
 
@@ -9,7 +9,7 @@ docker build --target final -t voltr-api .
 docker build --target cli -t voltr-finance-cli .
 ```
 
-The API listens on `VOLTR_API_ADDRESS` (`:8080` by default). `/live` is unauthenticated for container health checks. Every `/v1` route requires:
+The Go server listens on `VOLTR_API_ADDRESS` (`:8080` by default) and serves both the dashboard and API. `/live` is unauthenticated for container-local health checks. Every `/v1` route requires:
 
 ```http
 Authorization: Bearer <VOLTR_API_KEY>
@@ -18,6 +18,8 @@ Authorization: Bearer <VOLTR_API_KEY>
 Set a long random `VOLTR_API_KEY`; startup fails when it is empty. Terminate TLS at the load balancer or reverse proxy and use HTTPS for all non-local traffic so bearer credentials and finance data are encrypted in transit.
 
 Required database settings are `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, and `DB_NAME`. Pool bounds use `DB_POOL_SIZE` (default `5`) and `DB_MIN_POOL_SIZE` (default `0`). Connections force the `transactions` search path.
+
+The dashboard requires positive `VOLTR_UI_DEFAULT_USER_ID` and `VOLTR_UI_DEFAULT_HOUSEHOLD_ID` settings. Set `TZ` to the IANA timezone used for month boundaries (production defaults to `America/Toronto`). See [Finance dashboard](dashboard.md) for CAD presentation and the temporary full-admin BasicAuth trust model.
 
 ## Compose
 
@@ -29,7 +31,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Production uses `docker-compose.prd.yml`, an external `postgres-network`, and values supplied by `.env`. Run migrations explicitly when required:
+Production uses `docker-compose.prd.yml`, an external `postgres-network`, and values supplied by `.env`. It exposes the BasicAuth-protected UI at `finance.homelab.voltr.org` and only `/v1` at `finance-api.homelab.voltr.org`. Supply `VOLTR_UI_BASIC_AUTH_USERS` out of band; do not commit it. Run migrations explicitly when required:
 
 ```bash
 docker compose -f docker-compose.prd.yml --profile migrate run --rm migrate

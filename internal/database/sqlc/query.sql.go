@@ -1454,6 +1454,84 @@ func (q *Queries) ListCategories(ctx context.Context, includeInactive bool) ([]C
 	return items, nil
 }
 
+const listDetailedBudgetTransactions = `-- name: ListDetailedBudgetTransactions :many
+SELECT
+    blc.budget_line_id,
+    t.id,
+    t.transaction_date,
+    ROUND(t.amount::NUMERIC, 2) AS amount,
+    t.description,
+    t.notes,
+    c.id AS category_id,
+    c.code AS category_code,
+    c.name AS category_name,
+    u.id AS author_id,
+    u.name AS author_name
+FROM budget b
+JOIN transaction t
+    ON t.deleted_at IS NULL
+   AND t.transaction_date >= (b.period_start::DATE::TIMESTAMP AT TIME ZONE 'UTC')
+   AND t.transaction_date < ((b.period_end::DATE + INTERVAL '1 day')::TIMESTAMP AT TIME ZONE 'UTC')
+   AND (
+       (b.household_id IS NOT NULL AND t.household_id = b.household_id)
+       OR
+       (b.user_id IS NOT NULL AND t.author_id = b.user_id AND t.household_id IS NULL)
+   )
+JOIN users u ON u.id = t.author_id
+LEFT JOIN category c ON c.id = t.category_id
+LEFT JOIN budget_line_category blc
+    ON blc.budget_id = b.id
+   AND blc.category_id = t.category_id
+WHERE b.id = $1::BIGINT
+ORDER BY blc.budget_line_id ASC NULLS LAST, t.transaction_date ASC, t.id ASC
+`
+
+type ListDetailedBudgetTransactionsRow struct {
+	BudgetLineID    *int64             `json:"budgetLineId"`
+	ID              int64              `json:"id"`
+	TransactionDate pgtype.Timestamptz `json:"transactionDate"`
+	Amount          pgtype.Numeric     `json:"amount"`
+	Description     *string            `json:"description"`
+	Notes           *string            `json:"notes"`
+	CategoryID      *int64             `json:"categoryId"`
+	CategoryCode    *string            `json:"categoryCode"`
+	CategoryName    *string            `json:"categoryName"`
+	AuthorID        int64              `json:"authorId"`
+	AuthorName      string             `json:"authorName"`
+}
+
+func (q *Queries) ListDetailedBudgetTransactions(ctx context.Context, budgetID int64) ([]ListDetailedBudgetTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, listDetailedBudgetTransactions, budgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDetailedBudgetTransactionsRow
+	for rows.Next() {
+		var i ListDetailedBudgetTransactionsRow
+		if err := rows.Scan(
+			&i.BudgetLineID,
+			&i.ID,
+			&i.TransactionDate,
+			&i.Amount,
+			&i.Description,
+			&i.Notes,
+			&i.CategoryID,
+			&i.CategoryCode,
+			&i.CategoryName,
+			&i.AuthorID,
+			&i.AuthorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHouseholds = `-- name: ListHouseholds :many
 SELECT id, name, guild_id, created_at, updated_at FROM household
 ORDER BY name ASC, id ASC

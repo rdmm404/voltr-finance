@@ -7,6 +7,9 @@ services:
       target: final
     environment:
       VOLTR_API_ADDRESS: ":8080"
+      VOLTR_UI_DEFAULT_USER_ID: "${VOLTR_UI_DEFAULT_USER_ID:?set VOLTR_UI_DEFAULT_USER_ID}"
+      VOLTR_UI_DEFAULT_HOUSEHOLD_ID: "${VOLTR_UI_DEFAULT_HOUSEHOLD_ID:?set VOLTR_UI_DEFAULT_HOUSEHOLD_ID}"
+      TZ: "${TZ:-America/Toronto}"
       DB_HOST: postgres
       DB_PORT: "5432"
       ENVIRONMENT: prd
@@ -18,7 +21,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_proxy"
-      - "traefik.http.routers.voltr-finance-api.rule=Host(`api.finance.homelab.voltr.org`)"
+      - "traefik.http.routers.voltr-finance-ui.rule=Host(`finance.homelab.voltr.org`) && !PathPrefix(`/v1`) && !Path(`/live`)"
+      - "traefik.http.routers.voltr-finance-ui.entrypoints=websecure"
+      - "traefik.http.routers.voltr-finance-ui.tls.certresolver=myresolver"
+      - "traefik.http.routers.voltr-finance-ui.middlewares=voltr-finance-ui-auth"
+      - "traefik.http.middlewares.voltr-finance-ui-auth.basicauth.users=${VOLTR_UI_BASIC_AUTH_USERS:?set VOLTR_UI_BASIC_AUTH_USERS}"
+      - "traefik.http.routers.voltr-finance-api.rule=Host(`finance-api.homelab.voltr.org`) && PathPrefix(`/v1`)"
       - "traefik.http.routers.voltr-finance-api.entrypoints=websecure"
       - "traefik.http.routers.voltr-finance-api.tls.certresolver=myresolver"
       - "traefik.http.services.voltr-finance-api.loadbalancer.server.port=8080"

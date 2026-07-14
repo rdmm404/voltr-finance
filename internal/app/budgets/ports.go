@@ -14,4 +14,5 @@ type Repository interface {
 	UpdateLineWithCategories(context.Context, UpdateLineInput) (Line, error)
 	DeleteLine(context.Context, int64) error
 	LoadReportSnapshot(context.Context, int64) (ReportSnapshot, error)
+	LoadDetailedMonthlySnapshot(context.Context, Owner, time.Time, time.Time) (DetailedReportSnapshot, error)
 }

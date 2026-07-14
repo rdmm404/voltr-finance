@@ -10,22 +10,27 @@ import (
 )
 
 type fakeRepository struct {
-	monthly       Budget
-	monthlyMisses int
-	findErr       error
-	created       Budget
-	createErr     error
-	createInput   CreateMonthlyFromTemplateInput
-	createdLine   Line
-	createLineErr error
-	createLine    CreateLineInput
-	updatedLine   Line
-	updateLineErr error
-	updateLine    UpdateLineInput
-	deleteErr     error
-	deletedID     int64
-	snapshot      ReportSnapshot
-	reportErr     error
+	monthly          Budget
+	monthlyMisses    int
+	findErr          error
+	created          Budget
+	createErr        error
+	createInput      CreateMonthlyFromTemplateInput
+	createdLine      Line
+	createLineErr    error
+	createLine       CreateLineInput
+	updatedLine      Line
+	updateLineErr    error
+	updateLine       UpdateLineInput
+	deleteErr        error
+	deletedID        int64
+	snapshot         ReportSnapshot
+	reportErr        error
+	detailedSnapshot DetailedReportSnapshot
+	detailedErr      error
+	detailedOwner    Owner
+	detailedStart    time.Time
+	detailedEnd      time.Time
 }
 
 func (f *fakeRepository) FindMonthly(context.Context, Owner, time.Time, time.Time) (Budget, error) {
@@ -60,6 +65,10 @@ func (f *fakeRepository) DeleteLine(_ context.Context, id int64) error {
 func (f *fakeRepository) LoadReportSnapshot(context.Context, int64) (ReportSnapshot, error) {
 	return f.snapshot, f.reportErr
 }
+func (f *fakeRepository) LoadDetailedMonthlySnapshot(_ context.Context, owner Owner, start, end time.Time) (DetailedReportSnapshot, error) {
+	f.detailedOwner, f.detailedStart, f.detailedEnd = owner, start, end
+	return f.detailedSnapshot, f.detailedErr
+}
 
 func TestRepositoryPortExposesOnlyCohesiveOperations(t *testing.T) {
 	port := reflect.TypeOf((*Repository)(nil)).Elem()
@@ -67,7 +76,7 @@ func TestRepositoryPortExposesOnlyCohesiveOperations(t *testing.T) {
 	for i := range port.NumMethod() {
 		got[i] = port.Method(i).Name
 	}
-	want := []string{"CreateLineWithCategories", "CreateMonthlyFromTemplate", "DeleteLine", "FindMonthly", "LoadReportSnapshot", "UpdateLineWithCategories"}
+	want := []string{"CreateLineWithCategories", "CreateMonthlyFromTemplate", "DeleteLine", "FindMonthly", "LoadDetailedMonthlySnapshot", "LoadReportSnapshot", "UpdateLineWithCategories"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("repository methods=%v want=%v", got, want)
 	}
@@ -203,6 +212,60 @@ func TestReportSupportsNegativeValuesAndEmptyCollections(t *testing.T) {
 	empty, err := NewService(repo).Report(context.Background(), 12)
 	if err != nil || empty.Lines == nil || empty.UnmappedTransactions == nil || len(empty.Lines) != 0 {
 		t.Fatalf("empty=%+v error=%v", empty, err)
+	}
+}
+
+func TestDetailedMonthlyReportMapsTransactionsAndPreservesAggregateTotals(t *testing.T) {
+	userID := int64(8)
+	description, notes := "Groceries", "weekly shop"
+	repo := &fakeRepository{detailedSnapshot: DetailedReportSnapshot{
+		Budget: Budget{ID: 12, Owner: Owner{UserID: &userID}},
+		Lines: []DetailedReportLineData{{
+			ReportLineData: ReportLineData{Line: Line{ID: 1, BudgetID: 12, AllocationAmount: "100", Categories: []Category{{ID: 3, Code: "food"}}}, ActualAmount: "60.25"},
+			Transactions:   []DetailedTransaction{{ID: 21, Amount: "60.250", Description: &description, Notes: &notes, Category: &Category{ID: 3, Code: "food"}, Author: Author{ID: userID, Name: "Alex"}}},
+		}},
+		UnmappedTransactions: []DetailedTransaction{{ID: 22, Amount: "12.5", Author: Author{ID: userID, Name: "Alex"}}},
+		UncategorizedAmount:  "12.50",
+	}}
+
+	report, err := NewService(repo).DetailedMonthlyReport(context.Background(), MonthlyInput{Owner: Owner{UserID: &userID}, Year: 2026, Month: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Lines[0].Transactions[0].Amount != "60.25" || report.UnmappedTransactions[0].Amount != "12.50" {
+		t.Fatalf("transaction amounts were not normalized: %+v", report)
+	}
+	if report.Totals.AllocationAmount != "100.00" || report.Totals.ActualAmount != "60.25" || report.Totals.UnmappedActualAmount != "12.50" || report.Totals.UncategorizedActualAmount != "12.50" {
+		t.Fatalf("unexpected totals: %+v", report.Totals)
+	}
+	aggregateRepo := &fakeRepository{snapshot: ReportSnapshot{
+		Budget:               repo.detailedSnapshot.Budget,
+		Lines:                []ReportLineData{repo.detailedSnapshot.Lines[0].ReportLineData},
+		UnmappedTransactions: []UnmappedTransaction{{ID: 22, Amount: "12.5"}},
+		UncategorizedAmount:  "12.50",
+	}}
+	aggregate, err := NewService(aggregateRepo).Report(context.Background(), 12)
+	if err != nil || !reflect.DeepEqual(report.Totals, aggregate.Totals) || report.Lines[0].ActualAmount != aggregate.Lines[0].ActualAmount {
+		t.Fatalf("detailed report diverged from aggregate: detailed=%+v aggregate=%+v error=%v", report, aggregate, err)
+	}
+	if repo.detailedStart != time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC) || repo.detailedEnd != time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC) {
+		t.Fatalf("snapshot period=%s..%s", repo.detailedStart, repo.detailedEnd)
+	}
+}
+
+func TestDetailedMonthlyReportNormalizesEmptyCollectionsAndErrors(t *testing.T) {
+	userID := int64(8)
+	repo := &fakeRepository{detailedSnapshot: DetailedReportSnapshot{Budget: Budget{ID: 12}, UncategorizedAmount: "0"}}
+	report, err := NewService(repo).DetailedMonthlyReport(context.Background(), MonthlyInput{Owner: Owner{UserID: &userID}, Year: 2026, Month: 7})
+	if err != nil || report.Lines == nil || report.UnmappedTransactions == nil {
+		t.Fatalf("report=%+v error=%v", report, err)
+	}
+	repo.detailedErr = apperrors.NotFound(apperrors.CodeBudgetNotFound, "budget not found", nil)
+	if _, err := NewService(repo).DetailedMonthlyReport(context.Background(), MonthlyInput{Owner: Owner{UserID: &userID}, Year: 2026, Month: 7}); !apperrors.IsKind(err, apperrors.KindNotFound) {
+		t.Fatalf("not-found error=%v", err)
+	}
+	if _, err := NewService(repo).DetailedMonthlyReport(context.Background(), MonthlyInput{Year: 2026, Month: 7}); !apperrors.IsKind(err, apperrors.KindValidation) {
+		t.Fatalf("validation error=%v", err)
 	}
 }
 

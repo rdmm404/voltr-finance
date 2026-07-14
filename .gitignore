@@ -5,3 +5,5 @@ tmp
 .secrets/*
 .worktrees/
 config.json
+.tools/
+internal/webui/assets/dist/

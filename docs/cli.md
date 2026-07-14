@@ -23,13 +23,13 @@ The CLI reads a strict JSON config. Config-path precedence is:
 ```json
 {
   "api": {
-    "baseUrl": "https://finance.example.com",
+    "baseUrl": "https://finance-api.homelab.voltr.org",
     "apiKey": "replace-with-a-secret"
   }
 }
 ```
 
-Non-empty `VOLTR_API_URL` and `VOLTR_API_KEY` values override the corresponding file settings. Use HTTPS outside trusted local development; bearer credentials are sent on every finance request. Help commands do not require configuration.
+Non-empty `VOLTR_API_URL` and `VOLTR_API_KEY` values override the corresponding file settings. Production API clients should migrate from the previous API hostname to `https://finance-api.homelab.voltr.org`; the human dashboard hostname is not an API endpoint. Use HTTPS outside trusted local development; bearer credentials are sent on every finance request. Help commands do not require configuration.
 
 Examples below use:
 

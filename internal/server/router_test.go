@@ -12,6 +12,7 @@ import (
 	apptransactions "rdmm404/voltr-finance/internal/app/transactions"
 	appusers "rdmm404/voltr-finance/internal/app/users"
 	"rdmm404/voltr-finance/internal/httpapi"
+	"rdmm404/voltr-finance/internal/webui"
 )
 
 type transactionServiceStub struct{ calls *int }
@@ -116,11 +117,15 @@ func (budgetServiceStub) DeleteLine(context.Context, int64) error { panic("unexp
 func (budgetServiceStub) Report(context.Context, int64) (appbudgets.Report, error) {
 	panic("unexpected Report")
 }
+func (budgetServiceStub) DetailedMonthlyReport(context.Context, appbudgets.MonthlyInput) (appbudgets.DetailedReport, error) {
+	panic("unexpected DetailedMonthlyReport")
+}
 
 func TestCompositionExecutesEveryFeatureFlow(t *testing.T) {
 	transactionCalls, userCalls, householdCalls, categoryCalls, budgetCalls := 0, 0, 0, 0, 0
 	server, err := New(
 		httpapi.Config{APIKey: "secret"},
+		webui.Config{DefaultUserID: 1, DefaultHouseholdID: 1},
 		transactionServiceStub{calls: &transactionCalls},
 		userServiceStub{calls: &userCalls},
 		householdServiceStub{calls: &householdCalls},
@@ -148,6 +153,26 @@ func TestCompositionExecutesEveryFeatureFlow(t *testing.T) {
 				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
 		})
+	}
+	unauthorized := httptest.NewRecorder()
+	server.Handler.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/v1/users", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated API status=%d", unauthorized.Code)
+	}
+	live := httptest.NewRecorder()
+	server.Handler.ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/live", nil))
+	if live.Code != http.StatusOK || live.Body.String() != "{\"status\":\"ok\"}\n" {
+		t.Fatalf("live status=%d body=%s", live.Code, live.Body.String())
+	}
+	asset := httptest.NewRecorder()
+	server.Handler.ServeHTTP(asset, httptest.NewRequest(http.MethodGet, "/assets/app.css", nil))
+	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "text/css; charset=utf-8" {
+		t.Fatalf("asset status=%d content-type=%s", asset.Code, asset.Header().Get("Content-Type"))
+	}
+	reserved := httptest.NewRecorder()
+	server.Handler.ServeHTTP(reserved, httptest.NewRequest(http.MethodGet, "/v1/not-a-human-page", nil))
+	if reserved.Code != http.StatusUnauthorized {
+		t.Fatalf("reserved API path status=%d", reserved.Code)
 	}
 	for feature, count := range map[string]int{
 		"transactions": transactionCalls, "users": userCalls, "households": householdCalls,

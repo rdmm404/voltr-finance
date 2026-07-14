@@ -11,6 +11,9 @@ services:
     environment:
       VOLTR_API_ADDRESS: ":8080"
       VOLTR_API_KEY: "${VOLTR_API_KEY:-development-only-key}"
+      VOLTR_UI_DEFAULT_USER_ID: "${VOLTR_UI_DEFAULT_USER_ID:-1}"
+      VOLTR_UI_DEFAULT_HOUSEHOLD_ID: "${VOLTR_UI_DEFAULT_HOUSEHOLD_ID:-1}"
+      TZ: "${TZ:-America/Toronto}"
       DB_USER: voltr
       DB_PASSWORD: voltr
       DB_NAME: voltr_finance

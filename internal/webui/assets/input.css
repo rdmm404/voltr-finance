@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@source "../**/*.templ";
+@source "../**/*.go";
+
+@theme {
+  --color-background: #282a36;
+  --color-surface: #343746;
+  --color-surface-raised: #44475a;
+  --color-foreground: #f8f8f2;
+  --color-muted: #b6b8c8;
+  --color-accent: #bd93f9;
+  --color-accent-alt: #8be9fd;
+  --color-positive: #50fa7b;
+  --color-warning: #ffb86c;
+  --color-danger: #ff5555;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html { color-scheme: dark; }
+  body { @apply min-h-screen bg-background text-foreground antialiased; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-accent-alt; }
+  button, select, a { @apply min-h-11; }
+  summary { @apply cursor-pointer; }
+}
+
+@layer utilities {
+  .money { font-variant-numeric: tabular-nums; }
+}
