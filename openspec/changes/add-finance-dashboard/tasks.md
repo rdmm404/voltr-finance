@@ -17,11 +17,11 @@
 ## 3. templ and Tailwind Build Foundation
 
 - [ ] 3.1 Add a pinned templ generator tool and document the generation command
-- [ ] 3.2 Add `package.json` and lockfile with pinned Tailwind CLI build-only dependencies
+- [ ] 3.2 Add reproducible tooling that downloads an exact standalone Tailwind CLI version and verifies platform-specific SHA-256 checksums
 - [ ] 3.3 Add the Tailwind input stylesheet, source scanning configuration, production CSS command, and Dracula-inspired semantic color tokens
 - [ ] 3.4 Add development commands that coordinate templ generation, Tailwind watching, and Go reload without watching generated templ files
 - [ ] 3.5 Add CI verification that templ generation is clean and frontend assets build reproducibly
-- [ ] 3.6 Configure generated CSS and Node artifacts according to repository source-control and ignore conventions
+- [ ] 3.6 Configure generated CSS and downloaded Tailwind executables according to repository source-control and ignore conventions
 
 ## 4. Embedded Web UI Foundation
 
@@ -67,8 +67,8 @@
 
 ## 8. Container and Traefik Deployment
 
-- [ ] 8.1 Add a frontend build stage to the Dockerfile that installs locked Node dependencies and compiles Tailwind CSS before the Go binary build
-- [ ] 8.2 Keep Node, npm metadata, source templates, and build tools out of the final runtime image while including required IANA timezone data
+- [ ] 8.1 Add a frontend build stage to the Dockerfile that obtains the version/checksum-pinned standalone Tailwind CLI and compiles CSS before the Go binary build
+- [ ] 8.2 Keep the Tailwind executable, source templates, and build tools out of the final runtime image while including required IANA timezone data
 - [ ] 8.3 Update development Compose configuration with UI defaults and `TZ=America/Toronto`
 - [ ] 8.4 Add the BasicAuth-protected `finance.homelab.voltr.org` Traefik router with credentials supplied through deployment secret configuration
 - [ ] 8.5 Change the API router to `finance-api.homelab.voltr.org` and restrict it to `/v1` while retaining bearer authentication

@@ -14,7 +14,7 @@ The deployment is private behind Traefik. The initial browser interface is inten
 - Preserve inward dependency direction by making HTML another inbound adapter over application services.
 - Provide authoritative line-level transaction detail without UI-side mapping or multiple inconsistent report reads.
 - Establish reusable page, component, styling, asset, and testing conventions for later UI sections.
-- Keep the browser experience functional without JavaScript and keep the production runtime free of Node.
+- Keep the browser experience functional without JavaScript and keep both the initial build and production runtime free of Node.
 - Make the UI/API Traefik routing and temporary full-admin trust model explicit.
 
 **Non-Goals:**
@@ -105,13 +105,13 @@ shell -> primitives -> reusable patterns -> dashboard feature -> page
 
 Initial primitives include cards, buttons/links, badges, selects, progress indicators, alerts, and empty/error states. Patterns include metric cards, month navigation, owner selection, budget lines, and transaction lists. Components use semantic HTML, keyboard-visible focus, sufficient contrast, touch-sized controls, and text/icon cues in addition to color.
 
-Tailwind is a build-time dependency pinned through `package.json` and `package-lock.json` using the Tailwind CLI. It scans templ and relevant Go/JS sources and emits production CSS. The Dracula-inspired dark theme uses semantic CSS tokens for background, surface, foreground, muted, accent, positive, warning, and danger roles; vivid purple, pink, cyan, green, orange, and red are restrained to meaningful emphasis. No compiled CSS, `node_modules`, or minified JavaScript is committed.
+Tailwind is a build-time dependency supplied as its standalone CLI executable. Repository tooling pins the exact Tailwind version and platform-specific SHA-256 checksums, downloads the executable reproducibly for local/CI/container builds, and rejects checksum mismatches. The CLI scans templ and relevant Go/JS sources and emits production CSS. The Dracula-inspired dark theme uses semantic CSS tokens for background, surface, foreground, muted, accent, positive, warning, and danger roles; vivid purple, pink, cyan, green, orange, and red are restrained to meaningful emphasis. No compiled CSS or minified JavaScript is committed.
 
-No JavaScript bundler is introduced. If later behavior needs authored JavaScript, same-origin native ES modules are the default. A future npm browser dependency such as Chart.js can justify adding esbuild then.
+Node and a JavaScript bundler are not introduced. If later behavior needs authored JavaScript, same-origin native ES modules are the default. A future npm browser dependency such as Chart.js can justify introducing npm with a lockfile and adding esbuild then.
 
 ### 7. Static assets are embedded and same-origin
 
-Compiled CSS and any source-controlled icons are embedded into the Go binary and served under `/assets/` with correct content types and conservative cache headers. The UI does not depend on a CDN. The production Docker build uses Node only in a build stage to produce CSS and copies only the final Go binary into the runtime image.
+Compiled CSS and any source-controlled icons are embedded into the Go binary and served under `/assets/` with correct content types and conservative cache headers. The UI does not depend on a CDN. The production Docker build obtains the checksum-verified standalone Tailwind executable in a build stage and copies only the final Go binary into the runtime image.
 
 ### 8. UI and API use distinct Traefik routers
 
@@ -137,7 +137,7 @@ The UI formats monetary values with `en-CA`/CAD semantics and consistently ident
 - [Eager transaction detail increases HTML size] -> Accept the bounded monthly payload for a private dashboard; preserve a separate aggregate report and revisit lazy fragments only with measured need.
 - [A detailed report query adds SQL and model complexity] -> Reuse existing owner-scope predicates and test exact-once mapped/unmapped classification under one repeatable-read snapshot.
 - [Committed templ output can become stale] -> Verify generation in CI and include generation in the documented development command.
-- [Adding Node increases build tooling] -> Keep Node build-only, pin dependencies with a lockfile, and copy no Node runtime artifacts into the final image.
+- [Downloading a standalone build tool can be non-reproducible or compromised] -> Pin the Tailwind version and platform-specific checksums, fail on verification errors, and keep the executable out of the final image.
 - [A dark colorful theme can reduce readability] -> Use semantic tokens, restrained accents, contrast tests, visible text states, and responsive component tests.
 - [A fixed CAD assumption can misrepresent future mixed-currency data] -> Label the assumption, centralize formatting, and treat multi-currency as a future domain change rather than silently guessing.
 
