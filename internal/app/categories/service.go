@@ -6,47 +6,9 @@ import (
 	"strings"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
-	"rdmm404/voltr-finance/internal/app/patch"
 )
 
 var codePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
-
-type Category struct {
-	ID          int64
-	Code        string
-	Name        string
-	Description *string
-	IsActive    bool
-}
-
-type CreateInput struct {
-	Name        string
-	Code        *string
-	Description *string
-}
-
-type UpdateInput struct {
-	Code        string
-	Name        *string
-	Description patch.Field[string]
-}
-
-type Update struct {
-	Name        *string
-	Description patch.Field[string]
-}
-
-// Repository implementations translate missing rows and unique violations to
-// apperrors.KindNotFound and apperrors.KindConflict respectively.
-type Repository interface {
-	Create(context.Context, CreateInput) (Category, error)
-	List(context.Context, bool) ([]Category, error)
-	GetByCode(context.Context, string) (Category, error)
-	GetActiveByID(context.Context, int64) (Category, error)
-	GetActiveByCode(context.Context, string) (Category, error)
-	Update(context.Context, string, Update) (Category, error)
-	Deactivate(context.Context, string) (Category, error)
-}
 
 type Service struct{ repo Repository }
 

@@ -3,42 +3,9 @@ package households
 import (
 	"context"
 	"strings"
-	"time"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
 )
-
-type Household struct {
-	ID        int64
-	Name      string
-	GuildID   string
-	CreatedAt *time.Time
-	UpdatedAt *time.Time
-}
-
-type User struct {
-	ID          int64
-	Name        string
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsAppID  *string
-	CreatedAt   *time.Time
-	UpdatedAt   *time.Time
-}
-
-type Selector struct {
-	Name    *string
-	GuildID *string
-}
-
-type Repository interface {
-	List(context.Context) ([]Household, error)
-	GetByID(context.Context, int64) (Household, error)
-	GetByName(context.Context, string) (Household, error)
-	GetByGuildID(context.Context, string) (Household, error)
-	ListUsers(context.Context, int64) ([]User, error)
-}
 
 type Service struct{ repo Repository }
 

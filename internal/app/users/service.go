@@ -3,87 +3,9 @@ package users
 import (
 	"context"
 	"strings"
-	"time"
 
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
-	"rdmm404/voltr-finance/internal/app/patch"
 )
-
-type User struct {
-	ID          int64
-	Name        string
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsAppID  *string
-	CreatedAt   *time.Time
-	UpdatedAt   *time.Time
-}
-
-type Selector struct {
-	UserID      *int64
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsAppID  *string
-}
-
-func (s Selector) normalized() Selector {
-	if s.TelegramID != nil {
-		value, _, _ := strings.Cut(*s.TelegramID, "|")
-		s.TelegramID = &value
-	}
-	return s
-}
-
-func (s Selector) validate() error {
-	count := 0
-	for _, set := range []bool{s.UserID != nil, s.DiscordID != nil, s.TelegramID != nil, s.PhoneNumber != nil, s.WhatsAppID != nil} {
-		if set {
-			count++
-		}
-	}
-	if count != 1 {
-		return apperrors.Validation("exactly one identity selector is required")
-	}
-	return nil
-}
-
-type CreateInput struct {
-	Name        string
-	DiscordID   *string
-	TelegramID  *string
-	PhoneNumber *string
-	WhatsAppID  *string
-}
-
-type UpdateInput struct {
-	ID          int64
-	Name        *string
-	DiscordID   patch.Field[string]
-	TelegramID  patch.Field[string]
-	PhoneNumber patch.Field[string]
-	WhatsAppID  patch.Field[string]
-}
-
-type Update struct {
-	Name        *string
-	DiscordID   patch.Field[string]
-	TelegramID  patch.Field[string]
-	PhoneNumber patch.Field[string]
-	WhatsAppID  patch.Field[string]
-}
-
-type Repository interface {
-	Create(context.Context, CreateInput) (User, error)
-	Update(context.Context, int64, Update) (User, error)
-	GetByID(context.Context, int64) (User, error)
-	GetByDiscordID(context.Context, string) (User, error)
-	GetByTelegramID(context.Context, string) (User, error)
-	GetByPhoneNumber(context.Context, string) (User, error)
-	GetByWhatsAppID(context.Context, string) (User, error)
-	List(context.Context) ([]User, error)
-}
 
 type Service struct{ repo Repository }
 
@@ -152,4 +74,25 @@ func (s *Service) List(ctx context.Context) ([]User, error) {
 		items = []User{}
 	}
 	return items, apperrors.WrapInternal("list users", err)
+}
+
+func (s Selector) normalized() Selector {
+	if s.TelegramID != nil {
+		value, _, _ := strings.Cut(*s.TelegramID, "|")
+		s.TelegramID = &value
+	}
+	return s
+}
+
+func (s Selector) validate() error {
+	count := 0
+	for _, set := range []bool{s.UserID != nil, s.DiscordID != nil, s.TelegramID != nil, s.PhoneNumber != nil, s.WhatsAppID != nil} {
+		if set {
+			count++
+		}
+	}
+	if count != 1 {
+		return apperrors.Validation("exactly one identity selector is required")
+	}
+	return nil
 }

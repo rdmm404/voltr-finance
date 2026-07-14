@@ -82,8 +82,8 @@
 
 ## 10. Verification and Release Readiness
 
-- [x] 10.1 Add an architecture test or static import check proving application feature packages do not import HTTP, API client, CLI, database, transaction, pgx, or sqlc packages.
-- [x] 10.2 Add a dependency check proving the CLI production import graph contains no Postgres, pgx, sqlc, or server application wiring.
+- [x] 10.1 Verify application feature packages do not import HTTP, API client, CLI, database, transaction, pgx, or sqlc packages.
+- [x] 10.2 Verify the CLI production graph contains no Postgres, pgx, sqlc, or server application wiring.
 - [x] 10.3 Run formatting, unit tests, race-enabled tests, API/CLI integration tests, and production builds for both `cmd/api` and `cmd/cli`.
 - [x] 10.4 Perform a local Postgres smoke test covering authentication, every REST feature family, bulk partial success, monthly budget read/ensure, budget reporting, and CLI rendering.
 - [x] 10.5 Confirm deployment rollback requires only the previous binaries and configuration because this change introduces no destructive database migration.
@@ -103,7 +103,7 @@
 
 ## 12. Review Follow-up Corrections
 
-- [x] 12.1 Record that the low-level budget repository/transactor finding was intentionally declined rather than resolved.
+- [x] 12.1 Record the then-current budget-boundary disposition explicitly; this decision was later superseded by phase 13.
 - [x] 12.2 Add safe, actionable operation and diagnostic classification to production internal-error logs without exposing causes to clients.
 - [x] 12.3 Add explicit budget category-code resolution and replacement characterization coverage.
 - [x] 12.4 Replace nil-service `OPTIONS` composition probes with authenticated handler-to-service flows for every feature family.
@@ -118,3 +118,10 @@
 - [x] 13.4 Move report input loading behind one repeatable-read `LoadReportSnapshot` adapter operation.
 - [x] 13.5 Rewrite budget unit tests around the higher-level port and retain validation, category-code, report, conflict-recovery, and empty-collection coverage.
 - [x] 13.6 Update composition/integration wiring, remove the obsolete transactor, and run local plus CI verification.
+
+## 14. Application Package Organization
+
+- [x] 14.1 Split budgets into `models.go`, `ports.go`, and `service.go` without changing behavior.
+- [x] 14.2 Split transactions into `models.go`, `ports.go`, and `service.go` without changing behavior.
+- [x] 14.3 Split categories, users, and households into `models.go`, `ports.go`, and `service.go` files.
+- [ ] 14.4 Run formatting, tests, race, vet, builds, PostgreSQL integration, and CI verification.

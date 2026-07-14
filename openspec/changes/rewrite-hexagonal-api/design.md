@@ -52,7 +52,7 @@ internal/
     sqlc/               generated code
 ```
 
-Application feature packages SHALL own their input/output models and the narrow outbound ports needed by their use cases. They SHALL NOT import `internal/http`, `internal/api`, `internal/cli`, `internal/database`, `internal/transaction`, pgx, or sqlc. Shared application packages are allowed only for genuinely universal concepts such as typed application errors.
+Application feature packages SHALL own their input/output models and the narrow outbound ports needed by their use cases. Each feature package separates these concerns into `models.go`, `ports.go`, and `service.go`; additional focused domain files are allowed when behavior warrants them. They SHALL NOT import `internal/http`, `internal/api`, `internal/cli`, `internal/database`, `internal/transaction`, pgx, or sqlc. Shared application packages are allowed only for genuinely universal concepts such as typed application errors.
 
 The HTTP handlers and API client use explicit wire contracts from `internal/api`; handlers translate between wire and application models. This small amount of mapping prevents an external JSON contract from becoming the domain model and prevents the standalone client from depending on server application packages.
 
