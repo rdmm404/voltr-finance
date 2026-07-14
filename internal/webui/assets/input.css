@@ -3,27 +3,142 @@
 @source "../**/*.go";
 
 @theme {
-  --color-background: #282a36;
-  --color-surface: #343746;
-  --color-surface-raised: #44475a;
-  --color-foreground: #f8f8f2;
-  --color-muted: #b6b8c8;
-  --color-accent: #bd93f9;
-  --color-accent-alt: #8be9fd;
-  --color-positive: #50fa7b;
-  --color-warning: #ffb86c;
-  --color-danger: #ff5555;
-  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --color-background: #050505;
+  --color-surface: #0d0d0f;
+  --color-surface-raised: #161618;
+  --color-ink: #f4f4f5;
+  --color-ink-soft: #d4d4d8;
+  --color-muted: #85858e;
+  --color-accent: #f4f4f5;
+  --color-accent-alt: #a1a1aa;
+  --color-positive: #4de5a5;
+  --color-warning: #ffbd5c;
+  --color-danger: #ff6577;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 @layer base {
+  * { box-sizing: border-box; }
   html { color-scheme: dark; }
-  body { @apply min-h-screen bg-background text-foreground antialiased; }
+  body { @apply min-h-screen bg-background font-sans text-ink antialiased; }
   :focus-visible { @apply outline-2 outline-offset-2 outline-accent-alt; }
   button, select, a { @apply min-h-11; }
-  summary { @apply cursor-pointer; }
+  summary { @apply cursor-pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+}
+
+@layer components {
+  .shell { @apply mx-auto w-full max-w-[88rem] px-4 sm:px-6 lg:px-8; }
+  .site-header { @apply relative z-20 border-b border-white/[0.06] bg-background; }
+  .brand { @apply inline-flex items-center gap-3 text-base font-medium tracking-tight text-ink; }
+  .brand strong { @apply font-bold; }
+  .brand-mark { @apply flex size-9 items-center justify-center rounded-xl bg-ink text-background; }
+  .brand-mark svg { @apply size-5; }
+  .private-label { @apply hidden items-center gap-2 text-xs font-medium text-muted sm:flex; }
+  .status-dot { @apply size-1.5 rounded-full bg-positive; }
+
+  .panel, .filter-panel {
+    @apply rounded-2xl border border-white/[0.08] bg-surface;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, .16);
+  }
+  .eyebrow { @apply text-[.69rem] font-bold uppercase tracking-[.19em] text-accent-alt; }
+
+  .page-heading { @apply flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between; }
+  .page-heading h1 { @apply mt-2 text-4xl font-bold tracking-[-.04em] text-ink sm:text-5xl; }
+  .page-heading > div > p:last-child { @apply mt-3 text-sm text-muted sm:text-base; }
+  .month-nav { @apply inline-flex w-fit items-center overflow-hidden rounded-xl border border-white/[0.09] bg-surface; }
+  .month-nav a { @apply flex size-11 items-center justify-center text-muted transition hover:bg-white/[0.06] hover:text-ink; }
+  .month-nav svg { @apply size-5; }
+  .month-nav span { @apply border-x border-white/[0.08] px-4 text-xs font-semibold tracking-widest text-ink-soft; }
+
+  .filter-panel { @apply overflow-hidden; }
+  .filter-panel > summary { @apply flex min-h-16 items-center justify-between px-5 py-3 transition hover:bg-white/[0.025] sm:px-6; }
+  .filter-panel summary > span:first-child { @apply flex flex-col; }
+  .filter-panel summary strong { @apply text-sm font-semibold; }
+  .filter-panel summary small { @apply mt-0.5 text-xs text-muted; }
+  .filter-panel[open] > summary { @apply border-b border-white/[0.07]; }
+  .filter-form { @apply grid gap-4 p-5 sm:p-6 md:grid-cols-[1fr_1fr_auto] md:items-end; }
+  .filter-form label { @apply grid gap-2 text-xs font-semibold uppercase tracking-wider text-muted; }
+  .filter-form select { @apply min-h-11 rounded-xl border border-white/[0.1] bg-background/70 px-3 text-sm font-medium normal-case tracking-normal text-ink; }
+  .filter-form button { @apply rounded-xl bg-ink px-5 font-semibold text-background transition hover:bg-ink-soft; }
+
+  .hero-panel {
+    @apply overflow-hidden rounded-2xl border border-white/[0.09] bg-surface p-6 sm:p-8;
+    box-shadow: 0 12px 35px rgba(0,0,0,.16);
+  }
+
+  .metrics-grid { @apply grid grid-cols-3 gap-x-8; }
+  .metric { @apply min-w-0; }
+  .metric:nth-child(2) { @apply text-center; }
+  .metric:nth-child(3) { @apply text-right; }
+  .metric-label { @apply text-xs font-medium text-muted; }
+  .metric-value { @apply mt-1 truncate text-xl font-semibold tracking-[-.02em] text-ink-soft sm:text-3xl; }
+  .metric-emphasis .metric-value { @apply text-positive; }
+  .summary-progress { @apply mt-7; }
+  .summary-progress > div { @apply mb-2 flex items-center justify-between text-xs font-medium text-muted; }
+  .summary-progress > div strong { @apply text-sm font-semibold text-ink-soft; }
+  .summary-progress progress { @apply h-2; }
+
+  .scope-grid { @apply grid items-start gap-6 lg:grid-cols-2; }
+  .scope-panel { @apply min-w-0; }
+  .scope-summary { @apply border-b border-white/[0.07] p-6 sm:p-7; }
+  .scope-title { @apply flex items-start justify-between gap-4; }
+  .scope-title h2 { @apply mt-1 text-2xl font-semibold tracking-[-.03em]; }
+  .scope-summary > .metrics-grid { @apply mt-7 gap-x-5; }
+  .scope-summary .metric-value { @apply text-xl sm:text-2xl; }
+  .scope-summary .summary-progress { @apply mt-6; }
+  .line-list { @apply divide-y divide-white/[0.065]; }
+
+  .budget-line { @apply bg-transparent transition; }
+  .budget-line[open] { @apply bg-white/[0.018]; }
+  .budget-line > summary { @apply grid items-center gap-4 px-5 py-5 transition hover:bg-white/[0.025] sm:grid-cols-[minmax(0,1fr)_minmax(12rem,.85fr)_auto] sm:px-6; }
+  .line-heading { @apply min-w-0; }
+  .line-progress { @apply col-span-2 sm:col-span-1; }
+  .line-progress strong + span { margin-left: .2rem; }
+  progress { @apply block h-1.5 w-full overflow-hidden rounded-full border-0 bg-white/[0.07]; appearance: none; }
+  progress::-webkit-progress-bar { @apply rounded-full bg-white/[0.07]; }
+  progress::-webkit-progress-value { @apply rounded-full bg-positive; }
+  progress::-moz-progress-bar { @apply rounded-full bg-positive; }
+  progress[data-state="warning"]::-webkit-progress-value { @apply bg-warning; }
+  progress[data-state="danger"]::-webkit-progress-value { @apply bg-danger; }
+  progress[data-state="warning"]::-moz-progress-bar { @apply bg-warning; }
+  progress[data-state="danger"]::-moz-progress-bar { @apply bg-danger; }
+  .chevron { @apply flex size-7 items-center justify-center text-muted transition; }
+  .chevron svg { @apply size-5; }
+  details[open] > summary .chevron { @apply rotate-180; }
+  .line-detail { @apply border-t border-white/[0.06] bg-background/25 px-5 pb-3 sm:px-6; }
+  .remaining-note { @apply flex items-center justify-between border-b border-white/[0.06] py-4 text-xs text-muted; }
+  .remaining-note strong { @apply text-sm text-ink-soft; }
+
+  .transaction-list { @apply divide-y divide-white/[0.055]; }
+  .transaction-list li { @apply flex items-center gap-4 py-4; }
+  .empty-copy { @apply py-5 text-sm text-muted; }
+  .empty-state { @apply mt-6 flex items-center gap-3 rounded-xl border border-dashed border-white/[0.1] p-5 text-sm text-muted; }
+  .empty-state > span { @apply text-xl text-accent; }
+
+  .unmapped-line { @apply bg-warning/[0.025]; }
+  .unmapped-line > summary { @apply flex items-center gap-3 px-5 py-5 hover:bg-warning/[0.035] sm:px-6; }
+  .unmapped-line summary > span:first-child { @apply flex flex-col; }
+  .unmapped-line small { @apply mt-0.5 text-xs font-normal text-muted; }
+  .dashboard-footer { @apply flex flex-col justify-between gap-2 border-t border-white/[0.06] pt-2 text-xs text-muted sm:flex-row; }
 }
 
 @layer utilities {
   .money { font-variant-numeric: tabular-nums; }
+}
+
+@media (max-width: 639px) {
+  .private-label { display: none; }
+  .metrics-grid { gap: .65rem; }
+  .metric-label { font-size: .65rem; }
+  .metric-value { font-size: 1rem; }
+  .scope-summary .metric-value { font-size: 1rem; }
+  .budget-line > summary { position: relative; grid-template-columns: minmax(0, 1fr); }
+  .budget-line .line-heading { padding-right: 2rem; }
+  .budget-line .line-progress { grid-column: 1; }
+  .budget-line > summary > .chevron { position: absolute; right: 1rem; top: 1.35rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }

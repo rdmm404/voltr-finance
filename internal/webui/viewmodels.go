@@ -31,6 +31,7 @@ type PageView struct {
 
 type SummaryView struct {
 	Allocation, Spent, Remaining, Unmapped string
+	Progress                               string
 	State                                  SemanticState
 }
 
@@ -87,9 +88,6 @@ func mapScope(report appbudgets.DetailedReport, label, ownerName string) (ScopeV
 		if percentage < 0 {
 			percentage = 0
 		}
-		if percentage > 100 {
-			percentage = 100
-		}
 		categories := make([]string, 0, len(line.Categories))
 		for _, category := range line.Categories {
 			categories = append(categories, category.Name)
@@ -118,7 +116,17 @@ func combineScopes(scopes ...ScopeView) SummaryView {
 }
 
 func summary(allocation, spent, remaining, unmapped int64) SummaryView {
-	return SummaryView{Allocation: formatCAD(allocation), Spent: formatCAD(spent), Remaining: formatCAD(remaining), Unmapped: formatCAD(unmapped), State: varianceState(remaining, spent, allocation)}
+	percentage := int64(0)
+	if allocation > 0 {
+		percentage = spent * 100 / allocation
+	}
+	if percentage < 0 {
+		percentage = 0
+	}
+	return SummaryView{
+		Allocation: formatCAD(allocation), Spent: formatCAD(spent), Remaining: formatCAD(remaining), Unmapped: formatCAD(unmapped),
+		Progress: strconv.FormatInt(percentage, 10), State: varianceState(remaining, spent, allocation),
+	}
 }
 
 func varianceState(remaining, spent, allocation int64) SemanticState {
@@ -192,7 +200,7 @@ func formatCAD(cents int64) string {
 	for i := len(whole) - 3; i > 0; i -= 3 {
 		whole = whole[:i] + "," + whole[i:]
 	}
-	return fmt.Sprintf("%s$%s.%02d CAD", sign, whole, cents%100)
+	return fmt.Sprintf("%s$%s.%02d", sign, whole, cents%100)
 }
 
 var _ = time.Local

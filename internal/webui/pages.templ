@@ -9,16 +9,23 @@ templ Shell(title string) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="color-scheme" content="dark"/>
+			<meta name="theme-color" content="#0b1020"/>
 			<title>{ title } · Voltr Finance</title>
 			<link rel="stylesheet" href="/assets/app.css"/>
 		</head>
 		<body>
-			<header class="border-b border-surface-raised bg-surface">
-				<nav aria-label="Primary" class="mx-auto flex max-w-7xl items-center px-4 py-4 sm:px-6">
-					<a class="inline-flex items-center font-semibold text-accent" href="/">Voltr Finance</a>
+			<header class="site-header">
+				<nav aria-label="Primary" class="shell flex items-center justify-between py-5">
+					<a class="brand" href="/" aria-label="Voltr Finance home">
+						<span class="brand-mark" aria-hidden="true">
+							<svg viewBox="0 0 24 24"><path d="M13.2 2 4.8 13.1h6.5L10.8 22l8.4-11.1h-6.5L13.2 2Z" fill="currentColor"/></svg>
+						</span>
+						<span>Voltr <strong>Finance</strong></span>
+					</a>
+					<span class="private-label"><span class="status-dot"></span>Private dashboard</span>
 				</nav>
 			</header>
-			<main class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-10">
+			<main class="shell relative z-10 space-y-7 py-8 lg:py-12">
 				{ children... }
 			</main>
 		</body>
@@ -26,7 +33,7 @@ templ Shell(title string) {
 }
 
 templ Card(title string) {
-	<section class="rounded-xl border border-surface-raised bg-surface p-5 shadow-lg">
+	<section class="panel p-5 sm:p-6">
 		if title != "" {
 			<h2 class="mb-4 text-lg font-semibold">{ title }</h2>
 		}
@@ -34,117 +41,159 @@ templ Card(title string) {
 	</section>
 }
 
-templ Badge(state SemanticState, label string) {
-	<span class={ "inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold", stateClass(state) }>{ label }</span>
-}
-
-templ Summary(summary SummaryView) {
-	<div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-		@Metric("Allocated", summary.Allocation)
-		@Metric("Spent", summary.Spent)
-		@Metric("Effective remaining", summary.Remaining)
-		@Metric("Unmapped", summary.Unmapped)
+templ SummaryProgress(summary SummaryView) {
+	<div class="summary-progress" data-state={ string(summary.State) }>
+		<div><span>Budget used</span><strong class="money">{ summary.Progress }%</strong></div>
+		<progress value={ summary.Progress } max="100" data-state={ string(summary.State) }>{ summary.Progress }%</progress>
 	</div>
-	<div class="mt-4">@Badge(summary.State, string(summary.State))</div>
 }
 
-templ Metric(label, value string) {
-	<div><div class="text-sm text-muted">{ label }</div><div class="money mt-1 break-words text-xl font-semibold">{ value }</div></div>
+templ Metric(label, value string, emphasis bool) {
+	<div class={ "metric", templ.KV("metric-emphasis", emphasis) }>
+		<div class="metric-label">{ label }</div>
+		<div class="money metric-value">{ value }</div>
+	</div>
+}
+
+templ SummaryMetrics(summary SummaryView) {
+	<div class="metrics-grid">
+		@Metric("Total budget", summary.Allocation, false)
+		@Metric("Spent so far", summary.Spent, false)
+		@Metric("Still available", summary.Remaining, true)
+	</div>
 }
 
 templ TransactionList(items []TransactionView) {
 	if len(items) == 0 {
-		<p class="py-3 text-sm text-muted">No transactions mapped here.</p>
+		<p class="empty-copy">No transactions mapped here.</p>
 	} else {
-		<ul class="divide-y divide-surface-raised">
+		<ul class="transaction-list">
 			for _, item := range items {
-				<li class="grid gap-2 py-4 sm:grid-cols-[1fr_auto]">
-					<div class="min-w-0">
-						<p class="break-words font-medium">{ item.Description }</p>
-						<p class="text-sm text-muted">#{ fmt.Sprint(item.ID) } · { item.Date } · { item.Category } · { item.AuthorName }</p>
+				<li>
+					<div class="min-w-0 flex-1">
+						<p class="truncate font-medium text-ink">{ item.Description }</p>
+						<p class="mt-1 text-xs text-muted">{ item.Date } · { item.Category } · { item.AuthorName }</p>
 						if item.Notes != "" {
-							<p class="mt-1 break-words text-sm">{ item.Notes }</p>
+							<p class="mt-1 break-words text-sm text-ink-soft">{ item.Notes }</p>
 						}
 					</div>
-					<div class="money font-semibold">{ item.Amount }</div>
+					<div class="money whitespace-nowrap font-semibold">{ item.Amount }</div>
 				</li>
 			}
 		</ul>
 	}
 }
 
+templ BudgetLine(line LineView) {
+	<details class="budget-line" data-state={ string(line.State) }>
+		<summary>
+			<div class="line-heading">
+				<div class="min-w-0">
+					<div class="flex flex-wrap items-center gap-2">
+						<h3 class="truncate font-semibold text-ink">{ line.Name }</h3>
+					</div>
+					if line.Categories != "" {
+						<p class="mt-1 truncate text-xs text-muted">{ line.Categories }</p>
+					}
+				</div>
+			</div>
+			<div class="line-progress">
+				<div class="mb-2 flex items-end justify-between gap-3">
+					<span class="money text-sm"><strong>{ line.Actual }</strong>&nbsp;<span class="text-muted">of { line.Allocation }</span></span>
+					<span class={ "money text-sm font-semibold", stateClass(line.State) }>{ line.Progress }%</span>
+				</div>
+				<progress value={ line.Progress } max="100" data-state={ string(line.State) }>{ line.Progress }%</progress>
+			</div>
+			<span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+		</summary>
+		<div class="line-detail">
+			<div class="remaining-note"><span>Remaining in this line</span><strong class="money">{ line.Remaining }</strong></div>
+			@TransactionList(line.Transactions)
+		</div>
+	</details>
+}
+
 templ ScopeReport(scope ScopeView) {
 	if scope.Empty {
-		@Card(scope.Label + " · " + scope.OwnerName) { <p class="text-muted">No budget exists for this scope and month.</p> }
+		<section class="panel scope-panel p-6">
+			<p class="eyebrow">{ scope.Label }</p>
+			<h2 class="mt-2 text-xl font-semibold">{ scope.OwnerName }</h2>
+			<div class="empty-state"><span aria-hidden="true">○</span><p>No budget exists for this scope and month.</p></div>
+		</section>
 	} else {
-		@Card(scope.Label + " · " + scope.OwnerName) {
-			@Summary(scope.Summary)
-			<div class="mt-6 space-y-3">
+		<section class="panel scope-panel overflow-hidden">
+			<div class="scope-summary">
+				<div class="scope-title">
+					<div><p class="eyebrow">{ scope.Label } budget</p><h2>{ scope.OwnerName }</h2></div>
+				</div>
+				@SummaryMetrics(scope.Summary)
+				@SummaryProgress(scope.Summary)
+			</div>
+			<div class="line-list">
 				for _, line := range scope.Lines {
-					<details class="rounded-lg border border-surface-raised bg-background p-4">
-						<summary class="rounded-md focus-visible:outline"><span class="font-semibold">{ line.Name }</span><span class="money ml-2 text-sm text-muted">{ line.Actual } / { line.Allocation }</span></summary>
-						<div class="mt-4"><div class="mb-2 flex justify-between text-sm"><span>{ line.Categories }</span><span>{ line.Progress }%</span></div><progress class="h-2 w-full" value={ line.Progress } max="100">{ line.Progress }%</progress>@TransactionList(line.Transactions)</div>
-					</details>
+					@BudgetLine(line)
 				}
 				if len(scope.Unmapped) > 0 {
-					<details class="rounded-lg border border-warning bg-background p-4">
-						<summary class="font-semibold text-warning">Unmapped spending · { scope.Summary.Unmapped }</summary>
-						@TransactionList(scope.Unmapped)
+					<details class="unmapped-line">
+						<summary><span class="flex-1"><strong>Unmapped spending</strong><small>Needs your attention</small></span><strong class="money">{ scope.Summary.Unmapped }</strong><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></span></summary>
+						<div class="line-detail">@TransactionList(scope.Unmapped)</div>
 					</details>
 				}
+				if len(scope.Lines) == 0 && len(scope.Unmapped) == 0 {
+					<p class="empty-copy px-6">No budget lines or transactions yet.</p>
+				}
 			</div>
-		}
+		</section>
 	}
 }
 
 templ DashboardPage(view PageView) {
 	@Shell("Monthly dashboard") {
-		<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-			<div><p class="text-sm font-medium text-accent-alt">Monthly dashboard</p><h1 class="text-3xl font-bold">{ view.Month }</h1><p class="mt-1 text-sm text-muted">All amounts shown in CAD.</p></div>
-			<nav aria-label="Month" class="flex gap-2"><a class="inline-flex items-center rounded-lg border border-surface-raised px-4" href={ templ.SafeURL(view.PreviousURL) }>Previous</a><a class="inline-flex items-center rounded-lg border border-surface-raised px-4" href={ templ.SafeURL(view.NextURL) }>Next</a></nav>
-		</div>
-		@Card("Report owners") {
-			<form method="get" action="/" class="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+		<section class="page-heading">
+			<div>
+				<p class="eyebrow">Financial overview</p>
+				<h1>{ view.Month }</h1>
+				<p>See where your money went and what is still available.</p>
+			</div>
+			<nav aria-label="Month" class="month-nav">
+				<a href={ templ.SafeURL(view.PreviousURL) } aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></a>
+				<span>{ view.MonthValue }</span>
+				<a href={ templ.SafeURL(view.NextURL) } aria-label="Next month"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></a>
+			</nav>
+		</section>
+		<details class="filter-panel">
+			<summary><span><strong>Report owners</strong><small>Personal and household views</small></span><span class="chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></span></summary>
+			<form method="get" action="/" class="filter-form">
 				<input type="hidden" name="month" value={ view.MonthValue }/>
-				<label class="grid gap-2 text-sm">Personal owner<select class="min-h-11 rounded-lg border border-surface-raised bg-background px-3" name="userId">
+				<label>Personal owner<select name="userId">
 					for _, user := range view.Users {
 						<option value={ fmt.Sprint(user.ID) } selected?={ selected(user.ID, view.UserID) }>{ user.Name }</option>
 					}
 				</select></label>
-				<label class="grid gap-2 text-sm">Household owner<select class="min-h-11 rounded-lg border border-surface-raised bg-background px-3" name="householdId">
+				<label>Household owner<select name="householdId">
 					for _, household := range view.Households {
 						<option value={ fmt.Sprint(household.ID) } selected?={ selected(household.ID, view.HouseholdID) }>{ household.Name }</option>
 					}
 				</select></label>
-				<button class="min-h-11 rounded-lg bg-accent px-5 font-semibold text-background" type="submit">View report</button>
+				<button type="submit">Update dashboard</button>
 			</form>
-		}
+		</details>
 		if view.AllEmpty {
 			@Card("No budgets this month") { <p class="text-muted">Neither selected scope has a budget. Navigate to another month or choose different owners.</p> }
 		} else {
-			@Card("Combined monthly summary") { @Summary(view.Combined) }
+			<section class="hero-panel" data-state={ string(view.Combined.State) } aria-label="Combined monthly summary">
+				@SummaryMetrics(view.Combined)
+				@SummaryProgress(view.Combined)
+			</section>
 		}
-		<div class="grid gap-6 lg:grid-cols-2">
-			<div>@Card("Personal summary") {
-				if view.Personal.Empty {
-					<p class="text-muted">No personal budget.</p>
-				} else {
-					@Summary(view.Personal.Summary)
-				}
-			}</div>
-			<div>@Card("Household summary") {
-				if view.Household.Empty {
-					<p class="text-muted">No household budget.</p>
-				} else {
-					@Summary(view.Household.Summary)
-				}
-			}</div>
+		<div class="scope-grid">
+			@ScopeReport(view.Personal)
+			@ScopeReport(view.Household)
 		</div>
-		@ScopeReport(view.Personal)
-		@ScopeReport(view.Household)
+		<footer class="dashboard-footer"><span>All values in Canadian dollars</span><span>Voltr Finance · { view.MonthValue }</span></footer>
 	}
 }
 
 templ StatusPage(status int, title, message string) {
-	@Shell(title) { @Card(fmt.Sprintf("%d · %s", status, title)) { <p class="text-muted">{ message }</p><a class="mt-4 inline-flex items-center text-accent-alt underline" href="/">Return to dashboard</a> } }
+	@Shell(title) { @Card(fmt.Sprintf("%d · %s", status, title)) { <p class="text-muted">{ message }</p><a class="mt-4 inline-flex items-center text-accent underline" href="/">Return to dashboard</a> } }
 }

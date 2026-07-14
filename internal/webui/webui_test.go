@@ -86,17 +86,17 @@ func TestParseRequestStateCanonicalAndOverrides(t *testing.T) {
 	}
 }
 
-func TestMapScopeCADAndCombinedTotals(t *testing.T) {
+func TestMapScopeCurrencyAndCombinedTotals(t *testing.T) {
 	report := appbudgets.DetailedReport{Totals: appbudgets.ReportTotals{AllocationAmount: "1000.00", ActualAmount: "700.00", UnmappedActualAmount: "50.25"}, Lines: []appbudgets.DetailedReportLine{{ReportLine: appbudgets.ReportLine{Line: appbudgets.Line{Name: "Food", AllocationAmount: "100.00"}, ActualAmount: "90", RemainingAmount: "10"}}}}
 	scope, err := mapScope(report, "Personal", "Alex")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scope.Summary.Spent != "$750.25 CAD" || scope.Summary.Remaining != "$249.75 CAD" || scope.Summary.State != StateNormal {
+	if scope.Summary.Spent != "$750.25" || scope.Summary.Remaining != "$249.75" || scope.Summary.Progress != "75" || scope.Summary.State != StateNormal {
 		t.Fatalf("summary=%+v", scope.Summary)
 	}
-	combined := combineScopes(scope, ScopeView{Summary: SummaryView{Allocation: "$100.00 CAD", Spent: "$125.00 CAD", Remaining: "-$25.00 CAD", Unmapped: "$5.00 CAD", State: StateDanger}})
-	if combined.Allocation != "$1,100.00 CAD" || combined.Spent != "$875.25 CAD" || combined.Remaining != "$224.75 CAD" {
+	combined := combineScopes(scope, ScopeView{Summary: SummaryView{Allocation: "$100.00", Spent: "$125.00", Remaining: "-$25.00", Unmapped: "$5.00", State: StateDanger}})
+	if combined.Allocation != "$1,100.00" || combined.Spent != "$875.25" || combined.Remaining != "$224.75" {
 		t.Fatalf("combined=%+v", combined)
 	}
 }
