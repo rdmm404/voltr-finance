@@ -1,6 +1,6 @@
 services:
   api:
-    container_name: voltr-api
+    container_name: svc-voltr-finance-api
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,15 +12,23 @@ services:
       ENVIRONMENT: prd
     env_file:
       - .env
-    ports:
-      - "8080:8080"
     networks:
       - postgres-network
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.http.routers.voltr-finance-api.rule=Host(`api.finance.homelab.voltr.org`)"
+      - "traefik.http.routers.voltr-finance-api.entrypoints=websecure"
+      - "traefik.http.routers.voltr-finance-api.tls.certresolver=myresolver"
+      - "traefik.http.services.voltr-finance-api.loadbalancer.server.port=8080"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/live"]
       interval: 10s
       timeout: 3s
       retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
   migrate:
     image: ghcr.io/amacneil/dbmate
@@ -36,4 +44,6 @@ services:
 
 networks:
   postgres-network:
+    external: true
+  traefik_proxy:
     external: true
