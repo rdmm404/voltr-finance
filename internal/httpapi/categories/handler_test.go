@@ -65,6 +65,13 @@ func TestCategoryConflictMapsToConflict(t *testing.T) {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
 }
+func TestListQueryModel(t *testing.T) {
+	query, err := listQuery(httptest.NewRequest(http.MethodGet, "/v1/categories?includeInactive=true", nil))
+	if err != nil || !query.IncludeInactive {
+		t.Fatalf("query = %#v, err = %v", query, err)
+	}
+}
+
 func TestCategoryLifecycleRoutes(t *testing.T) {
 	router := httpapi.NewRouter()
 	New(categoryServiceStub{}).Register(router)

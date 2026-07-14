@@ -76,17 +76,21 @@ type RestoreTransactionsRequest struct {
 	RestoredByUserID int64   `json:"restoredByUserId"`
 }
 
+type GetTransactionQuery struct {
+	IncludeDeleted bool `query:"includeDeleted"`
+}
+
 type ListTransactionsQuery struct {
-	IDs            []int64
-	AuthorID       *int64
-	HouseholdID    *int64
-	FromDate       *time.Time
-	ToDate         *time.Time
-	Search         *string
-	Sort           string
-	SortOrder      string
-	Limit          int32
-	Offset         int32
-	IncludeDeleted bool
-	OnlyDeleted    bool
+	IDs            []int64    `query:"ids"`
+	AuthorID       *int64     `query:"authorId"`
+	HouseholdID    *int64     `query:"householdId"`
+	FromDate       *time.Time `query:"fromDate"`
+	ToDate         *time.Time `query:"toDate"`
+	Search         *string    `query:"search"`
+	Sort           string     `query:"sort"`
+	SortOrder      string     `query:"sortOrder"`
+	Limit          int32      `query:"limit"`
+	Offset         int32      `query:"offset"`
+	IncludeDeleted bool       `query:"includeDeleted"`
+	OnlyDeleted    bool       `query:"onlyDeleted"`
 }

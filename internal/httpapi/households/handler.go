@@ -55,13 +55,18 @@ func (h *Handler) get(w http.ResponseWriter, request *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, household(item))
 }
 func (h *Handler) resolve(w http.ResponseWriter, request *http.Request) {
-	item, err := h.service.Resolve(request.Context(), apphouseholds.Selector{Name: httpapi.QueryString(request, "name"), GuildID: httpapi.QueryString(request, "guildId")})
+	query := resolveQuery(request)
+	item, err := h.service.Resolve(request.Context(), apphouseholds.Selector{Name: query.Name, GuildID: query.GuildID})
 	if err != nil {
 		h.support.Fail(w, request, err)
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, household(item))
 }
+func resolveQuery(request *http.Request) api.ResolveHouseholdQuery {
+	return api.ResolveHouseholdQuery{Name: httpapi.QueryString(request, "name"), GuildID: httpapi.QueryString(request, "guildId")}
+}
+
 func (h *Handler) listUsers(w http.ResponseWriter, request *http.Request) {
 	id, err := httpapi.ParsePathID(request, "id")
 	if err != nil {

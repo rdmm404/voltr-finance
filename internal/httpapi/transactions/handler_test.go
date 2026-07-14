@@ -12,19 +12,31 @@ import (
 )
 
 type transactionServiceStub struct {
-	create func(context.Context, apptransactions.CreateInput) (apptransactions.Transaction, error)
+	create  func(context.Context, apptransactions.CreateInput) (apptransactions.Transaction, error)
+	get     func(context.Context, int64, bool) (apptransactions.Transaction, error)
+	list    func(context.Context, apptransactions.ListFilter) ([]apptransactions.Transaction, error)
+	getMany func(context.Context, []int64, bool) ([]apptransactions.Transaction, error)
 }
 
 func (s transactionServiceStub) Create(ctx context.Context, input apptransactions.CreateInput) (apptransactions.Transaction, error) {
 	return s.create(ctx, input)
 }
-func (transactionServiceStub) Get(context.Context, int64, bool) (apptransactions.Transaction, error) {
+func (s transactionServiceStub) Get(ctx context.Context, id int64, includeDeleted bool) (apptransactions.Transaction, error) {
+	if s.get != nil {
+		return s.get(ctx, id, includeDeleted)
+	}
 	return apptransactions.Transaction{ID: 1}, nil
 }
-func (transactionServiceStub) List(context.Context, apptransactions.ListFilter) ([]apptransactions.Transaction, error) {
+func (s transactionServiceStub) List(ctx context.Context, filter apptransactions.ListFilter) ([]apptransactions.Transaction, error) {
+	if s.list != nil {
+		return s.list(ctx, filter)
+	}
 	return []apptransactions.Transaction{}, nil
 }
-func (transactionServiceStub) GetMany(context.Context, []int64, bool) ([]apptransactions.Transaction, error) {
+func (s transactionServiceStub) GetMany(ctx context.Context, ids []int64, includeDeleted bool) ([]apptransactions.Transaction, error) {
+	if s.getMany != nil {
+		return s.getMany(ctx, ids, includeDeleted)
+	}
 	return []apptransactions.Transaction{}, nil
 }
 func (transactionServiceStub) Update(_ context.Context, input apptransactions.UpdateInput) (apptransactions.Transaction, error) {
@@ -84,6 +96,51 @@ func TestLifecycleRoutes(t *testing.T) {
 		router.ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Errorf("%s %s = %d: %s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestQueryModelsMapToTransactionInputs(t *testing.T) {
+	called := map[string]bool{}
+	stub := transactionServiceStub{
+		get: func(_ context.Context, id int64, includeDeleted bool) (apptransactions.Transaction, error) {
+			called["get"] = true
+			if id != 4 || !includeDeleted {
+				t.Fatalf("get input = %d, %v", id, includeDeleted)
+			}
+			return apptransactions.Transaction{ID: id}, nil
+		},
+		list: func(_ context.Context, filter apptransactions.ListFilter) ([]apptransactions.Transaction, error) {
+			called["list"] = true
+			if filter.AuthorID == nil || *filter.AuthorID != 8 || filter.Search == nil || *filter.Search != "food" || filter.Sort != "amount" || filter.SortOrder != "asc" || filter.Limit != 25 || filter.Offset != 3 || !filter.OnlyDeleted {
+				t.Fatalf("list filter = %#v", filter)
+			}
+			return []apptransactions.Transaction{}, nil
+		},
+		getMany: func(_ context.Context, ids []int64, includeDeleted bool) ([]apptransactions.Transaction, error) {
+			called["many"] = true
+			if len(ids) != 2 || ids[0] != 1 || ids[1] != 2 || !includeDeleted {
+				t.Fatalf("get many input = %v, %v", ids, includeDeleted)
+			}
+			return []apptransactions.Transaction{}, nil
+		},
+	}
+	router := httpapi.NewRouter()
+	New(stub).Register(router)
+	for _, path := range []string{
+		"/v1/transactions/4?includeDeleted=true",
+		"/v1/transactions?authorId=8&search=food&sort=amount&sortOrder=asc&limit=25&offset=3&onlyDeleted=true",
+		"/v1/transactions?ids=1&ids=2&includeDeleted=true",
+	} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d: %s", path, response.Code, response.Body.String())
+		}
+	}
+	for _, operation := range []string{"get", "list", "many"} {
+		if !called[operation] {
+			t.Errorf("%s was not called", operation)
 		}
 	}
 }

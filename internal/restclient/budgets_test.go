@@ -17,11 +17,11 @@ func TestBudgetMethods(t *testing.T) {
 		call                         func(*Client) error
 	}{
 		{"get monthly", http.MethodGet, "/v1/budgets/monthly?householdId=3&month=7&year=2026", `{}`, http.StatusOK, func(c *Client) error {
-			_, err := c.GetMonthlyBudget(context.Background(), api.MonthlyBudgetParams{HouseholdID: &householdID, Year: 2026, Month: 7})
+			_, err := c.GetMonthlyBudget(context.Background(), api.MonthlyBudgetQuery{HouseholdID: &householdID, Year: 2026, Month: 7})
 			return err
 		}},
 		{"ensure monthly", http.MethodPost, "/v1/budgets/monthly", `{}`, http.StatusCreated, func(c *Client) error {
-			_, err := c.EnsureMonthlyBudget(context.Background(), api.MonthlyBudgetParams{HouseholdID: &householdID, Year: 2026, Month: 7})
+			_, err := c.EnsureMonthlyBudget(context.Background(), api.EnsureMonthlyBudgetRequest{HouseholdID: &householdID, Year: 2026, Month: 7})
 			return err
 		}},
 		{"create line", http.MethodPost, "/v1/budgets/5/lines", `{}`, http.StatusCreated, func(c *Client) error {

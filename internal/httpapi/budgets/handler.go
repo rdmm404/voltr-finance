@@ -37,11 +37,12 @@ func (h *Handler) Register(router *httpapi.Router) {
 }
 
 func (h *Handler) getMonthly(w http.ResponseWriter, request *http.Request) {
-	input, ok := monthlyQuery(w, request)
-	if !ok {
+	query, err := monthlyQuery(request)
+	if err != nil {
+		httpapi.WriteValidationError(w, err.Error())
 		return
 	}
-	item, err := h.service.GetMonthly(request.Context(), input)
+	item, err := h.service.GetMonthly(request.Context(), monthlyQueryInput(query))
 	if err != nil {
 		h.support.Fail(w, request, err)
 		return
@@ -50,7 +51,7 @@ func (h *Handler) getMonthly(w http.ResponseWriter, request *http.Request) {
 }
 
 func (h *Handler) ensureMonthly(w http.ResponseWriter, request *http.Request) {
-	var body api.MonthlyBudgetParams
+	var body api.EnsureMonthlyBudgetRequest
 	if !h.support.Decode(w, request, &body) {
 		return
 	}
@@ -135,31 +136,31 @@ func (h *Handler) report(w http.ResponseWriter, request *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, report(item))
 }
 
-func monthlyQuery(w http.ResponseWriter, request *http.Request) (appbudgets.MonthlyInput, bool) {
+func monthlyQuery(request *http.Request) (api.MonthlyBudgetQuery, error) {
 	householdID, err := httpapi.QueryInt64(request, "householdId")
 	if err != nil {
-		httpapi.WriteValidationError(w, err.Error())
-		return appbudgets.MonthlyInput{}, false
+		return api.MonthlyBudgetQuery{}, err
 	}
 	userID, err := httpapi.QueryInt64(request, "userId")
 	if err != nil {
-		httpapi.WriteValidationError(w, err.Error())
-		return appbudgets.MonthlyInput{}, false
+		return api.MonthlyBudgetQuery{}, err
 	}
 	year, err := httpapi.QueryInt(request, "year", 0)
 	if err != nil {
-		httpapi.WriteValidationError(w, err.Error())
-		return appbudgets.MonthlyInput{}, false
+		return api.MonthlyBudgetQuery{}, err
 	}
 	month, err := httpapi.QueryInt(request, "month", 0)
 	if err != nil {
-		httpapi.WriteValidationError(w, err.Error())
-		return appbudgets.MonthlyInput{}, false
+		return api.MonthlyBudgetQuery{}, err
 	}
-	return appbudgets.MonthlyInput{Owner: appbudgets.Owner{HouseholdID: householdID, UserID: userID}, Year: year, Month: month}, true
+	return api.MonthlyBudgetQuery{HouseholdID: householdID, UserID: userID, Year: year, Month: month}, nil
 }
 
-func monthlyInput(value api.MonthlyBudgetParams) appbudgets.MonthlyInput {
+func monthlyQueryInput(value api.MonthlyBudgetQuery) appbudgets.MonthlyInput {
+	return appbudgets.MonthlyInput{Owner: appbudgets.Owner{HouseholdID: value.HouseholdID, UserID: value.UserID}, Year: value.Year, Month: value.Month}
+}
+
+func monthlyInput(value api.EnsureMonthlyBudgetRequest) appbudgets.MonthlyInput {
 	return appbudgets.MonthlyInput{Owner: appbudgets.Owner{HouseholdID: value.HouseholdID, UserID: value.UserID}, Year: value.Year, Month: value.Month}
 }
 

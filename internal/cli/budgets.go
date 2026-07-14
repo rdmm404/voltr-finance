@@ -20,12 +20,13 @@ func (c *BudgetGetCmd) Run(ctx *runContext) error {
 	if err != nil {
 		return err
 	}
-	params := api.MonthlyBudgetParams{HouseholdID: c.HouseholdID, UserID: c.UserID, Year: year, Month: month}
 	var budget api.Budget
 	if c.Create {
-		budget, err = ctx.budgets.EnsureMonthlyBudget(ctx.Context, params)
+		request := api.EnsureMonthlyBudgetRequest{HouseholdID: c.HouseholdID, UserID: c.UserID, Year: year, Month: month}
+		budget, err = ctx.budgets.EnsureMonthlyBudget(ctx.Context, request)
 	} else {
-		budget, err = ctx.budgets.GetMonthlyBudget(ctx.Context, params)
+		query := api.MonthlyBudgetQuery{HouseholdID: c.HouseholdID, UserID: c.UserID, Year: year, Month: month}
+		budget, err = ctx.budgets.GetMonthlyBudget(ctx.Context, query)
 	}
 	if err != nil {
 		return err

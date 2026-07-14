@@ -23,9 +23,9 @@ func (c *Client) CreateTransactions(ctx context.Context, request api.BulkCreateT
 	return response, err
 }
 
-func (c *Client) GetTransaction(ctx context.Context, id int64, includeDeleted bool) (api.Transaction, error) {
+func (c *Client) GetTransaction(ctx context.Context, id int64, input api.GetTransactionQuery) (api.Transaction, error) {
 	query := url.Values{}
-	if includeDeleted {
+	if input.IncludeDeleted {
 		query.Set("includeDeleted", "true")
 	}
 	var response api.Transaction

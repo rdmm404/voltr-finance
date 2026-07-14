@@ -78,12 +78,12 @@ func (h *Handler) get(w http.ResponseWriter, request *http.Request) {
 		httpapi.WriteValidationError(w, err.Error())
 		return
 	}
-	includeDeleted, err := httpapi.QueryBool(request, "includeDeleted", false)
+	query, err := getQuery(request)
 	if err != nil {
 		httpapi.WriteValidationError(w, err.Error())
 		return
 	}
-	item, err := h.service.Get(request.Context(), id, includeDeleted)
+	item, err := h.service.Get(request.Context(), id, query.IncludeDeleted)
 	if err != nil {
 		h.support.Fail(w, request, err)
 		return
@@ -92,14 +92,15 @@ func (h *Handler) get(w http.ResponseWriter, request *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, request *http.Request) {
-	filter, ids, err := listInput(request)
+	query, err := listQuery(request)
 	if err != nil {
 		httpapi.WriteValidationError(w, err.Error())
 		return
 	}
+	filter := listInput(query)
 	var items []apptransactions.Transaction
-	if len(ids) > 0 {
-		items, err = h.service.GetMany(request.Context(), ids, filter.IncludeDeleted)
+	if len(query.IDs) > 0 {
+		items, err = h.service.GetMany(request.Context(), query.IDs, filter.IncludeDeleted)
 	} else {
 		items, err = h.service.List(request.Context(), filter)
 	}
@@ -224,45 +225,50 @@ func bulkResult(result apptransactions.BulkResult) api.BulkResult {
 	return response
 }
 
-func listInput(request *http.Request) (apptransactions.ListFilter, []int64, error) {
-	query := request.URL.Query()
-	ids, err := parseIDs(query["ids"])
+func getQuery(request *http.Request) (api.GetTransactionQuery, error) {
+	includeDeleted, err := httpapi.QueryBool(request, "includeDeleted", false)
+	return api.GetTransactionQuery{IncludeDeleted: includeDeleted}, err
+}
+
+func listQuery(request *http.Request) (api.ListTransactionsQuery, error) {
+	values := request.URL.Query()
+	ids, err := parseIDs(values["ids"])
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
 	authorID, err := httpapi.QueryInt64(request, "authorId")
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
 	householdID, err := httpapi.QueryInt64(request, "householdId")
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
-	from, err := parseTime(query.Get("fromDate"), "fromDate")
+	from, err := parseTime(values.Get("fromDate"), "fromDate")
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
-	to, err := parseTime(query.Get("toDate"), "toDate")
+	to, err := parseTime(values.Get("toDate"), "toDate")
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
 	limit, err := httpapi.QueryInt(request, "limit", 100)
 	if err != nil || limit < 1 || limit > 1000 {
-		return apptransactions.ListFilter{}, nil, fmt.Errorf("limit must be between 1 and 1000")
+		return api.ListTransactionsQuery{}, fmt.Errorf("limit must be between 1 and 1000")
 	}
 	offset, err := httpapi.QueryInt(request, "offset", 0)
 	if err != nil || offset < 0 {
-		return apptransactions.ListFilter{}, nil, fmt.Errorf("offset must be a non-negative integer")
+		return api.ListTransactionsQuery{}, fmt.Errorf("offset must be a non-negative integer")
 	}
 	includeDeleted, err := httpapi.QueryBool(request, "includeDeleted", false)
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
 	onlyDeleted, err := httpapi.QueryBool(request, "onlyDeleted", false)
 	if err != nil {
-		return apptransactions.ListFilter{}, nil, err
+		return api.ListTransactionsQuery{}, err
 	}
-	sortBy, order := query.Get("sort"), query.Get("sortOrder")
+	sortBy, order := values.Get("sort"), values.Get("sortOrder")
 	if sortBy == "" {
 		sortBy = "transaction_date"
 	}
@@ -270,12 +276,24 @@ func listInput(request *http.Request) (apptransactions.ListFilter, []int64, erro
 		order = "desc"
 	}
 	if !oneOf(sortBy, "transaction_date", "created_at", "amount", "id") {
-		return apptransactions.ListFilter{}, nil, fmt.Errorf("unsupported sort field")
+		return api.ListTransactionsQuery{}, fmt.Errorf("unsupported sort field")
 	}
 	if !oneOf(order, "asc", "desc") {
-		return apptransactions.ListFilter{}, nil, fmt.Errorf("sortOrder must be asc or desc")
+		return api.ListTransactionsQuery{}, fmt.Errorf("sortOrder must be asc or desc")
 	}
-	return apptransactions.ListFilter{AuthorID: authorID, HouseholdID: householdID, FromDate: from, ToDate: to, Search: httpapi.QueryString(request, "search"), Sort: sortBy, SortOrder: order, Limit: int32(limit), Offset: int32(offset), IncludeDeleted: includeDeleted, OnlyDeleted: onlyDeleted}, ids, nil
+	return api.ListTransactionsQuery{
+		IDs: ids, AuthorID: authorID, HouseholdID: householdID, FromDate: from, ToDate: to,
+		Search: httpapi.QueryString(request, "search"), Sort: sortBy, SortOrder: order,
+		Limit: int32(limit), Offset: int32(offset), IncludeDeleted: includeDeleted, OnlyDeleted: onlyDeleted,
+	}, nil
+}
+
+func listInput(query api.ListTransactionsQuery) apptransactions.ListFilter {
+	return apptransactions.ListFilter{
+		AuthorID: query.AuthorID, HouseholdID: query.HouseholdID, FromDate: query.FromDate, ToDate: query.ToDate,
+		Search: query.Search, Sort: query.Sort, SortOrder: query.SortOrder, Limit: query.Limit, Offset: query.Offset,
+		IncludeDeleted: query.IncludeDeleted, OnlyDeleted: query.OnlyDeleted,
+	}
 }
 func parseIDs(values []string) ([]int64, error) {
 	var ids []int64

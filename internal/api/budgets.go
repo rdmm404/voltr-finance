@@ -2,7 +2,14 @@ package api
 
 import "time"
 
-type MonthlyBudgetParams struct {
+type MonthlyBudgetQuery struct {
+	HouseholdID *int64 `query:"householdId"`
+	UserID      *int64 `query:"userId"`
+	Year        int    `query:"year"`
+	Month       int    `query:"month"`
+}
+
+type EnsureMonthlyBudgetRequest struct {
 	HouseholdID *int64 `json:"householdId,omitempty"`
 	UserID      *int64 `json:"userId,omitempty"`
 	Year        int    `json:"year"`

@@ -33,6 +33,13 @@ func TestResolveRoute(t *testing.T) {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
 }
+func TestResolveQueryModel(t *testing.T) {
+	query := resolveQuery(httptest.NewRequest(http.MethodGet, "/v1/households/resolve?name=Home&guildId=guild", nil))
+	if query.Name == nil || *query.Name != "Home" || query.GuildID == nil || *query.GuildID != "guild" {
+		t.Fatalf("query = %#v", query)
+	}
+}
+
 func TestHouseholdReadRoutes(t *testing.T) {
 	router := httpapi.NewRouter()
 	New(householdServiceStub{}).Register(router)

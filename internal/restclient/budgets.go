@@ -9,13 +9,13 @@ import (
 	"rdmm404/voltr-finance/internal/api"
 )
 
-func (c *Client) GetMonthlyBudget(ctx context.Context, input api.MonthlyBudgetParams) (api.Budget, error) {
+func (c *Client) GetMonthlyBudget(ctx context.Context, input api.MonthlyBudgetQuery) (api.Budget, error) {
 	var response api.Budget
 	err := c.do(ctx, http.MethodGet, api.MonthlyBudgetsPath, monthlyQuery(input), nil, &response)
 	return response, err
 }
 
-func (c *Client) EnsureMonthlyBudget(ctx context.Context, input api.MonthlyBudgetParams) (api.Budget, error) {
+func (c *Client) EnsureMonthlyBudget(ctx context.Context, input api.EnsureMonthlyBudgetRequest) (api.Budget, error) {
 	var response api.Budget
 	err := c.do(ctx, http.MethodPost, api.MonthlyBudgetsPath, nil, input, &response)
 	return response, err
@@ -43,7 +43,7 @@ func (c *Client) GetBudgetReport(ctx context.Context, budgetID int64) (api.Budge
 	return response, err
 }
 
-func monthlyQuery(input api.MonthlyBudgetParams) url.Values {
+func monthlyQuery(input api.MonthlyBudgetQuery) url.Values {
 	query := url.Values{"year": []string{strconv.Itoa(input.Year)}, "month": []string{strconv.Itoa(input.Month)}}
 	setInt64(query, "householdId", input.HouseholdID)
 	setInt64(query, "userId", input.UserID)

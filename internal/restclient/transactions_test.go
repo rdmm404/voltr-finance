@@ -27,7 +27,10 @@ func TestTransactionMethodsAndQueries(t *testing.T) {
 			_, err := c.CreateTransactions(context.Background(), api.BulkCreateTransactionsRequest{})
 			return err
 		}},
-		{"get", http.MethodGet, "/v1/transactions/4?includeDeleted=true", func(c *Client) error { _, err := c.GetTransaction(context.Background(), 4, true); return err }},
+		{"get", http.MethodGet, "/v1/transactions/4?includeDeleted=true", func(c *Client) error {
+			_, err := c.GetTransaction(context.Background(), 4, api.GetTransactionQuery{IncludeDeleted: true})
+			return err
+		}},
 		{"list", http.MethodGet, "/v1/transactions?authorId=8&fromDate=2026-07-01T02%3A03%3A04Z&ids=1&ids=2&includeDeleted=true&limit=25&offset=3&search=food&sort=amount&sortOrder=asc", func(c *Client) error {
 			_, err := c.ListTransactions(context.Background(), api.ListTransactionsQuery{IDs: []int64{1, 2}, AuthorID: &authorID, FromDate: &from, Search: &search, Sort: "amount", SortOrder: "asc", Limit: 25, Offset: 3, IncludeDeleted: true})
 			return err

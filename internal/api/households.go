@@ -11,6 +11,6 @@ type Household struct {
 }
 
 type ResolveHouseholdQuery struct {
-	Name    *string
-	GuildID *string
+	Name    *string `query:"name"`
+	GuildID *string `query:"guildId"`
 }

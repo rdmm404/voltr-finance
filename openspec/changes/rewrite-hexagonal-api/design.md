@@ -131,7 +131,7 @@ Budgets
 
 Household resolution accepts exactly one of `name` or `guildId`; direct ID retrieval uses the resource route. User resolution accepts exactly one supported identity selector.
 
-Resource identifiers belong in path parameters for single-resource mutations and are not duplicated in JSON bodies. Categories consistently use their stable code for GET, PATCH, and DELETE, avoiding client-side lookup-before-mutation orchestration. List filters, sorting, pagination, and include-deleted flags use query parameters. JSON field names remain lower camel case.
+Resource identifiers belong in path parameters for single-resource mutations and are not duplicated in JSON bodies. Categories consistently use their stable code for GET, PATCH, and DELETE, avoiding client-side lookup-before-mutation orchestration. List filters, sorting, pagination, and include-deleted flags use query parameters. Every query-bearing endpoint has a feature-scoped wire model in `internal/api`, with explicit query field names. HTTP handlers decode into that wire model before mapping to application inputs, and the REST client accepts the same model when encoding the URL. JSON and query field names remain lower camel case.
 
 Nullable PATCH fields have one application-owned tri-state representation: absent, set, or clear. The retained public pointer-plus-`clearX` JSON shape is validated at the handler boundary; contradictory set-and-clear payloads are rejected, and handlers immediately collapse valid input into the tri-state mutation before calling a service.
 

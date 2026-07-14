@@ -50,8 +50,8 @@ type categoryClient interface {
 }
 
 type budgetClient interface {
-	GetMonthlyBudget(context.Context, api.MonthlyBudgetParams) (api.Budget, error)
-	EnsureMonthlyBudget(context.Context, api.MonthlyBudgetParams) (api.Budget, error)
+	GetMonthlyBudget(context.Context, api.MonthlyBudgetQuery) (api.Budget, error)
+	EnsureMonthlyBudget(context.Context, api.EnsureMonthlyBudgetRequest) (api.Budget, error)
 	CreateBudgetLine(context.Context, int64, api.CreateBudgetLineRequest) (api.BudgetLine, error)
 	UpdateBudgetLine(context.Context, int64, api.UpdateBudgetLineRequest) (api.BudgetLine, error)
 	DeleteBudgetLine(context.Context, int64) error

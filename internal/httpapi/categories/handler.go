@@ -50,12 +50,12 @@ func (h *Handler) create(w http.ResponseWriter, request *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, request *http.Request) {
-	includeInactive, err := httpapi.QueryBool(request, "includeInactive", false)
+	query, err := listQuery(request)
 	if err != nil {
 		httpapi.WriteValidationError(w, err.Error())
 		return
 	}
-	items, err := h.service.List(request.Context(), includeInactive)
+	items, err := h.service.List(request.Context(), query.IncludeInactive)
 	if err != nil {
 		h.support.Fail(w, request, err)
 		return
@@ -65,6 +65,11 @@ func (h *Handler) list(w http.ResponseWriter, request *http.Request) {
 		response = append(response, category(item))
 	}
 	httpapi.WriteJSON(w, http.StatusOK, response)
+}
+
+func listQuery(request *http.Request) (api.ListCategoriesQuery, error) {
+	includeInactive, err := httpapi.QueryBool(request, "includeInactive", false)
+	return api.ListCategoriesQuery{IncludeInactive: includeInactive}, err
 }
 
 func (h *Handler) get(w http.ResponseWriter, request *http.Request) {

@@ -21,5 +21,5 @@ type UpdateCategoryRequest struct {
 }
 
 type ListCategoriesQuery struct {
-	IncludeInactive bool
+	IncludeInactive bool `query:"includeInactive"`
 }

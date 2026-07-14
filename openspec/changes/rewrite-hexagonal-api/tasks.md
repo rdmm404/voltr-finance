@@ -125,3 +125,9 @@
 - [x] 14.2 Split transactions into `models.go`, `ports.go`, and `service.go` without changing behavior.
 - [x] 14.3 Split categories, users, and households into `models.go`, `ports.go`, and `service.go` files.
 - [x] 14.4 Run formatting, tests, race, vet, builds, PostgreSQL integration, and CI verification.
+
+## 15. Query Contract Consistency
+
+- [x] 15.1 Define an `internal/api` wire model for every query-bearing endpoint and separate the monthly GET query from the monthly POST request body.
+- [x] 15.2 Decode query strings into API wire models before mapping to application inputs, and make REST-client methods accept the same models.
+- [x] 15.3 Add query mapping coverage and run formatting, tests, race, vet, and production builds.

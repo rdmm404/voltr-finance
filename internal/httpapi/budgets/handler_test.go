@@ -66,6 +66,13 @@ func TestBudgetInternalErrorIsSafe(t *testing.T) {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
 }
+func TestMonthlyQueryModel(t *testing.T) {
+	query, err := monthlyQuery(httptest.NewRequest(http.MethodGet, "/v1/budgets/monthly?householdId=2&year=2026&month=7", nil))
+	if err != nil || query.HouseholdID == nil || *query.HouseholdID != 2 || query.Year != 2026 || query.Month != 7 {
+		t.Fatalf("query = %#v, err = %v", query, err)
+	}
+}
+
 func TestBudgetReadLineAndReportRoutes(t *testing.T) {
 	router := httpapi.NewRouter()
 	New(budgetServiceStub{}).Register(router)
