@@ -8,21 +8,16 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-const defaultPoolSize = 5
-
 type Config struct {
-	Database DBConfig `json:"database"`
+	API APIConfig `json:"api"`
 }
 
-type DBConfig struct {
-	Host     string `json:"host"`
-	Port     string `json:"port"`
-	Name     string `json:"name"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	PoolSize int    `json:"poolSize"`
+type APIConfig struct {
+	BaseURL string `json:"baseUrl"`
+	APIKey  string `json:"apiKey"`
 }
 
 func ResolveConfigPath(flagPath string) (string, error) {
@@ -32,7 +27,6 @@ func ResolveConfigPath(flagPath string) (string, error) {
 	if envPath := os.Getenv("VOLTR_CONFIG"); envPath != "" {
 		return envPath, nil
 	}
-
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
@@ -47,10 +41,10 @@ func LoadConfig(path string) (Config, error) {
 	}
 	defer file.Close()
 
-	var cfg Config
+	var config Config
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&cfg); err != nil {
+	if err := decoder.Decode(&config); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 	var extra any
@@ -60,51 +54,34 @@ func LoadConfig(path string) (Config, error) {
 		}
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
-	if err := cfg.Validate(); err != nil {
+	config.applyEnvironment()
+	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}
-	return cfg, nil
+	return config, nil
+}
+
+func (c *Config) applyEnvironment() {
+	if value := strings.TrimSpace(os.Getenv("VOLTR_API_URL")); value != "" {
+		c.API.BaseURL = value
+	}
+	if value := os.Getenv("VOLTR_API_KEY"); value != "" {
+		c.API.APIKey = value
+	}
 }
 
 func (c Config) Validate() error {
-	return c.Database.Validate()
-}
-
-func (c DBConfig) Validate() error {
-	missing := make([]error, 0)
-	if c.Host == "" {
-		missing = append(missing, errors.New("database.host is required"))
+	var validationErrors []error
+	if strings.TrimSpace(c.API.BaseURL) == "" {
+		validationErrors = append(validationErrors, errors.New("api.baseUrl is required"))
+	} else {
+		parsed, err := url.Parse(c.API.BaseURL)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			validationErrors = append(validationErrors, errors.New("api.baseUrl must be an absolute HTTP(S) URL"))
+		}
 	}
-	if c.Port == "" {
-		missing = append(missing, errors.New("database.port is required"))
+	if strings.TrimSpace(c.API.APIKey) == "" {
+		validationErrors = append(validationErrors, errors.New("api.apiKey is required"))
 	}
-	if c.Name == "" {
-		missing = append(missing, errors.New("database.name is required"))
-	}
-	if c.User == "" {
-		missing = append(missing, errors.New("database.user is required"))
-	}
-	if c.Password == "" {
-		missing = append(missing, errors.New("database.password is required"))
-	}
-	return errors.Join(missing...)
-}
-
-func (c DBConfig) ConnString() string {
-	poolSize := c.PoolSize
-	if poolSize == 0 {
-		poolSize = defaultPoolSize
-	}
-
-	u := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(c.User, c.Password),
-		Host:   c.Host + ":" + c.Port,
-		Path:   c.Name,
-	}
-	q := u.Query()
-	q.Set("pool_max_conns", fmt.Sprintf("%d", poolSize))
-	q.Set("search_path", "transactions")
-	u.RawQuery = q.Encode()
-	return u.String()
+	return errors.Join(validationErrors...)
 }

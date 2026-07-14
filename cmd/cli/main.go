@@ -7,11 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"rdmm404/voltr-finance/internal/app"
 	"rdmm404/voltr-finance/internal/cli"
-	"rdmm404/voltr-finance/internal/database"
-	"rdmm404/voltr-finance/internal/database/sqlc"
-	"rdmm404/voltr-finance/internal/transaction"
+	"rdmm404/voltr-finance/internal/restclient"
 )
 
 func main() {
@@ -35,21 +32,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	cfg, err := cli.LoadConfig(path)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
-		return 2
+		return 1
 	}
-
-	pool, err := database.NewPool(ctx, cfg.Database.ConnString())
+	client, err := restclient.New(restclient.Config{BaseURL: cfg.API.BaseURL, APIKey: cfg.API.APIKey})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	defer pool.Close()
-
-	repo := sqlc.New(pool)
-	txSvc := transaction.NewTransactionService(pool, repo)
-	appSvc := app.NewServiceWithTransactor(repo, txSvc, app.NewSQLCTransactor(pool, repo))
-
-	return cli.Run(ctx, cliArgs, stdin, stdout, stderr, appSvc)
+	return cli.Run(ctx, cliArgs, stdin, stdout, stderr, client)
 }
 
 func extractConfigArg(args []string) (string, []string, error) {

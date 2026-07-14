@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"rdmm404/voltr-finance/internal/app"
+	"rdmm404/voltr-finance/internal/api"
 )
 
 func TestRenderSingleTransactionCompact(t *testing.T) {
 	description := "Groceries"
 	notes := "Costco"
 	householdID := int64(1)
-	tx := app.TransactionDTO{
+	tx := api.Transaction{
 		ID:              101,
 		Amount:          42.5,
 		TransactionDate: time.Date(2026, 5, 5, 14, 30, 0, 0, time.UTC),
@@ -47,7 +47,7 @@ func TestRenderSingleTransactionCompact(t *testing.T) {
 }
 
 func TestRenderTransactionsCSVUsesStableColumns(t *testing.T) {
-	tx := app.TransactionDTO{
+	tx := api.Transaction{
 		ID:              101,
 		Amount:          42.5,
 		TransactionDate: time.Date(2026, 5, 5, 14, 30, 0, 0, time.UTC),
@@ -61,7 +61,7 @@ func TestRenderTransactionsCSVUsesStableColumns(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := RenderTransactionsCSV(&out, []app.TransactionDTO{tx}); err != nil {
+	if err := RenderTransactionsCSV(&out, []api.Transaction{tx}); err != nil {
 		t.Fatalf("RenderTransactionsCSV returned error: %v", err)
 	}
 
@@ -72,20 +72,18 @@ func TestRenderTransactionsCSVUsesStableColumns(t *testing.T) {
 	}
 }
 
-func TestRenderWriteResultJSON(t *testing.T) {
-	result := app.WriteResult{CreatedIDs: []int64{101}}
-
+func TestRenderBulkResultJSON(t *testing.T) {
+	result := api.BulkResult{Succeeded: []api.BulkSucceeded{{Index: 0, ID: 101}}, Failed: []api.BulkFailed{}}
 	var out bytes.Buffer
 	if err := RenderJSON(&out, result); err != nil {
-		t.Fatalf("RenderJSON returned error: %v", err)
+		t.Fatal(err)
 	}
-
-	var decoded app.WriteResult
+	var decoded api.BulkResult
 	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
-		t.Fatalf("json unmarshal: %v", err)
+		t.Fatal(err)
 	}
-	if len(decoded.CreatedIDs) != 1 || decoded.CreatedIDs[0] != 101 {
-		t.Fatalf("decoded = %+v, want created id 101", decoded)
+	if len(decoded.Succeeded) != 1 || decoded.Succeeded[0].ID != 101 {
+		t.Fatalf("decoded=%+v", decoded)
 	}
 }
 

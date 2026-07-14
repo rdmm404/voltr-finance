@@ -1,47 +1,49 @@
 # Voltr Finance CLI
 
-`voltr-finance` is a host-installed CLI for direct Postgres-backed finance operations. Commands emit JSON unless a command explicitly supports another format.
+`voltr-finance` is a standalone client for the authenticated Voltr Finance REST API. It never connects to PostgreSQL. Commands emit JSON unless a command explicitly supports compact or CSV output.
 
 ## Install
 
-Build the CLI entrypoint from the repository root:
+Build from the repository root:
 
 ```bash
 go build -o /tmp/voltr-finance ./cmd/cli
 ```
 
-The Dockerfile also provides a `cli` target that exports `/usr/local/bin/voltr-finance`.
+The Dockerfile also provides a `cli` target containing `/usr/local/bin/voltr-finance`.
 
 ## Configuration
 
-The CLI reads a strict JSON config file. Config path lookup is:
+The CLI reads a strict JSON config. Config-path precedence is:
 
 1. `--config /path/to/config.json`
 2. `VOLTR_CONFIG`
 3. `$HOME/.config/voltr-finance/config.json`
 
-Sample `config.json`:
-
 ```json
 {
-  "database": {
-    "host": "localhost",
-    "port": "5432",
-    "name": "voltr_finance",
-    "user": "voltr_cli_rw",
-    "password": "change-me",
-    "poolSize": 5
+  "api": {
+    "baseUrl": "https://finance.example.com",
+    "apiKey": "replace-with-a-secret"
   }
 }
 ```
 
-The connection uses the `transactions` search path. `poolSize` defaults to `5` when omitted or zero.
+Non-empty `VOLTR_API_URL` and `VOLTR_API_KEY` values override the corresponding file settings. Use HTTPS outside trusted local development; bearer credentials are sent on every finance request. Help commands do not require configuration.
 
 Examples below use:
 
 ```bash
 VOLTR="/tmp/voltr-finance --config /tmp/voltr-finance.json"
 ```
+
+## Exit status and bulk results
+
+- `0`: complete success
+- `2`: usage/validation error or one or more failed bulk items
+- `1`: configuration, authentication, transport, server, or unexpected failure
+
+Bulk commands always print the complete `succeeded` and `failed` arrays before returning exit status `2` for item failures.
 
 ## Transactions
 
@@ -80,7 +82,7 @@ Expected JSON shape:
       "notes": "Costco",
       "categoryCode": "groceries",
       "householdId": 1,
-      "author": { "TelegramID": "123456789" }
+      "author": { "telegramId": "123456789" }
     }
   ]
 }
@@ -295,7 +297,7 @@ $VOLTR budgets get \
   --month 2026-05
 ```
 
-Get or create a household monthly budget. When `--create` is provided and the month does not exist, the app copies the latest prior budget for the same owner. If no prior budget exists, it creates an empty budget.
+Ensure a household monthly budget exists. `--create` calls the idempotent ensure endpoint directly; without it, the CLI performs a read-only GET and a missing budget remains missing. A newly ensured month copies the latest prior budget structure for the same owner, or starts empty when no prior budget exists.
 
 ```bash
 $VOLTR budgets get \

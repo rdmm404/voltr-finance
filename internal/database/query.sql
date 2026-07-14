@@ -43,7 +43,7 @@ SET
         ELSE description
     END,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = sqlc.arg(id)::BIGINT
+WHERE code = sqlc.arg(code)::VARCHAR
 RETURNING *;
 
 -- name: DeactivateCategory :one
@@ -73,6 +73,11 @@ WHERE user_id = sqlc.arg(user_id)::BIGINT
 -- name: GetBudgetById :one
 SELECT * FROM budget
 WHERE id = sqlc.arg(id)::BIGINT;
+
+-- name: LockBudgetForUpdate :one
+SELECT id FROM budget
+WHERE id = sqlc.arg(id)::BIGINT
+FOR UPDATE;
 
 -- name: GetLatestPriorHouseholdBudget :one
 SELECT * FROM budget
@@ -112,6 +117,8 @@ SELECT * FROM budget_line
 WHERE id = sqlc.arg(id)::BIGINT;
 
 -- name: GetMaxBudgetLineSortOrder :one
+-- Call only after LockBudgetForUpdate in the same transaction when allocating
+-- an automatic sort order.
 SELECT COALESCE(MAX(sort_order), 0)::INTEGER AS sort_order
 FROM budget_line
 WHERE budget_id = sqlc.arg(budget_id)::BIGINT;
@@ -362,6 +369,11 @@ VALUES
 ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
+-- name: GetTransactionByIdForUpdate :one
+SELECT * FROM transaction
+WHERE id = sqlc.arg(id)::BIGINT
+FOR UPDATE;
+
 -- name: UpdateTransactionById :one
 UPDATE
     transaction
@@ -383,7 +395,7 @@ SET
         ELSE description
     END,
     transaction_date = CASE
-        WHEN sqlc.arg(set_transaction_date)::bool THEN sqlc.narg(transaction_date)::timestamp
+        WHEN sqlc.arg(set_transaction_date)::bool THEN sqlc.narg(transaction_date)::timestamptz
         ELSE transaction_date
     END,
     notes = CASE

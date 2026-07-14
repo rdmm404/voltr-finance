@@ -1,6 +1,6 @@
 services:
-  bot:
-    container_name: voltr-bot
+  api:
+    container_name: voltr-api
     build:
       context: .
       dockerfile: Dockerfile
@@ -8,23 +8,30 @@ services:
     volumes:
       - ./cmd:/app/cmd:rw
       - ./internal:/app/internal:rw
-      - ./.dev:/app/.dev:rw
     environment:
-      - DB_USER=voltr
-      - DB_PASSWORD=voltr
-      - DB_NAME=voltr_finance
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DISCORD_CREATE_COMMANDS=false
-      - GOOGLE_CLOUD_LOCATION=us-central1
-    env_file:
-      - .env
+      VOLTR_API_ADDRESS: ":8080"
+      VOLTR_API_KEY: "${VOLTR_API_KEY:-development-only-key}"
+      DB_USER: voltr
+      DB_PASSWORD: voltr
+      DB_NAME: voltr_finance
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_POOL_SIZE: "5"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
-      - "3100:3100"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   db:
-    image: postgres
+    image: postgres:17-alpine
     container_name: voltr-db
     environment:
       POSTGRES_USER: voltr
@@ -33,8 +40,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql
-      # - ./database/data:/docker-entrypoint-initdb.d
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voltr -d voltr_finance"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   migrate:
     image: ghcr.io/amacneil/dbmate
     entrypoint: ["sh"]
@@ -42,12 +54,14 @@ services:
     volumes:
       - ./db:/db:rw
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
-      - DB_USER=voltr
-      - DB_PASSWORD=voltr
-      - DB_NAME=voltr_finance
-      - DB_HOST=db
-      - DB_PORT=5432
+      DB_USER: voltr
+      DB_PASSWORD: voltr
+      DB_NAME: voltr_finance
+      DB_HOST: db
+      DB_PORT: "5432"
+
 volumes:
   db_data:

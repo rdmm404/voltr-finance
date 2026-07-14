@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"rdmm404/voltr-finance/internal/app"
+	"rdmm404/voltr-finance/internal/api"
 )
 
 func RenderJSON(w io.Writer, value any) error {
@@ -17,7 +17,7 @@ func RenderJSON(w io.Writer, value any) error {
 	return encoder.Encode(value)
 }
 
-func RenderTransactionCompact(w io.Writer, tx app.TransactionDTO) error {
+func RenderTransactionCompact(w io.Writer, tx api.Transaction) error {
 	_, err := fmt.Fprintf(w, "Transaction #%d\n", tx.ID)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func RenderTransactionCompact(w io.Writer, tx app.TransactionDTO) error {
 	return nil
 }
 
-func RenderTransactionsCSV(w io.Writer, txs []app.TransactionDTO) error {
+func RenderTransactionsCSV(w io.Writer, txs []api.Transaction) error {
 	writer := csv.NewWriter(w)
 	if err := writer.Write([]string{
 		"id",
@@ -93,14 +93,14 @@ func stringValue(value *string) string {
 	return *value
 }
 
-func categoryCode(category *app.CategoryRefDTO) string {
+func categoryCode(category *api.CategoryRef) string {
 	if category == nil {
 		return ""
 	}
 	return category.Code
 }
 
-func categoryValue(category *app.CategoryRefDTO) string {
+func categoryValue(category *api.CategoryRef) string {
 	if category == nil {
 		return ""
 	}

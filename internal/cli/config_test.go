@@ -7,27 +7,15 @@ import (
 	"testing"
 )
 
-func TestResolveConfigPathPrefersFlag(t *testing.T) {
+func TestResolveConfigPathPrecedence(t *testing.T) {
 	t.Setenv("VOLTR_CONFIG", "/env/config.json")
-
 	path, err := ResolveConfigPath("/flag/config.json")
-	if err != nil {
-		t.Fatalf("ResolveConfigPath returned error: %v", err)
+	if err != nil || path != "/flag/config.json" {
+		t.Fatalf("path=%q error=%v", path, err)
 	}
-	if path != "/flag/config.json" {
-		t.Fatalf("path = %q, want flag path", path)
-	}
-}
-
-func TestResolveConfigPathFallsBackToEnv(t *testing.T) {
-	t.Setenv("VOLTR_CONFIG", "/env/config.json")
-
-	path, err := ResolveConfigPath("")
-	if err != nil {
-		t.Fatalf("ResolveConfigPath returned error: %v", err)
-	}
-	if path != "/env/config.json" {
-		t.Fatalf("path = %q, want env path", path)
+	path, err = ResolveConfigPath("")
+	if err != nil || path != "/env/config.json" {
+		t.Fatalf("path=%q error=%v", path, err)
 	}
 }
 
@@ -35,99 +23,63 @@ func TestResolveConfigPathDefaultsToHomeConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("VOLTR_CONFIG", "")
-
 	path, err := ResolveConfigPath("")
 	if err != nil {
-		t.Fatalf("ResolveConfigPath returned error: %v", err)
+		t.Fatal(err)
 	}
-
 	want := filepath.Join(home, ".config", "voltr-finance", "config.json")
 	if path != want {
-		t.Fatalf("path = %q, want %q", path, want)
+		t.Fatalf("path=%q want=%q", path, want)
 	}
 }
 
-func TestLoadConfigParsesDatabaseFields(t *testing.T) {
-	path := writeConfig(t, `{
-		"database": {
-			"host": "localhost",
-			"port": "5432",
-			"name": "voltr_finance",
-			"user": "voltr",
-			"password": "secret",
-			"poolSize": 9
-		}
-	}`)
-
-	cfg, err := LoadConfig(path)
+func TestLoadConfigParsesAPIFields(t *testing.T) {
+	path := writeConfig(t, `{"api":{"baseUrl":"https://api.example.com","apiKey":"secret"}}`)
+	config, err := LoadConfig(path)
 	if err != nil {
-		t.Fatalf("LoadConfig returned error: %v", err)
+		t.Fatal(err)
 	}
-	if cfg.Database.Host != "localhost" || cfg.Database.Port != "5432" || cfg.Database.Name != "voltr_finance" || cfg.Database.User != "voltr" || cfg.Database.Password != "secret" || cfg.Database.PoolSize != 9 {
-		t.Fatalf("unexpected database config: %+v", cfg.Database)
-	}
-}
-
-func TestLoadConfigRejectsUnknownFields(t *testing.T) {
-	path := writeConfig(t, `{
-		"database": {
-			"host": "localhost",
-			"port": "5432",
-			"name": "voltr_finance",
-			"user": "voltr",
-			"password": "secret",
-			"extra": true
-		}
-	}`)
-
-	_, err := LoadConfig(path)
-	if err == nil {
-		t.Fatal("LoadConfig returned nil error")
-	}
-	if !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("error = %q, want unknown field validation", err)
+	if config.API.BaseURL != "https://api.example.com" || config.API.APIKey != "secret" {
+		t.Fatalf("config=%+v", config)
 	}
 }
 
-func TestLoadConfigRejectsTrailingTokens(t *testing.T) {
-	path := writeConfig(t, `{
-		"database": {
-			"host": "localhost",
-			"port": "5432",
-			"name": "voltr_finance",
-			"user": "voltr",
-			"password": "secret"
-		}
-	} {}`)
-
-	_, err := LoadConfig(path)
-	if err == nil {
-		t.Fatal("LoadConfig returned nil error")
+func TestLoadConfigAppliesEnvironmentOverrides(t *testing.T) {
+	t.Setenv("VOLTR_API_URL", "https://override.example.com/")
+	t.Setenv("VOLTR_API_KEY", "override-key")
+	path := writeConfig(t, `{"api":{"baseUrl":"https://file.example.com","apiKey":"file-key"}}`)
+	config, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "trailing") {
-		t.Fatalf("error = %q, want trailing token validation", err)
+	if config.API.BaseURL != "https://override.example.com/" || config.API.APIKey != "override-key" {
+		t.Fatalf("config=%+v", config)
 	}
 }
 
-func TestLoadConfigRequiresDatabaseFields(t *testing.T) {
-	required := map[string]string{
-		"host":     `"port":"5432","name":"voltr_finance","user":"voltr","password":"secret"`,
-		"port":     `"host":"localhost","name":"voltr_finance","user":"voltr","password":"secret"`,
-		"name":     `"host":"localhost","port":"5432","user":"voltr","password":"secret"`,
-		"user":     `"host":"localhost","port":"5432","name":"voltr_finance","password":"secret"`,
-		"password": `"host":"localhost","port":"5432","name":"voltr_finance","user":"voltr"`,
-	}
-
-	for field, body := range required {
-		t.Run(field, func(t *testing.T) {
-			path := writeConfig(t, `{"database":{`+body+`}}`)
-
-			_, err := LoadConfig(path)
+func TestLoadConfigRejectsUnknownFieldsAndTrailingTokens(t *testing.T) {
+	for name, content := range map[string]string{
+		"unknown":  `{"api":{"baseUrl":"https://api.example.com","apiKey":"key","database":"no"}}`,
+		"trailing": `{"api":{"baseUrl":"https://api.example.com","apiKey":"key"}} {}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, content))
 			if err == nil {
-				t.Fatal("LoadConfig returned nil error")
+				t.Fatal("expected error")
 			}
-			if !strings.Contains(err.Error(), "database."+field) {
-				t.Fatalf("error = %q, want missing database.%s", err, field)
+		})
+	}
+}
+
+func TestLoadConfigRequiresValidAPIFields(t *testing.T) {
+	for name, content := range map[string]string{
+		"base URL": `{"api":{"apiKey":"key"}}`, "API key": `{"api":{"baseUrl":"https://api.example.com"}}`,
+		"absolute URL": `{"api":{"baseUrl":"localhost:8080","apiKey":"key"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, content))
+			if err == nil || !strings.Contains(err.Error(), "api.") {
+				t.Fatalf("error=%v", err)
 			}
 		})
 	}
@@ -135,10 +87,9 @@ func TestLoadConfigRequiresDatabaseFields(t *testing.T) {
 
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
-
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
+		t.Fatal(err)
 	}
 	return path
 }
