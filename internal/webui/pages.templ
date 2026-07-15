@@ -56,10 +56,10 @@ templ Metric(label, value string, emphasis bool) {
 }
 
 templ SummaryMetrics(summary SummaryView) {
-	<div class="metrics-grid">
+	<div class="metrics-grid" data-state={ string(summary.State) }>
 		@Metric("Total budget", summary.Allocation, false)
-		@Metric("Spent so far", summary.Spent, false)
-		@Metric("Still available", summary.Remaining, true)
+		@Metric("Spent", summary.Spent, false)
+		@Metric("Available", summary.Remaining, true)
 	</div>
 }
 

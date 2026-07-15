@@ -101,6 +101,28 @@ func TestMapScopeCurrencyAndCombinedTotals(t *testing.T) {
 	}
 }
 
+func TestSummaryMetricsUsesSummaryState(t *testing.T) {
+	var output strings.Builder
+	summary := SummaryView{
+		Allocation: "$100.00",
+		Spent:      "$125.00",
+		Remaining:  "-$25.00",
+		State:      StateDanger,
+	}
+	if err := SummaryMetrics(summary).Render(context.Background(), &output); err != nil {
+		t.Fatal(err)
+	}
+	body := output.String()
+	for _, expected := range []string{`data-state="danger"`, ">Spent<", ">Available<", "-$25.00"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected %q in rendered summary: %s", expected, body)
+		}
+	}
+	if strings.Contains(body, "Spent so far") || strings.Contains(body, "Still available") {
+		t.Fatalf("rendered summary contains outdated wording: %s", body)
+	}
+}
+
 func TestHandlerRedirectRenderAssetsAndErrors(t *testing.T) {
 	userID, householdID := int64(1), int64(2)
 	report := appbudgets.DetailedReport{Budget: appbudgets.BudgetSummary{ID: 10}, Totals: appbudgets.ReportTotals{AllocationAmount: "100", ActualAmount: "25", UnmappedActualAmount: "5", UncategorizedActualAmount: "5"}, Lines: []appbudgets.DetailedReportLine{}, UnmappedTransactions: []appbudgets.DetailedTransaction{}}

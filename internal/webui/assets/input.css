@@ -74,6 +74,8 @@
   .metric-label { @apply text-xs font-medium text-muted; }
   .metric-value { @apply mt-1 truncate text-xl font-semibold tracking-[-.02em] text-ink-soft sm:text-3xl; }
   .metric-emphasis .metric-value { @apply text-positive; }
+  .metrics-grid[data-state="warning"] .metric-emphasis .metric-value { @apply text-warning; }
+  .metrics-grid[data-state="danger"] .metric-emphasis .metric-value { @apply text-danger; }
   .summary-progress { @apply mt-7; }
   .summary-progress > div { @apply mb-2 flex items-center justify-between text-xs font-medium text-muted; }
   .summary-progress > div strong { @apply text-sm font-semibold text-ink-soft; }
