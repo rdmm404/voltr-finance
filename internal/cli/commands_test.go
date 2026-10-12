@@ -27,8 +27,11 @@ func TestEveryCommandUsesOneAuthenticatedFeatureRequest(t *testing.T) {
 		status             int
 	}{
 		{"transaction create", http.MethodPost, "/v1/transactions", []string{"transactions", "create", "--amount=12.5", "--transaction-date=2026-07-01T00:00:00Z", "--household-id=2", "--author-id=1"}, "", `{}`, 200},
+		{"transaction create personal", http.MethodPost, "/v1/transactions", []string{"transactions", "create", "--amount=12.5", "--transaction-date=2026-07-01T00:00:00Z", "--author-id=1"}, "", `{}`, 200},
+		{"transaction create credit", http.MethodPost, "/v1/transactions", []string{"transactions", "create", "--amount", "-12.5", "--transaction-date=2026-07-01T00:00:00Z", "--household-id=2", "--author-id=1"}, "", `{}`, 200},
 		{"transaction create bulk", http.MethodPost, "/v1/transactions/bulk", []string{"transactions", "create-bulk"}, `{"transactions":[]}`, `{"succeeded":[],"failed":[]}`, 200},
 		{"transaction update", http.MethodPatch, "/v1/transactions/1", []string{"transactions", "update", "--id=1", "--amount=13"}, "", `{}`, 200},
+		{"transaction update credit", http.MethodPatch, "/v1/transactions/1", []string{"transactions", "update", "--id=1", "--amount", "-13"}, "", `{}`, 200},
 		{"transaction update bulk", http.MethodPatch, "/v1/transactions/bulk", []string{"transactions", "update-bulk"}, `{"transactions":[]}`, `{"succeeded":[],"failed":[]}`, 200},
 		{"transaction get", http.MethodGet, "/v1/transactions", []string{"transactions", "get", "--ids=1"}, "", `[]`, 200},
 		{"transaction list", http.MethodGet, "/v1/transactions", []string{"transactions", "list"}, "", `[]`, 200},

@@ -93,7 +93,13 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		stdin = os.Stdin
 	}
 	var cli CLI
-	parser, err := kong.New(&cli, kong.Name("voltr-finance"), kong.Exit(func(int) {}), kong.Writers(stdout, stderr))
+	parser, err := kong.New(
+		&cli,
+		kong.Name("voltr-finance"),
+		kong.Exit(func(int) {}),
+		kong.Writers(stdout, stderr),
+		kong.WithHyphenPrefixedParameters(true),
+	)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

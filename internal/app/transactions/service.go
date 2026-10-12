@@ -131,9 +131,6 @@ func (s *Service) prepareCreate(ctx context.Context, input CreateInput) (NewTran
 	if input.TransactionDate.IsZero() {
 		return NewTransaction{}, apperrors.Validation("transaction date is required")
 	}
-	if input.HouseholdID == nil {
-		return NewTransaction{}, apperrors.Validation("household id is required")
-	}
 	authorID, err := s.identities.ResolveUserID(ctx, input.Author)
 	if err != nil {
 		return NewTransaction{}, apperrors.Normalize(err)

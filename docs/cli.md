@@ -62,7 +62,19 @@ $VOLTR transactions create \
   --household-id 1
 ```
 
-For negative amounts, use `--amount=-12.34` so the value is not parsed as a flag.
+`--household-id` is optional. Omit it to create a personal transaction owned by
+the selected author; include it to create a household transaction.
+
+```bash
+$VOLTR transactions create \
+  --amount 18.00 \
+  --transaction-date 2026-05-05T14:30:00-04:00 \
+  --description "Personal purchase" \
+  --author-telegram-id "123456789"
+```
+
+Negative amounts represent credits and can use either `--amount -12.34` or
+`--amount=-12.34`.
 
 Create transactions in bulk from a file, or omit `--input` to read from stdin:
 

@@ -117,6 +117,58 @@ func TestSingleTransactionLifecycleAndHash(t *testing.T) {
 	}
 }
 
+func TestCreateAllowsPersonalTransaction(t *testing.T) {
+	repo := newFakeRepository()
+	service := NewService(repo, fakeIdentities{}, fakeCategories{})
+	date := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+
+	created, err := service.Create(context.Background(), CreateInput{
+		Amount:          25,
+		TransactionDate: date,
+	})
+	if err != nil {
+		t.Fatalf("Create personal transaction error=%v", err)
+	}
+	if created.AuthorID != 7 || created.HouseholdID != nil {
+		t.Fatalf("created transaction=%+v, want author 7 with no household", created)
+	}
+	wantHash, err := Hash(nil, date, 7, nil, nil, 25)
+	if err != nil {
+		t.Fatalf("Hash error=%v", err)
+	}
+	if created.Hash != wantHash {
+		t.Fatalf("hash=%q want=%q", created.Hash, wantHash)
+	}
+}
+
+func TestTransactionAmountsAllowCredits(t *testing.T) {
+	repo := newFakeRepository()
+	service := NewService(repo, fakeIdentities{}, fakeCategories{})
+	householdID := int64(2)
+	date := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+
+	created, err := service.Create(context.Background(), CreateInput{
+		Amount:          -12.50,
+		TransactionDate: date,
+		HouseholdID:     &householdID,
+	})
+	if err != nil {
+		t.Fatalf("Create credit error=%v", err)
+	}
+	if created.Amount != -12.50 {
+		t.Fatalf("created amount=%v want=-12.5", created.Amount)
+	}
+
+	amount := float32(-20)
+	updated, err := service.Update(context.Background(), UpdateInput{ID: created.ID, Amount: &amount})
+	if err != nil {
+		t.Fatalf("Update credit error=%v", err)
+	}
+	if updated.Amount != -20 {
+		t.Fatalf("updated amount=%v want=-20", updated.Amount)
+	}
+}
+
 func TestBatchMarksInfrastructureFailureAndContinues(t *testing.T) {
 	repo := newFakeRepository()
 	repo.failCreateCall = 1

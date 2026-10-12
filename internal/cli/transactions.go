@@ -23,7 +23,7 @@ type TransactionCreateCmd struct {
 	Description       *string   `help:"Short transaction description."`
 	Notes             *string   `help:"Longer transaction notes."`
 	Category          *string   `help:"Category code."`
-	HouseholdID       *int64    `required:"" placeholder:"INT-64" help:"Internal household ID."`
+	HouseholdID       *int64    `placeholder:"INT-64" help:"Internal household ID. Omit for a personal transaction."`
 	AuthorID          *int64    `placeholder:"INT-64" help:"Internal author user ID. Exactly one author selector may be provided."`
 	AuthorDiscordID   *string   `help:"Author Discord user ID. Exactly one author selector may be provided."`
 	AuthorTelegramID  *string   `help:"Author Telegram user ID. Exactly one author selector may be provided."`
