@@ -21,10 +21,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_proxy"
-      - "traefik.http.routers.voltr-finance-ui.rule=Host(`finance.homelab.voltr.org`) && !PathPrefix(`/v1`) && !Path(`/live`)"
+      - "traefik.http.routers.voltr-finance-ui.rule=Host(`finance.nautilus.voltr.org`) && !PathPrefix(`/v1`) && !Path(`/live`)"
       - "traefik.http.routers.voltr-finance-ui.entrypoints=websecure"
       - "traefik.http.routers.voltr-finance-ui.tls.certresolver=myresolver"
-      - "traefik.http.routers.voltr-finance-api.rule=Host(`finance-api.homelab.voltr.org`) && PathPrefix(`/v1`)"
+      - "traefik.http.routers.voltr-finance-api.rule=Host(`finance-api.nautilus.voltr.org`) && PathPrefix(`/v1`)"
       - "traefik.http.routers.voltr-finance-api.entrypoints=websecure"
       - "traefik.http.routers.voltr-finance-api.tls.certresolver=myresolver"
       - "traefik.http.services.voltr-finance-api.loadbalancer.server.port=8080"
