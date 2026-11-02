@@ -31,9 +31,9 @@
   --text-*: initial;
   --text-label: 11.3px;
   --text-body: 13px;
-  --text-h3: 14.6px;
-  --text-h2: 16.5px;
-  --text-h1: 18.5px;
+  --text-h3: 15px;
+  --text-h2: 18px;
+  --text-h1: 22px;
 
   --radius-*: initial;
   --radius-sm: 1px;
@@ -54,7 +54,6 @@
   h2 { @apply text-h2; }
   h3 { @apply text-h3; }
   h1::before { @apply text-accent; content: "> "; }
-  h2::before { @apply text-muted; content: "# "; }
   summary { @apply cursor-pointer; list-style: none; }
   summary::-webkit-details-marker { display: none; }
 
@@ -108,12 +107,7 @@
 
   .summary-progress { @apply flex flex-col gap-1 border-t border-line px-2 py-1.5; }
   .summary-progress-label { @apply flex items-center justify-between gap-2 text-label text-muted; }
-  .summary-progress-label > span:last-child { @apply flex items-center gap-1; }
   .summary-progress-label strong { @apply font-bold text-fg; }
-
-  .badge { @apply inline-block rounded-sm px-1 text-label font-medium whitespace-nowrap; }
-  .badge[data-state="warning"] { @apply bg-warning/15 text-warning; }
-  .badge[data-state="danger"] { @apply bg-problem/15 text-problem; }
 
   .scope-grid { @apply grid items-start gap-3 lg:grid-cols-2; }
   .scope-panel { @apply min-w-0; }
@@ -126,14 +120,12 @@
     @apply grid items-center gap-x-2 gap-y-1 px-2 py-1.5 hover:bg-raised;
     grid-template-columns: minmax(0, 1fr) auto 1.5ch;
   }
-  .line-heading { @apply col-span-2 col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-1; }
+  .line-heading { @apply col-span-2 col-start-1 row-start-1 min-w-0; }
   .line-heading h3 { @apply text-body font-semibold tracking-normal break-words; }
   .budget-line .marker { @apply col-start-3 row-start-1; }
   .line-amount { @apply col-start-1 row-start-2 whitespace-nowrap; }
   .line-amount strong { @apply font-medium; }
-  .line-pct { @apply col-span-2 col-start-2 row-start-2 text-right font-bold text-success; }
-  .line-pct[data-state="warning"] { @apply text-warning; }
-  .line-pct[data-state="danger"] { @apply text-problem; }
+  .line-pct { @apply col-span-2 col-start-2 row-start-2 text-right font-medium; }
   .line-categories { @apply col-span-3 col-start-1 text-label break-words text-muted; }
   .budget-line progress { @apply col-span-3 col-start-1; }
 
@@ -164,11 +156,9 @@
   .transaction-notes { @apply mt-[2px] break-words text-muted; }
   .transaction-amount { @apply font-semibold whitespace-nowrap; }
 
-  .unmapped-line { @apply border-l-2 border-warning; }
   .unmapped-line > summary { @apply flex items-center gap-2 px-2 py-1.5 hover:bg-raised; }
-  .unmapped-heading { @apply flex min-w-0 flex-1 flex-wrap items-center gap-x-1; }
-  .unmapped-heading strong { @apply font-semibold; }
-  .unmapped-amount { @apply font-bold whitespace-nowrap text-warning; }
+  .unmapped-heading { @apply min-w-0 flex-1 font-semibold; }
+  .unmapped-amount { @apply font-medium whitespace-nowrap; }
 
   .dashboard-footer { @apply flex flex-wrap justify-between gap-x-2 border-t border-line pt-1.5 text-label text-muted; }
 

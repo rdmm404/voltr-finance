@@ -40,9 +40,9 @@ templ Card(title string) {
 	</section>
 }
 
-templ StateBadge(state SemanticState) {
+templ StateText(state SemanticState) {
 	if label := stateLabel(state); label != "" {
-		<span class="badge" data-state={ string(state) }>{ label }</span>
+		<span class="sr-only">{ label }</span>
 	}
 }
 
@@ -51,7 +51,7 @@ templ SummaryProgress(summary SummaryView) {
 		<div class="summary-progress-label">
 			<span>Budget used</span>
 			<span>
-				@StateBadge(summary.State)
+				@StateText(summary.State)
 				<strong>{ summary.Progress }%</strong>
 			</span>
 		</div>
@@ -100,10 +100,10 @@ templ BudgetLine(line LineView) {
 		<summary>
 			<div class="line-heading">
 				<h3>{ line.Name }</h3>
-				@StateBadge(line.State)
+				@StateText(line.State)
 			</div>
 			<span class="line-amount"><strong>{ line.Actual }</strong> <span class="sub">of { line.Allocation }</span></span>
-			<span class="line-pct" data-state={ string(line.State) }>{ line.Progress }%</span>
+			<span class="line-pct">{ line.Progress }%</span>
 			<span class="marker" aria-hidden="true"></span>
 			if line.Categories != "" {
 				<p class="line-categories">{ line.Categories }</p>
@@ -135,7 +135,7 @@ templ ScopeReport(scope ScopeView) {
 				if len(scope.Unmapped) > 0 {
 					<details class="unmapped-line">
 						<summary>
-							<span class="unmapped-heading"><strong>Unmapped spending</strong><span class="badge" data-state="warning">Needs your attention</span></span>
+							<strong class="unmapped-heading">Unmapped spending</strong>
 							<span class="unmapped-amount">{ scope.Summary.Unmapped }</span>
 							<span class="marker" aria-hidden="true"></span>
 						</summary>

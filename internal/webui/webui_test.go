@@ -129,8 +129,11 @@ func TestBudgetLineNamesStateInWords(t *testing.T) {
 		if err := BudgetLine(LineView{Name: "Food", State: state}).Render(context.Background(), &output); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(output.String(), expected) {
-			t.Fatalf("expected %q for state %q: %s", expected, state, output.String())
+		if !strings.Contains(output.String(), `<span class="sr-only">`+expected+`</span>`) {
+			t.Fatalf("expected screen-reader text %q for state %q: %s", expected, state, output.String())
+		}
+		if strings.Contains(output.String(), `class="badge"`) {
+			t.Fatalf("expected no visible badge for state %q: %s", state, output.String())
 		}
 	}
 }

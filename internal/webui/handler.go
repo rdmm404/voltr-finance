@@ -90,7 +90,7 @@ func embeddedAssets(prefix, dir string) http.Handler {
 	})
 }
 
-// stateLabel names a budget state in words, so that it is not conveyed by color alone.
+// stateLabel names a budget state for screen readers; sighted users get it from the figure and its color.
 func stateLabel(state SemanticState) string {
 	switch state {
 	case StateDanger:
