@@ -14,7 +14,7 @@ import (
 	apperrors "rdmm404/voltr-finance/internal/app/errors"
 )
 
-//go:embed assets/dist/*
+//go:embed assets/dist/* assets/fonts/*.woff2
 var assetFiles embed.FS
 
 type Handler struct {
@@ -38,12 +38,8 @@ func New(config Config, services Services, logger *slog.Logger) (*Handler, error
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
-	assets, _ := fs.Sub(assetFiles, "assets/dist")
-	assetHandler := http.StripPrefix("/assets/", http.FileServerFS(assets))
-	mux.Handle("GET /assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		assetHandler.ServeHTTP(w, r)
-	}))
+	mux.Handle("GET /assets/", embeddedAssets("/assets/", "assets/dist"))
+	mux.Handle("GET /assets/fonts/", embeddedAssets("/assets/fonts/", "assets/fonts"))
 	mux.HandleFunc("GET /", h.dashboardPage)
 }
 
@@ -85,14 +81,24 @@ func (h *Handler) render(ctx context.Context, w http.ResponseWriter, status int,
 	}
 }
 
-func stateClass(state SemanticState) string {
+func embeddedAssets(prefix, dir string) http.Handler {
+	assets, _ := fs.Sub(assetFiles, dir)
+	files := http.StripPrefix(prefix, http.FileServerFS(assets))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		files.ServeHTTP(w, r)
+	})
+}
+
+// stateLabel names a budget state in words, so that it is not conveyed by color alone.
+func stateLabel(state SemanticState) string {
 	switch state {
 	case StateDanger:
-		return "border-danger text-danger"
+		return "Over budget"
 	case StateWarning:
-		return "border-warning text-warning"
+		return "Near limit"
 	default:
-		return "border-positive text-positive"
+		return ""
 	}
 }
 func selected(value, selected int64) bool { return value == selected }

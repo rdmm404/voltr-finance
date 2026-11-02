@@ -123,6 +123,18 @@ func TestSummaryMetricsUsesSummaryState(t *testing.T) {
 	}
 }
 
+func TestBudgetLineNamesStateInWords(t *testing.T) {
+	for state, expected := range map[SemanticState]string{StateWarning: "Near limit", StateDanger: "Over budget"} {
+		var output strings.Builder
+		if err := BudgetLine(LineView{Name: "Food", State: state}).Render(context.Background(), &output); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("expected %q for state %q: %s", expected, state, output.String())
+		}
+	}
+}
+
 func TestHandlerRedirectRenderAssetsAndErrors(t *testing.T) {
 	userID, householdID := int64(1), int64(2)
 	report := appbudgets.DetailedReport{Budget: appbudgets.BudgetSummary{ID: 10}, Totals: appbudgets.ReportTotals{AllocationAmount: "100", ActualAmount: "25", UnmappedActualAmount: "5", UncategorizedActualAmount: "5"}, Lines: []appbudgets.DetailedReportLine{}, UnmappedTransactions: []appbudgets.DetailedTransaction{}}
@@ -153,6 +165,12 @@ func TestHandlerRedirectRenderAssetsAndErrors(t *testing.T) {
 	mux.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Header().Get("Content-Type"), "text/css") || response.Header().Get("Cache-Control") == "" {
 		t.Fatalf("asset status=%d headers=%v", response.Code, response.Header())
+	}
+	request = httptest.NewRequest(http.MethodGet, "/assets/fonts/jetbrains-mono-latin-wght-normal.woff2", nil)
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "font/woff2" || response.Header().Get("Cache-Control") == "" {
+		t.Fatalf("font status=%d headers=%v", response.Code, response.Header())
 	}
 	request = httptest.NewRequest(http.MethodGet, "/?month=bad", nil)
 	response = httptest.NewRecorder()
