@@ -29,3 +29,5 @@ make verify-generated  # verify committed templ output
 ```
 
 Local Compose defaults the owner IDs to `1` and timezone to `America/Toronto`; override them through environment variables when your seed data differs. Compiled CSS and `.tools/tailwindcss` are generated artifacts and are not committed.
+
+JetBrains Mono is committed under `internal/webui/assets/fonts/` (SIL Open Font License) and served from the same origin, so the dashboard makes no third-party requests. Only the Latin subset is included; other scripts fall back to the system monospace font.
