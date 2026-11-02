@@ -79,6 +79,7 @@
   .site-nav { @apply flex items-center justify-between py-1.5; }
   .brand { @apply inline-flex items-center gap-1 font-bold tracking-[-.03em]; }
   .brand-mark { @apply grid size-[26px] place-items-center rounded-sm bg-accent text-on-accent; }
+  .brand-mark svg { @apply size-[20px]; }
   .private-label { @apply hidden text-label text-muted sm:block; }
 
   .page-heading { @apply flex flex-wrap items-start justify-between gap-2; }
