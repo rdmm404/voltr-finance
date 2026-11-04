@@ -24,6 +24,7 @@ services:
       - "traefik.http.routers.voltr-finance-ui.rule=Host(`finance.nautilus.voltr.org`) && !PathPrefix(`/v1`) && !Path(`/live`)"
       - "traefik.http.routers.voltr-finance-ui.entrypoints=websecure"
       - "traefik.http.routers.voltr-finance-ui.tls.certresolver=myresolver"
+      - "traefik.http.routers.voltr-finance-ui.middlewares=finance-auth@file"
       - "traefik.http.routers.voltr-finance-api.rule=Host(`finance-api.nautilus.voltr.org`) && PathPrefix(`/v1`)"
       - "traefik.http.routers.voltr-finance-api.entrypoints=websecure"
       - "traefik.http.routers.voltr-finance-api.tls.certresolver=myresolver"
